@@ -1,6 +1,16 @@
-import InteractiveMap from "@/components/interactiveMap";
+// src/app/proyectos/page.tsx
+import dynamic from 'next/dynamic';
+import { useMemo } from 'react';
 
 export default function ProyectosPage() {
+    // Usamos useMemo para asegurarnos de que el componente del mapa no se vuelva a renderizar innecesariamente.
+    const InteractiveMap = useMemo(() => dynamic(
+        () => import('@/components/interactiveMap'),
+        {
+            loading: () => <p className="flex items-center justify-center h-full text-gray-500">Cargando mapa...</p>
+        }
+    ), []);
+
     return (
         <div className="bg-white">
             {/* Encabezado de la página */}
@@ -17,20 +27,12 @@ export default function ProyectosPage() {
 
             {/* Contenedor del Mapa Interactivo */}
             <div className="container mx-auto px-4 py-12">
-                <div className="w-full h-[600px] bg-gray-200 rounded-lg shadow-lg">
-                    {/* Aquí irá el mapa funcional. Por ahora, es un placeholder. */}
-                    {/* <InteractiveMap /> */}
-                    <p className="flex items-center justify-center h-full text-gray-500">
-                        El mapa interactivo se implementará aquí.
-                    </p>
+                <div className="w-full h-[600px] bg-gray-200 rounded-lg shadow-lg overflow-hidden">
+                    <InteractiveMap />
                 </div>
             </div>
 
-            {/* Sección de Proyectos Destacados (Opcional pero recomendado) */}
-            <div className="container mx-auto px-4 py-12">
-                <h2 className="text-3xl font-bold text-center mb-8">Proyectos Destacados</h2>
-                {/* Aquí podríamos mostrar una cuadrícula con 3 o 4 proyectos importantes */}
-            </div>
+            {/* ... Sección de Proyectos Destacados ... */}
         </div>
     );
 }
