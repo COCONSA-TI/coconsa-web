@@ -54,9 +54,9 @@ export default function CertificacionesPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {isoCertifications.map((cert) => (
             <div key={cert.name} className="bg-white border border-gray-200 rounded-lg shadow-lg p-8 text-center flex flex-col items-center">
-              <div className="text-blue-600 mb-4">{cert.icon}</div>
+              <div className="text-red-700 mb-4">{cert.icon}</div>
               <h3 className="text-xl font-bold text-gray-900">{cert.name}</h3>
-              <p className="text-blue-700 font-semibold mt-1">{cert.title}</p>
+              <p className="text-red-700 font-semibold mt-1">{cert.title}</p>
               <p className="text-gray-600 mt-4 flex-grow">{cert.description}</p>
               <p className="mt-6 font-bold text-gray-800 bg-gray-100 p-3 rounded-md">{cert.benefit}</p>
             </div>
@@ -82,13 +82,13 @@ export default function CertificacionesPage() {
       </section>
       
       {/* CTA */}
-      <section className="bg-blue-600">
+      <section className="bg-red-600">
         <div className="container mx-auto text-center text-white px-4 py-12">
           <h2 className="text-3xl font-bold mb-4">Trabaja con un Socio Certificado</h2>
           <p className="max-w-2xl mx-auto mb-8">
             Nuestras certificaciones te dan la seguridad y tranquilidad que tu proyecto merece. Contáctanos y construyamos juntos.
           </p>
-          <Link href="/contacto" className="bg-white text-blue-600 font-bold py-3 px-8 rounded-lg hover:bg-gray-200 transition-colors">
+          <Link href="/contacto" className="bg-white text-red-600 font-bold py-3 px-8 rounded-lg hover:bg-gray-100 transition-colors">
             Iniciar Conversación
           </Link>
         </div>

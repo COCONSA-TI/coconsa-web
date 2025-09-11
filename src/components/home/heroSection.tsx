@@ -5,8 +5,8 @@ export default function HeroSection() {
         <section className="relative h-[60vh] text-white">
             {/* Imagen de Fondo */}
             <Image
-                src="/ruta/a/tu/imagen-principal.jpg"
-                alt="Construcción de nave industrial"
+                src="/imagen_principal.jpg"
+                alt="Construcción de fraccionamiento"
                 layout="fill"
                 objectFit="cover"
                 quality={85}
@@ -21,7 +21,7 @@ export default function HeroSection() {
                     Construimos los cimientos de tu futuro
                 </h1>
                 <p className="text-lg md:text-xl max-w-3xl">
-                    Más de 30 años de experiencia en proyectos de construcción industrial, comercial e infraestructura.
+                    Más de 40 años de experiencia en proyectos de construcción industrial, comercial e infraestructura.
                 </p>
             </div>
         </section>

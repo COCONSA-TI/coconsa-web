@@ -21,7 +21,7 @@ export default function ServiciosPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                     {services.map((service) => (
                         <Link href={service.href} key={service.name} className="block bg-white p-8 rounded-lg shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300">
-                            <div className="text-blue-600 mb-4">
+                            <div className="text-red-700 mb-4">
                                 {service.icon}
                             </div>
                             <h3 className="text-2xl font-semibold text-gray-900 mb-2">{service.name}</h3>

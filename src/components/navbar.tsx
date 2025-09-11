@@ -5,6 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 const navLinks = [
+  { name: 'Inicio', href: '/' },
   { name: 'Nosotros', href: '/nosotros' },
   { name: 'Certificaciones', href: '/certificaciones' },
   { name: 'Servicios', href: '/servicios' },
@@ -79,7 +80,7 @@ export default function Navbar() {
                 <Link
                   href={link.href}
                   onClick={() => setIsOpen(false)}
-                  className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50"
+                  className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-red-700 hover:bg-gray-50"
                 >
                   {link.name}
                 </Link>

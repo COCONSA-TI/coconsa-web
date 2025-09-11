@@ -1,0 +1,102 @@
+import Image from 'next/image';
+import Link from 'next/link';
+
+const clients = [
+    // Fila 1
+    { name: 'GRUPO SIMSA', logoSrc: '/clients/grupo-simsa.png' },
+    { name: 'DILSA', logoSrc: '/clients/dilsa.png' },
+    { name: 'PEÑOLES', logoSrc: '/clients/penoles.png' },
+    { name: 'MAGNELEC', logoSrc: '/clients/magnelec.png' },
+    // Fila 2
+    { name: 'Tecnológico de Monterrey', logoSrc: '/clients/tec-de-monterrey.svg' },
+    { name: 'ECOGAS', logoSrc: '/clients/ecogas.png' },
+    { name: 'LALA', logoSrc: '/clients/lala.svg' },
+    { name: 'CONAGUA', logoSrc: '/clients/conagua.png' },
+    // Fila 3
+    { name: 'Voltrak', logoSrc: '/clients/voltrak.png' },
+    { name: 'GTO', logoSrc: '/clients/gto.png' },
+    { name: 'Casas GEO', logoSrc: '/clients/casas-geo.png' },
+    { name: 'Walmart', logoSrc: '/clients/walmart.svg' },
+    // Fila 4
+    { name: 'EIFFAGE', logoSrc: '/clients/eiffage.png' },
+    { name: 'Atlas Casas', logoSrc: '/clients/atlas-casas.png' },
+    { name: 'PRODIEL', logoSrc: '/clients/prodiel.png' },
+    { name: 'Ruba', logoSrc: '/clients/ruba.png' },
+    // Fila 5
+    { name: 'SIMAS', logoSrc: '/clients/simas.png' },
+    { name: 'JARSA', logoSrc: '/clients/jarsa.png' },
+    { name: 'Tyson', logoSrc: '/clients/tyson.svg' },
+    { name: 'HOMEX', logoSrc: '/clients/homex.png' },
+    // Fila 6
+    { name: 'Ticsa', logoSrc: '/clients/ticsa.png' },
+    { name: 'Colegio Alemán', logoSrc: '/clients/colegio-aleman.png' },
+    { name: 'TOZZI', logoSrc: '/clients/tozzi.png' },
+    { name: 'PASA', logoSrc: '/clients/pasa.png' },
+    // Fila 7
+    { name: 'Huntec', logoSrc: '/clients/huntec.png' },
+    { name: 'MEGACABLE', logoSrc: '/clients/megacable.png' },
+    { name: 'TREBOTTI', logoSrc: '/clients/trebotti.png' },
+    { name: 'NUPLEN', logoSrc: '/clients/noplen.png' },
+    // Fila 8
+    { name: '7-Eleven', logoSrc: '/clients/7-eleven.svg' },
+    { name: 'enel', logoSrc: '/clients/enel.png' },
+    { name: 'Bachoco', logoSrc: '/clients/bachoco.svg' },
+    { name: 'TAYCO', logoSrc: '/clients/tayco.png' },
+    // Fila 9
+    { name: 'Miner S.A', logoSrc: '/clients/miner-s-a.png' },
+    { name: 'CUATRO D', logoSrc: '/clients/cuatro.png' },
+    { name: 'Vitro', logoSrc: '/clients/vitro.png' },
+    { name: 'ENGIE', logoSrc: '/clients/engie.svg' },
+    // Fila 10
+    { name: 'HBP Group', logoSrc: '/clients/hbp-group.png' },
+    { name: 'Milwaukee', logoSrc: '/clients/milwaukee.svg' },
+    { name: 'SIRSA Construcción', logoSrc: '/clients/sirsa.png' },
+    { name: 'LINAMAR', logoSrc: '/clients/linamar.png' },
+];
+
+export default function ClientesPage() {
+    return (
+        <main className="bg-white">
+            {/* Encabezado */}
+            <section className="py-16 sm:py-24 text-center bg-gray-50">
+                <div className="container mx-auto px-4">
+                    <h1 className="text-4xl md:text-5xl font-bold text-gray-900">
+                        La Confianza de Grandes Empresas
+                    </h1>
+                    <p className="mt-4 text-lg max-w-3xl mx-auto text-gray-600">
+                        Nuestra mayor satisfacción es la confianza que nuestros clientes depositan en nosotros para llevar a cabo sus proyectos más importantes.
+                    </p>
+                </div>
+            </section>
+
+            {/* Muro de Logos Unificado */}
+            <section className="py-16 container mx-auto px-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-8 items-center">
+                    {clients.map((client) => (
+                        <div key={client.name} title={client.name} className="flex justify-center p-4">
+                            <div className="relative h-20 w-full filter grayscale hover:grayscale-0 transition-all duration-300 ease-in-out">
+                                <Image
+                                    src={client.logoSrc}
+                                    alt={`Logo de ${client.name}`}
+                                    layout="fill"
+                                    objectFit="contain"
+                                    loading="lazy"
+                                />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </section>
+
+            {/* CTA */}
+            <section className="bg-red-600">
+                <div className="container mx-auto text-center text-white px-4 py-12">
+                    <h2 className="text-3xl font-bold mb-4">Conviértete en Nuestro Próximo Caso de Éxito</h2>
+                    <Link href="/contacto" className="bg-white text-red-600 font-bold py-3 px-8 rounded-lg hover:bg-gray-100 transition-colors">
+                        Inicia tu Proyecto
+                    </Link>
+                </div>
+            </section>
+        </main>
+    );
+}

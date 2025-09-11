@@ -1,15 +1,12 @@
 import Image from 'next/image';
+import Link from 'next/link';
 
 const clients = [
-  { name: 'Caterpillar', logoSrc: '/clients/caterpillar.svg' },
+  { name: 'Peñoles', logoSrc: '/clients/penoles.png' },
   { name: 'John Deere', logoSrc: '/clients/john-deere.svg' },
   { name: 'HEB', logoSrc: '/clients/heb.svg' },
   { name: 'Soriana', logoSrc: '/clients/soriana.svg' },
   { name: 'Lala', logoSrc: '/clients/lala.svg' },
-  { name: 'Pilgrims', logoSrc: '/clients/pilgrims.svg' },
-  { name: 'Tyson', logoSrc: '/clients/tyson.svg' },
-  { name: 'Sumitomo', logoSrc: '/clients/sumitomo.svg' },
-  // ... añade más clientes según sea necesario
 ];
 
 export default function ClientsSection() {
@@ -18,7 +15,7 @@ export default function ClientsSection() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         {/* Encabezado de la sección */}
         <div className="text-center max-w-3xl mx-auto">
-          <p className="text-blue-600 font-semibold">NUESTROS CLIENTES</p>
+          <p className="text-red-700 font-semibold">NUESTROS CLIENTES</p>
           <h2 className="mt-2 text-3xl md:text-4xl font-bold text-gray-900">
             La Confianza de los Líderes de la Industria
           </h2>
@@ -43,6 +40,12 @@ export default function ClientsSection() {
               </div>
             ))}
           </div>
+        </div>
+        {/* Botón de Acción Principal */}
+        <div className="mt-16 text-center">
+          <Link href="/clientes" className="bg-red-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-red-700 transition-colors duration-300 text-lg">
+            Ver Todos los Clientes
+          </Link>
         </div>
       </div>
     </section>

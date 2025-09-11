@@ -24,10 +24,10 @@ export default function Footer() {
           <div>
             <h3 className="text-lg font-semibold text-white mb-4">Navegación</h3>
             <ul className="space-y-2 text-sm">
-              <li><Link href="/servicios" className="hover:text-blue-500 transition-colors">Servicios</Link></li>
-              <li><Link href="/proyectos" className="hover:text-blue-500 transition-colors">Proyectos</Link></li>
-              <li><Link href="/nosotros" className="hover:text-blue-500 transition-colors">Nosotros</Link></li>
-              <li><Link href="/contacto" className="hover:text-blue-500 transition-colors">Contacto</Link></li>
+              <li><Link href="/servicios" className="hover:text-red-700 transition-colors">Servicios</Link></li>
+              <li><Link href="/proyectos" className="hover:text-red-700 transition-colors">Proyectos</Link></li>
+              <li><Link href="/nosotros" className="hover:text-red-700 transition-colors">Nosotros</Link></li>
+              <li><Link href="/contacto" className="hover:text-red-700 transition-colors">Contacto</Link></li>
             </ul>
           </div>
 

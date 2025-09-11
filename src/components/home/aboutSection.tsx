@@ -30,9 +30,9 @@ export default function AboutSection() {
           {/* Columna de Texto */}
           <div className="space-y-6">
             <div className="text-left">
-              <p className="text-blue-600 font-semibold mb-2">SOBRE NOSOTROS</p>
+              <p className="text-red-700 font-semibold mb-2">SOBRE NOSOTROS</p>
               <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
-                Más de 30 Años Forjando el Futuro de la Construcción
+                Más de 40 Años Forjando el Futuro de la Construcción
               </h2>
             </div>
             <p className="text-lg text-gray-600 leading-relaxed">
@@ -50,7 +50,7 @@ export default function AboutSection() {
             </div>
 
             <div className="pt-4">
-              <Link href="/nosotros" className="text-blue-600 font-semibold hover:underline">
+              <Link href="/nosotros" className="text-red-700 font-semibold hover:underline">
                 Conoce más sobre nuestra historia →
               </Link>
             </div>

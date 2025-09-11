@@ -23,7 +23,7 @@ export default function GallerySection() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         {/* Encabezado de la sección */}
         <div className="text-center max-w-3xl mx-auto">
-          <p className="text-blue-600 font-semibold">GALERÍA</p>
+          <p className="text-red-700 font-semibold">GALERÍA</p>
           <h2 className="mt-2 text-3xl md:text-4xl font-bold text-gray-900">
             Proyectos que Hablan por Sí Mismos
           </h2>
@@ -57,7 +57,7 @@ export default function GallerySection() {
 
         {/* Botón de Acción Principal */}
         <div className="mt-16 text-center">
-          <Link href="/proyectos" className="bg-blue-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-blue-700 transition-colors duration-300 text-lg">
+          <Link href="/galeria" className="bg-red-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-red-700 transition-colors duration-300 text-lg">
             Ver Portafolio Completo
           </Link>
         </div>

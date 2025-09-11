@@ -4,7 +4,7 @@ const certifications = [
   {
     name: 'ISNetworld Member',
     description: 'Cumplimos con los más altos estándares internacionales de seguridad y gestión de contratistas.',
-    logoSrc: '/certifications/isn.png',
+    logoSrc: '/certifications/isn.webp',
     alt: 'Logo de certificación ISNetworld'
   },
   {
@@ -27,7 +27,7 @@ export default function CertificationsSection() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         {/* Encabezado de la sección */}
         <div className="text-center max-w-3xl mx-auto">
-          <p className="text-blue-600 font-semibold">CONFIANZA Y CUMPLIMIENTO</p>
+          <p className="text-red-700 font-semibold">CONFIANZA Y CUMPLIMIENTO</p>
           <h2 className="mt-2 text-3xl md:text-4xl font-bold text-gray-900">
             Compromiso con la Calidad y la Seguridad
           </h2>

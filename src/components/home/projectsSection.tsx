@@ -9,7 +9,7 @@ export default function ProjectsSection() {
 
           {/* Columna de Texto */}
           <div className="space-y-6 text-center lg:text-left">
-            <p className="text-blue-500 font-semibold">PORTAFOLIO DE PROYECTOS</p>
+            <p className="text-red-700 font-semibold">PORTAFOLIO DE PROYECTOS</p>
             <h2 className="text-3xl md:text-4xl font-bold">
               Nuestra Huella en la República Mexicana
             </h2>
@@ -20,21 +20,21 @@ export default function ProjectsSection() {
             {/* Estadísticas de Impacto */}
             <div className="flex justify-center lg:justify-start space-x-8 pt-4">
               <div className="text-center">
-                <span className="block text-4xl font-bold text-blue-500">15+</span>
+                <span className="block text-4xl font-bold text-red-700">15+</span>
                 <span className="text-gray-400">Estados</span>
               </div>
               <div className="text-center">
-                <span className="block text-4xl font-bold text-blue-500">200+</span>
+                <span className="block text-4xl font-bold text-red-700">200+</span>
                 <span className="text-gray-400">Proyectos</span>
               </div>
               <div className="text-center">
-                <span className="block text-4xl font-bold text-blue-500">30</span>
+                <span className="block text-4xl font-bold text-red-700">30</span>
                 <span className="text-gray-400">Años</span>
               </div>
             </div>
 
             <div className="pt-6">
-              <Link href="/proyectos" className="inline-block bg-blue-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-blue-700 transition-colors duration-300 text-lg">
+              <Link href="/proyectos" className="inline-block bg-red-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-red-700 transition-colors duration-300 text-lg">
                 Explora el Mapa Interactivo
               </Link>
             </div>
