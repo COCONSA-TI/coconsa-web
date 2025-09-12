@@ -19,7 +19,7 @@ export default function GallerySection() {
   const [index, setIndex] = useState(-1);
 
   return (
-    <section id="galeria" className="py-16 sm:py-24 bg-white">
+    <section id="galeria" className="py-16 sm:py-24 bg-gray-50">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         {/* Encabezado de la sección */}
         <div className="text-center max-w-3xl mx-auto">

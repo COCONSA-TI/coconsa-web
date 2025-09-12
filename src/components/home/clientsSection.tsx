@@ -2,16 +2,16 @@ import Image from 'next/image';
 import Link from 'next/link';
 
 const clients = [
-  { name: 'Peñoles', logoSrc: '/clients/penoles.png' },
-  { name: 'John Deere', logoSrc: '/clients/john-deere.svg' },
-  { name: 'HEB', logoSrc: '/clients/heb.svg' },
-  { name: 'Soriana', logoSrc: '/clients/soriana.svg' },
-  { name: 'Lala', logoSrc: '/clients/lala.svg' },
+  { name: 'Peñoles', logoSrc: '/clients/penoles.jpg' },
+  { name: 'Lala', logoSrc: '/clients/lala.jpg' },
+  { name: 'Tyson', logoSrc: '/clients/tyson.jpg' },
+  { name: 'Walmart', logoSrc: '/clients/walmart.jpg' },
+  { name: 'Grupo Simsa', logoSrc: '/clients/grupo-simsa.jpg' },
 ];
 
 export default function ClientsSection() {
   return (
-    <section id="clientes" className="py-16 sm:py-24 bg-gray-50">
+    <section id="clientes" className="py-16 sm:py-24 bg-white">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         {/* Encabezado de la sección */}
         <div className="text-center max-w-3xl mx-auto">

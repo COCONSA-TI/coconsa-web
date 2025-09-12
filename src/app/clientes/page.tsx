@@ -3,30 +3,30 @@ import Link from 'next/link';
 
 const clients = [
     // Fila 1
-    { name: 'GRUPO SIMSA', logoSrc: '/clients/grupo-simsa.png' },
-    { name: 'DILSA', logoSrc: '/clients/dilsa.png' },
-    { name: 'PEÑOLES', logoSrc: '/clients/penoles.png' },
+    { name: 'GRUPO SIMSA', logoSrc: '/clients/grupo-simsa.jpg' },
+    { name: 'DILSA', logoSrc: '/clients/dilsa.jpg' },
+    { name: 'PEÑOLES', logoSrc: '/clients/penoles.jpg' },
     { name: 'MAGNELEC', logoSrc: '/clients/magnelec.png' },
     // Fila 2
-    { name: 'Tecnológico de Monterrey', logoSrc: '/clients/tec-de-monterrey.svg' },
+    { name: 'Tecnológico de Monterrey', logoSrc: '/clients/tec-mty.jpg' },
     { name: 'ECOGAS', logoSrc: '/clients/ecogas.png' },
-    { name: 'LALA', logoSrc: '/clients/lala.svg' },
-    { name: 'CONAGUA', logoSrc: '/clients/conagua.png' },
+    { name: 'LALA', logoSrc: '/clients/lala.jpg' },
+    { name: 'CONAGUA', logoSrc: '/clients/conagua.jpg' },
     // Fila 3
-    { name: 'Voltrak', logoSrc: '/clients/voltrak.png' },
+    { name: 'Voltrak', logoSrc: '/clients/voltrak.jpg' },
     { name: 'GTO', logoSrc: '/clients/gto.png' },
-    { name: 'Casas GEO', logoSrc: '/clients/casas-geo.png' },
-    { name: 'Walmart', logoSrc: '/clients/walmart.svg' },
+    { name: 'Casas GEO', logoSrc: '/clients/casas-geo.jpg' },
+    { name: 'Walmart', logoSrc: '/clients/walmart.jpg' },
     // Fila 4
     { name: 'EIFFAGE', logoSrc: '/clients/eiffage.png' },
-    { name: 'Atlas Casas', logoSrc: '/clients/atlas-casas.png' },
-    { name: 'PRODIEL', logoSrc: '/clients/prodiel.png' },
-    { name: 'Ruba', logoSrc: '/clients/ruba.png' },
+    { name: 'Atlas Casas', logoSrc: '/clients/atlas.jpg' },
+    { name: 'PRODIEL', logoSrc: '/clients/prodiel.jpg' },
+    { name: 'Ruba', logoSrc: '/clients/ruba.jpg' },
     // Fila 5
-    { name: 'SIMAS', logoSrc: '/clients/simas.png' },
-    { name: 'JARSA', logoSrc: '/clients/jarsa.png' },
-    { name: 'Tyson', logoSrc: '/clients/tyson.svg' },
-    { name: 'HOMEX', logoSrc: '/clients/homex.png' },
+    { name: 'SIMAS', logoSrc: '/clients/simas.jpg' },
+    { name: 'JARSA', logoSrc: '/clients/jarsa.jpg' },
+    { name: 'Tyson', logoSrc: '/clients/tyson.jpg' },
+    { name: 'HOMEX', logoSrc: '/clients/homex.jpg' },
     // Fila 6
     { name: 'Ticsa', logoSrc: '/clients/ticsa.png' },
     { name: 'Colegio Alemán', logoSrc: '/clients/colegio-aleman.png' },
@@ -36,22 +36,22 @@ const clients = [
     { name: 'Huntec', logoSrc: '/clients/huntec.png' },
     { name: 'MEGACABLE', logoSrc: '/clients/megacable.png' },
     { name: 'TREBOTTI', logoSrc: '/clients/trebotti.png' },
-    { name: 'NUPLEN', logoSrc: '/clients/noplen.png' },
+    { name: 'NUPLEN', logoSrc: '/clients/nuplen.png' },
     // Fila 8
-    { name: '7-Eleven', logoSrc: '/clients/7-eleven.svg' },
-    { name: 'enel', logoSrc: '/clients/enel.png' },
-    { name: 'Bachoco', logoSrc: '/clients/bachoco.svg' },
+    { name: '7-Eleven', logoSrc: '/clients/seven-eleven.png' },
+    { name: 'enel', logoSrc: '/clients/enel-group.png' },
+    { name: 'Bachoco', logoSrc: '/clients/bachoco.png' },
     { name: 'TAYCO', logoSrc: '/clients/tayco.png' },
     // Fila 9
-    { name: 'Miner S.A', logoSrc: '/clients/miner-s-a.png' },
-    { name: 'CUATRO D', logoSrc: '/clients/cuatro.png' },
+    { name: 'Miner S.A', logoSrc: '/clients/miner.png' },
+    { name: 'CUATRO D', logoSrc: '/clients/cuatro-D.png' },
     { name: 'Vitro', logoSrc: '/clients/vitro.png' },
-    { name: 'ENGIE', logoSrc: '/clients/engie.svg' },
+    { name: 'ENGIE', logoSrc: '/clients/engie.png' },
     // Fila 10
-    { name: 'HBP Group', logoSrc: '/clients/hbp-group.png' },
-    { name: 'Milwaukee', logoSrc: '/clients/milwaukee.svg' },
+    { name: 'HBP Group', logoSrc: '/clients/hbp.webp' },
+    { name: 'Milwaukee', logoSrc: '/clients/milwaukee.png' },
     { name: 'SIRSA Construcción', logoSrc: '/clients/sirsa.png' },
-    { name: 'LINAMAR', logoSrc: '/clients/linamar.png' },
+    { name: 'LINAMAR', logoSrc: '/clients/linamar.jpeg' },
 ];
 
 export default function ClientesPage() {
