@@ -8,27 +8,30 @@ const isoCertifications = [
     title: 'Gestión de la Calidad',
     description: 'Esta certificación garantiza que nuestros procesos están estandarizados para entregar consistentemente proyectos que cumplen y superan las expectativas del cliente.',
     benefit: 'Beneficio para ti: Calidad predecible y resultados confiables.',
-    icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+    iconSrc: '/certifications/iso9001.webp',
+    iconAlt: 'ISO 9001',
   },
   {
     name: 'ISO 14001:2015',
     title: 'Gestión Ambiental',
     description: 'Demuestra nuestro compromiso con la sostenibilidad, gestionando y minimizando el impacto ambiental de nuestras operaciones en cada proyecto.',
     benefit: 'Beneficio para ti: Proyectos responsables y cumplimiento normativo ambiental.',
-    icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12"><path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582" /></svg>
+    iconSrc: '/certifications/iso14001.webp',
+    iconAlt: 'ISO 14001',
   },
   {
     name: 'ISO 45001:2018',
     title: 'Seguridad y Salud en el Trabajo',
     description: 'Priorizamos la seguridad de nuestro equipo y de todos los involucrados en la obra, implementando un sistema de gestión para prevenir riesgos y accidentes.',
     benefit: 'Beneficio para ti: Entornos de trabajo seguros y reducción de riesgos en tu proyecto.',
-    icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.745 3.745 0 013.296-1.043A3.745 3.745 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.745 3.745 0 011.043 3.296A3.745 3.745 0 0121 12z" /></svg>
+    iconSrc: '/certifications/iso45001.png',
+    iconAlt: 'ISO 45001',
   },
 ];
 
 // Datos de otros registros que ya teníamos
 const otherCredentials = [
-  { name: 'ISNetworld Member', logoSrc: '/certifications/isn.png', alt: 'Logo de certificación ISNetworld' },
+  { name: 'ISNetworld Member', logoSrc: '/certifications/isn.webp', alt: 'Logo de certificación ISNetworld' },
   { name: 'Empresa Socialmente Responsable', logoSrc: '/certifications/esr.png', alt: 'Distintivo ESR' },
   { name: 'Registro REPSE', logoSrc: '/certifications/repse.png', alt: 'Registro REPSE' }
 ];
@@ -54,7 +57,18 @@ export default function CertificacionesPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {isoCertifications.map((cert) => (
             <div key={cert.name} className="bg-white border border-gray-200 rounded-lg shadow-lg p-8 text-center flex flex-col items-center">
-              <div className="text-red-700 mb-4">{cert.icon}</div>
+              <div className="mb-4">
+                <div className="mx-auto w-16 h-16 relative filter grayscale hover:grayscale-0 transition-all duration-300">
+                  <Image
+                    src={cert.iconSrc}
+                    alt={cert.iconAlt}
+                    width={64}
+                    height={64}
+                    style={{ objectFit: 'contain' }}
+                    loading="lazy"
+                  />
+                </div>
+              </div>
               <h3 className="text-xl font-bold text-gray-900">{cert.name}</h3>
               <p className="text-red-700 font-semibold mt-1">{cert.title}</p>
               <p className="text-gray-600 mt-4 flex-grow">{cert.description}</p>
