@@ -28,7 +28,7 @@ export default function ProjectsSection() {
                 <span className="text-gray-400">Proyectos</span>
               </div>
               <div className="text-center">
-                <span className="block text-4xl font-bold text-red-700">30</span>
+                <span className="block text-4xl font-bold text-red-700">40</span>
                 <span className="text-gray-400">Años</span>
               </div>
             </div>

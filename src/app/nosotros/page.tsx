@@ -23,7 +23,7 @@ export default function NosotrosPage() {
       {/* 1. Hero Section */}
       <section className="relative h-[40vh] flex items-center justify-center text-white">
         <Image
-          src="/nosotros-hero.jpg"
+          src="/imagen_principal.jpg"
           alt="Oficinas corporativas de COCONSA"
           layout="fill"
           objectFit="cover"
@@ -31,7 +31,7 @@ export default function NosotrosPage() {
           priority
         />
         <div className="relative z-10 text-center px-4">
-          <h1 className="text-4xl md:text-5xl font-bold">Más de 3 Décadas Construyendo Confianza</h1>
+          <h1 className="text-4xl md:text-5xl font-bold">Más de 4 Décadas Construyendo Confianza</h1>
         </div>
       </section>
 
