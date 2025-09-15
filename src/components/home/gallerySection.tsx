@@ -48,7 +48,7 @@ export default function GallerySection() {
                 height={600}
                 className="object-cover w-full h-full transform group-hover:scale-105 transition-transform duration-300"
               />
-              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-300 flex items-center justify-center">
+              <div className="absolute inset-0  group-hover:bg-opacity-40 transition-all duration-300 flex items-center justify-center">
                 <p className="text-white text-lg font-bold opacity-0 group-hover:opacity-100 transition-opacity duration-300">Ver foto</p>
               </div>
             </div>

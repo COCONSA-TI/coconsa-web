@@ -18,6 +18,16 @@ const allProjects = [
   { src: '/gallery/proyecto-6.jpg', alt: 'Maquinaria en proyecto de parque solar', category: 'Parques Solares' },
   { src: '/gallery/proyecto-7.jpg', alt: 'Construcción de gasolinera', category: 'Gasolineras' },
   { src: '/gallery/proyecto-8.jpg', alt: 'Planta de tratamiento de agua municipal', category: 'PTAR' },
+  { src: '/gallery/proyecto-9.jpg', alt: 'Infraestructura vial en zona urbana', category: 'Vialidades' },
+  { src: '/gallery/proyecto-10.png', alt: 'Obra hidráulica en canal de riego', category: 'Obras Hidráulicas' },
+  { src: '/gallery/proyecto-11.jpg', alt: 'Terracerías para desarrollo habitacional', category: 'Terracerías' },
+  { src: '/gallery/proyecto-12.jpg', alt: 'Construcción de planta industrial', category: 'Naves Industriales' },
+  { src: '/gallery/proyecto-13.jpg', alt: 'Obra civil en proyecto comercial', category: 'Edificaciones' },
+  { src: '/gallery/proyecto-14.jpg', alt: 'Pavimentación de calle urbana', category: 'Urbanizaciones' },
+  { src: '/gallery/proyecto-15.jpg', alt: 'Instalación de estructura metálica', category: 'Edificaciones' },
+  { src: '/gallery/proyecto-16.jpg', alt: 'Complejo industrial desde el aire', category: 'Naves Industriales' },
+  { src: '/gallery/proyecto-17.jpg', alt: 'Maquinaria en obra vial', category: 'Vialidades' },
+  { src: '/gallery/proyecto-18.jpg', alt: 'Construcción de gasolinera', category: 'Gasolineras' }
   // ...Añade aquí todas las fotos de tus proyectos
 ];
 
@@ -48,22 +58,6 @@ export default function GaleriaPage() {
 
       {/* Galería con Filtros */}
       <section className="py-16 container mx-auto px-4">
-        {/* Botones de Filtro */}
-        <div className="flex justify-center flex-wrap gap-4 mb-12">
-          {categories.map((category) => (
-            <button
-              key={category}
-              onClick={() => setFilter(category)}
-              className={`px-6 py-2 font-semibold rounded-full transition-colors duration-300 ${
-                filter === category 
-                ? 'bg-red-600 text-white' 
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              {category}
-            </button>
-          ))}
-        </div>
 
         {/* Grid de Imágenes */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -80,9 +74,8 @@ export default function GaleriaPage() {
                 height={450}
                 className="object-cover w-full h-full transform group-hover:scale-105 transition-transform duration-300"
               />
-              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-300 flex items-end p-4">
+              <div className="absolute inset-0 group-hover:bg-opacity-40 transition-all duration-300 flex items-end p-4">
                 <p className="text-white text-lg font-bold opacity-0 group-hover:opacity-100 transition-opacity duration-300 -translate-y-4 group-hover:translate-y-0">
-                  {project.category}
                 </p>
               </div>
             </div>
