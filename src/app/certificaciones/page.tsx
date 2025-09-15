@@ -78,7 +78,7 @@ export default function CertificacionesPage() {
         </div>
       </section>
 
-      {/* Sección de Otros Registros */}
+      {/* Sección de Otros Registros
       <section className="py-16 bg-gray-50">
         <div className="container mx-auto px-4">
           <h2 className="text-3xl font-bold text-center mb-12 text-gray-900">Otros Registros y Distintivos</h2>
@@ -93,7 +93,7 @@ export default function CertificacionesPage() {
             ))}
           </div>
         </div>
-      </section>
+      </section> */}
       
       {/* CTA */}
       <section className="bg-red-600">

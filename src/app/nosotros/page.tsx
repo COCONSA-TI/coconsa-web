@@ -23,8 +23,8 @@ export default function NosotrosPage() {
       {/* 1. Hero Section */}
       <section className="relative h-[40vh] flex items-center justify-center text-white">
         <Image
-          src="/imagen_principal.jpg"
-          alt="Oficinas corporativas de COCONSA"
+          src="/nosotros/banner.jpg"
+          alt="banner de COCONSA"
           layout="fill"
           objectFit="cover"
           className="brightness-50"
@@ -91,7 +91,7 @@ export default function NosotrosPage() {
                 </div>
             </div>
             <div>
-                <Image src="/nosotros/nosotros.png" alt="Equipo de COCONSA" width={600} height={400} className="rounded-lg shadow-2xl"/>
+                <Image src="/nosotros/equipo-coconsa.jpg" alt="Equipo de COCONSA" width={600} height={400} className="rounded-lg shadow-2xl"/>
                 <h3 className="text-2xl font-bold mt-6">Un Equipo Comprometido con la Excelencia</h3>
                 <p className="text-gray-600 mt-2">Nuestro mayor activo es nuestro talentoso equipo de ingenieros, arquitectos, técnicos y personal administrativo que hacen posible cada proyecto.</p>
             </div>

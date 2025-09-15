@@ -2,22 +2,22 @@ import Image from 'next/image';
 
 const certifications = [
   {
-    name: 'ISNetworld Member',
+    name: 'ISO 9001',
     description: 'Cumplimos con los más altos estándares internacionales de seguridad y gestión de contratistas.',
-    logoSrc: '/certifications/isn.webp',
-    alt: 'Logo de certificación ISNetworld'
+    logoSrc: '/certifications/iso9001.webp',
+    alt: 'Logo de certificación ISO 9001'
   },
   {
-    name: 'Empresa Socialmente Responsable',
-    description: 'Reconocimiento a nuestro compromiso con el desarrollo social y el cuidado del medio ambiente.',
-    logoSrc: '/certifications/esr.png',
-    alt: 'Distintivo ESR como Empresa Socialmente Responsable'
+    name: 'ISO 14001',
+    description: 'Comprometidos con la gestión ambiental y la sostenibilidad en todos nuestros proyectos.',
+    logoSrc: '/certifications/iso14001.webp',
+    alt: 'Logo de certificación ISO 14001'
   },
   {
-    name: 'Registro REPSE',
-    description: 'Autorizados y registrados ante la STPS para la prestación de servicios y obras especializadas.',
-    logoSrc: '/certifications/repse.png',
-    alt: 'Registro REPSE de la Secretaría del Trabajo y Previsión Social'
+    name: 'ISO 45001',
+    description: 'Priorizamos la seguridad y el bienestar de nuestro equipo en cada obra que emprendemos.',
+    logoSrc: '/certifications/iso45001.png',
+    alt: 'Logo de certificación ISO 45001'
   }
 ];
 
