@@ -47,7 +47,7 @@ export default function RentaMaquinariaPage() {
       {/* 1. Hero Section */}
       <section className="relative h-[50vh] flex items-center justify-center text-white">
         <Image
-          src="/maquinaria-hero.jpg"
+          src="/machines/maquinaria-hero.jpg"
           alt="Flota de maquinaria pesada de COCONSA en un proyecto"
           layout="fill"
           objectFit="cover"
