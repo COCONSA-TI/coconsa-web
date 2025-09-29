@@ -4,6 +4,7 @@ import "./globals.css";
 import Navbar from "@/components/navbar";
 import Footer from "@/components/footer";
 import 'leaflet/dist/leaflet.css';
+import { QuotationProvider } from "@/context/QuotationContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,11 +29,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="{inter.className}">
+        <QuotationProvider>
         <Navbar />
         <main className={`min-h-screen flex flex-col ${geistSans.variable} ${geistMono.variable} font-sans`}>
           {children}
         </main>
         <Footer />
+        </QuotationProvider>
       </body>
     </html>
   );

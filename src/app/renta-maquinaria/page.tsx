@@ -1,6 +1,9 @@
 // src/app/renta-maquinaria/page.tsx
+'use client'; // Necesario para usar hooks como useQuotation
 import Image from 'next/image';
 import Link from 'next/link';
+import { useQuotation } from '@/context/QuotationContext';
+import { useState } from 'react'; // 1. Importa useState
 
 // Catálogo de maquinaria. Fácil de expandir y mantener.
 const machineryCatalog = [
@@ -42,6 +45,21 @@ const machineryCatalog = [
 ];
 
 export default function RentaMaquinariaPage() {
+  const { addItem, items } = useQuotation(); 
+  // 2. Crea un estado para rastrear los items recién añadidos
+  const [justAdded, setJustAdded] = useState<string | null>(null);
+
+  // 3. Crea una función para manejar el clic
+  const handleAddItem = (category: string) => {
+    addItem(category);
+    setJustAdded(category); // Marca el item como recién añadido
+
+    // 4. Revierte el estado del botón después de 2 segundos
+    setTimeout(() => {
+      setJustAdded(null);
+    }, 2000);
+  };
+
   return (
     <main className="bg-white">
       {/* 1. Hero Section */}
@@ -68,31 +86,54 @@ export default function RentaMaquinariaPage() {
             <p className="mt-2 text-lg text-gray-600">Encuentra la maquinaria que necesitas para cada fase de tu obra.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {machineryCatalog.map((machine) => (
-              <div key={machine.category} className="bg-white rounded-lg shadow-lg overflow-hidden flex flex-col group">
-                <div className="relative h-56">
-                  <Image
-                    src={machine.imageSrc}
-                    alt={`Imagen de ${machine.category}`}
-                    layout="fill"
-                    objectFit="cover"
-                    className="group-hover:scale-105 transition-transform duration-300"
-                  />
+            {machineryCatalog.map((machine) => {
+              // 5. Comprueba si el item ya está en la cotización o si se acaba de añadir
+              const isAdded = items.some(item => item.id === machine.category);
+              const wasJustAdded = justAdded === machine.category;
+
+              return (
+                <div key={machine.category} className="bg-white rounded-lg shadow-lg overflow-hidden flex flex-col group">
+                  <div className="relative h-56">
+                    <Image
+                      src={machine.imageSrc}
+                      alt={`Imagen de ${machine.category}`}
+                      layout="fill"
+                      objectFit="cover"
+                      className="group-hover:scale-105 transition-transform duration-300"
+                    />
+                  </div>
+                  <div className="p-6 flex-grow flex flex-col">
+                    <h3 className="text-2xl font-bold text-gray-900">{machine.category}</h3>
+                    <p className="mt-2 text-gray-600 flex-grow">{machine.description}</p>
+                    {/* BOTÓN CON LÓGICA CONDICIONAL */}
+                    <button 
+                      onClick={() => handleAddItem(machine.category)}
+                      disabled={isAdded || wasJustAdded} // Deshabilitado si ya está añadido
+                      className={`
+                        mt-6 w-full text-center font-bold py-2 px-4 rounded-lg transition-colors
+                        ${isAdded || wasJustAdded 
+                          ? 'bg-green-500 text-white cursor-not-allowed' // Estilo para botón añadido
+                          : 'bg-red-600 text-white hover:bg-red-700' // Estilo normal
+                        }
+                      `}
+                    >
+                      {isAdded || wasJustAdded ? 'Añadido ✓' : 'Añadir a Cotización'}
+                    </button>
+                  </div>
                 </div>
-                <div className="p-6 flex-grow flex flex-col">
-                  <h3 className="text-2xl font-bold text-gray-900">{machine.category}</h3>
-                  <p className="mt-2 text-gray-600 flex-grow">{machine.description}</p>
-                  <Link href="/contacto" className="mt-6 w-full text-center bg-gray-800 text-white font-bold py-2 px-4 rounded-lg hover:bg-black transition-colors">
-                    Consultar Disponibilidad
-                  </Link>
-                </div>
-              </div>
-            ))}
+              );
+            })}
+          </div>
+          {/* AÑADIR UN BOTÓN PARA IR A LA PÁGINA DE COTIZACIÓN */}
+          <div className="text-center mt-12">
+            <Link href="/cotizacion" className="bg-gray-800 text-white font-bold py-3 px-8 rounded-lg hover:bg-black transition-colors">
+                Ver Cotización ({items.length})
+            </Link>
           </div>
         </div>
       </section>
       
-      {/* 3. Por Qué Elegirnos */}
+  {/* 3. Por Qué Elegirnos */}
       <section className="py-16 container mx-auto px-4">
         <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold text-gray-900">Ventajas de Nuestro Servicio</h2>
@@ -120,7 +161,7 @@ export default function RentaMaquinariaPage() {
           <p className="max-w-2xl mx-auto mb-8">
             Contacta a nuestro departamento de maquinaria para obtener una cotización y asegurar la disponibilidad de los equipos que necesitas.
           </p>
-          <Link href="/contacto" className="bg-white text-red-600 font-bold py-3 px-8 rounded-lg hover:bg-gray-100 transition-colors">
+          <Link href="/cotizacion" className="bg-white text-red-600 font-bold py-3 px-8 rounded-lg hover:bg-gray-100 transition-colors">
             Solicitar Cotización
           </Link>
         </div>
