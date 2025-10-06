@@ -146,7 +146,7 @@ export async function sendQuotation(prevState: FormState, formData: FormData): P
     redirect('/gracias');
 }
 
-export async function sendContactMessage(prevState: any, formData: FormData) {
+export async function sendContactMessage(prevState: unknown, formData: FormData) {
   const validatedFields = ContactFormSchema.safeParse({
     name: formData.get('name'),
     email: formData.get('email'),
