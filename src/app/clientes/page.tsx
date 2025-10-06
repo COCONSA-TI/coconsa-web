@@ -1,5 +1,12 @@
+import { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
+
+export const metadata: Metadata = {
+  title: 'Clientes | COCONSA - Empresas que Confían en Nosotros',
+  description: 'Conozca las empresas que han confiado en COCONSA para sus proyectos de construcción. Nuestra cartera de clientes incluye líderes en diversos sectores industriales.',
+  keywords: 'clientes COCONSA, empresas constructoras, proyectos industriales, clientes construcción, referencias COCONSA',
+};
 
 const clients = [
     // Fila 1

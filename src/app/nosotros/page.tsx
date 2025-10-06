@@ -1,6 +1,12 @@
-// src/app/nosotros/page.tsx
+import { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
+
+export const metadata: Metadata = {
+  title: 'Nosotros | COCONSA - Historia, Valores y Compromiso',
+  description: 'Conozca más sobre COCONSA, nuestra historia, valores y compromiso con la excelencia en la industria de la construcción y renta de maquinaria en México.',
+  keywords: 'COCONSA historia, valores empresariales, misión visión, equipo COCONSA, construcción México',
+};
 
 // Datos para la línea de tiempo. Fácil de expandir.
 const timelineEvents = [

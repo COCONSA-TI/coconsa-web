@@ -6,7 +6,9 @@ import { Resend } from 'resend';
 import { redirect } from 'next/navigation';
 import QuotationEmail from '@/components/emails/QuotationEmail'; 
 import ConfirmationEmail from '@/components/emails/ConfirmationEmail';
+import { ContactFormSchema } from './schemas';
 import React from 'react';
+import ContactFormEmail from '@/components/emails/ContactFormEmail';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const salesEmail = process.env.SALES_EMAIL as string;
@@ -142,4 +144,38 @@ export async function sendQuotation(prevState: FormState, formData: FormData): P
 
     // 3. Redirigir a una página de agradecimiento (esto se queda igual)
     redirect('/gracias');
+}
+
+export async function sendContactMessage(prevState: any, formData: FormData) {
+  const validatedFields = ContactFormSchema.safeParse({
+    name: formData.get('name'),
+    email: formData.get('email'),
+    phone: formData.get('phone'),
+    message: formData.get('message'),
+  });
+
+  if (!validatedFields.success) {
+    return {
+      errors: validatedFields.error.flatten().fieldErrors,
+    };
+  }
+
+  const { name, email, phone, message } = validatedFields.data;
+  
+  try {
+    const contactFormEmailElement = await ContactFormEmail({ name, email, phone, message });
+
+    await resend.emails.send({
+      from: fromEmail, // Usa tu dominio verificado
+      to: [salesEmail], // El correo que recibirá los mensajes
+      subject: `Nuevo Mensaje de Contacto de ${name}`,
+      replyTo: email, // Para que al responder, le respondas al cliente
+      react: contactFormEmailElement,
+    });
+
+    return { success: true, message: '¡Mensaje enviado con éxito!' };
+  } catch (error) {
+    console.error('Error al enviar mensaje de contacto:', error);
+    return { success: false, message: 'No se pudo enviar el mensaje. Inténtalo de nuevo.' };
+  }
 }

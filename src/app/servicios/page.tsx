@@ -1,5 +1,12 @@
+import { Metadata } from 'next';
 import Link from 'next/link';
 import { services } from '@/data/servicesData';
+
+export const metadata: Metadata = {
+  title: 'Servicios | COCONSA - Soluciones Integrales en Construcción',
+  description: 'Descubra nuestra amplia gama de servicios de construcción, desde proyectos industriales hasta infraestructura civil. COCONSA ofrece soluciones completas y profesionales.',
+  keywords: 'servicios construcción, proyectos industriales, infraestructura civil, construcción comercial, COCONSA servicios',
+};
 
 export default function ServiciosPage() {
     return (

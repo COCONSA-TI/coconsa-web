@@ -12,7 +12,7 @@ const navLinks = [
   { name: 'Clientes', href: '/clientes' },
   { name: 'Galería', href: '/galeria' },
   { name: 'Proyectos', href: '/proyectos' },
-  { name: 'Renta de Maquinaria', href: '/renta-maquinaria' },
+  { name: 'Venta de Maquinaria', href: '/venta-maquinaria' },
   { name: 'Contacto', href: '/contacto' },
 ];
 
@@ -20,7 +20,7 @@ export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
-    <header className="bg-white shadow-md sticky top-0 z-50">
+    <header className="bg-rojo-coconsa shadow-md sticky top-0 z-50">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
           {/* Logo */}
@@ -32,7 +32,7 @@ export default function Navbar() {
                 width={50}
                 height={40}
                 priority
-                className="drop-shadow-lg"
+                className="drop-shadow-lg brightness-0 invert"
               />
             </Link>
           </div>
@@ -42,7 +42,7 @@ export default function Navbar() {
             <ul className="flex items-center space-x-6">
               {navLinks.map((link) => (
                 <li key={link.name}>
-                  <Link href={link.href} className="text-gray-700 font-medium hover:text-red-700 transition-colors duration-300">
+                  <Link href={link.href} className="text-white font-medium hover:text-gray-300 transition-colors duration-300">
                     {link.name}
                   </Link>
                 </li>

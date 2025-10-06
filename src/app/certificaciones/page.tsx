@@ -1,5 +1,12 @@
+import { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
+
+export const metadata: Metadata = {
+  title: 'Certificaciones | COCONSA - Calidad y Excelencia Certificada',
+  description: 'Explore nuestras certificaciones ISO y estándares de calidad. COCONSA mantiene los más altos niveles de excelencia en construcción y servicios.',
+  keywords: 'certificaciones COCONSA, ISO 9001, certificaciones construcción, estándares calidad, certificaciones industria',
+};
 
 // Datos de las certificaciones ISO
 const isoCertifications = [

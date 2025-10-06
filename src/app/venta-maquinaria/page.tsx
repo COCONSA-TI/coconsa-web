@@ -1,50 +1,59 @@
-// src/app/renta-maquinaria/page.tsx
-'use client'; // Necesario para usar hooks como useQuotation
+'use client';
+
+import { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useQuotation } from '@/context/QuotationContext';
-import { useState } from 'react'; // 1. Importa useState
+import { useState } from 'react';
+
 
 // Catálogo de maquinaria. Fácil de expandir y mantener.
 const machineryCatalog = [
   {
     category: 'Bulldozers',
     description: 'Potencia y precisión para empuje, desmonte y nivelación de grandes superficies de terreno.',
+    precio: 1500000,
     imageSrc: '/machines/bulldozer.jpg',
   },
   {
     category: 'Camiones de Volteo',
     description: 'Transporte eficiente y seguro de materiales a granel como tierra, grava y escombro.',
+    precio: 1200000,
     imageSrc: '/machines/camion-volteo.jpg',
   },
   {
     category: 'Excavadora',
     description: 'Versatilidad para excavación, zanjeo y movimiento de tierras en todo tipo de proyectos constructivos.',
+    precio: 1800000,
     imageSrc: '/machines/excavadora.jpg',
   },
   {
     category: 'Motoconformadora',
     description: 'Alta precisión para la nivelación final de superficies, ideal para la creación de caminos y plataformas.',
+    precio: 1600000,
     imageSrc: '/machines/motoconformadora.jpg',
   },
   {
     category: 'Pipa Freightliner',
     description: 'Suministro y riego de agua para control de polvo, compactación y otros usos esenciales en obra.',
+    precio: 900000,
     imageSrc: '/machines/pipa-freightliner.jpg',
   },
   {
     category: 'Retroexcavadora',
     description: 'Equipo multifuncional, perfecto para zanjas, carga de materiales y trabajos en espacios reducidos.',
+    precio: 1100000,
     imageSrc: '/machines/retroexcavadora.jpg',
   },
   {
     category: 'Tractocamión con Góndola',
     description: 'Transporte de grandes volúmenes de material a granel para el abastecimiento eficiente de tus proyectos.',
+    precio: 1300000,
     imageSrc: '/machines/tractocamion-gondola.jpg',
   }
 ];
 
-export default function RentaMaquinariaPage() {
+export default function VentaMaquinariaPage() {
   const { addItem, items } = useQuotation(); 
   // 2. Crea un estado para rastrear los items recién añadidos
   const [justAdded, setJustAdded] = useState<string | null>(null);
@@ -73,8 +82,8 @@ export default function RentaMaquinariaPage() {
           priority
         />
         <div className="relative z-10 text-center px-4">
-          <h1 className="text-4xl md:text-6xl font-bold">Renta de Maquinaria Pesada</h1>
-          <p className="mt-4 text-lg md:text-xl max-w-3xl">Equipos modernos y operadores certificados para garantizar la máxima eficiencia en tu proyecto.</p>
+          <h1 className="text-4xl md:text-6xl font-bold">Venta de Maquinaria Pesada</h1>
+          <p className="mt-4 text-lg md:text-xl max-w-3xl">Equipos modernos para garantizar la máxima eficiencia en tu proyecto.</p>
         </div>
       </section>
 
@@ -104,6 +113,7 @@ export default function RentaMaquinariaPage() {
                   </div>
                   <div className="p-6 flex-grow flex flex-col">
                     <h3 className="text-2xl font-bold text-gray-900">{machine.category}</h3>
+                    <p className="mt-2 text-gray-600">$ {machine.precio}</p>
                     <p className="mt-2 text-gray-600 flex-grow">{machine.description}</p>
                     {/* BOTÓN CON LÓGICA CONDICIONAL */}
                     <button 
@@ -161,7 +171,7 @@ export default function RentaMaquinariaPage() {
           <p className="max-w-2xl mx-auto mb-8">
             Contacta a nuestro departamento de maquinaria para obtener una cotización y asegurar la disponibilidad de los equipos que necesitas.
           </p>
-          <Link href="/cotizacion" className="bg-white text-red-600 font-bold py-3 px-8 rounded-lg hover:bg-gray-100 transition-colors">
+          <Link href="/contacto" className="bg-white text-red-600 font-bold py-3 px-8 rounded-lg hover:bg-gray-100 transition-colors">
             Solicitar Cotización
           </Link>
         </div>
