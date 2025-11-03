@@ -1,15 +1,67 @@
 import { NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabase/server";
+import { LoginSchema } from "@/lib/schemas";
+import { createSession } from "@/lib/auth";
+import bcrypt from 'bcryptjs';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { username, password } = body
+    
+    const validatedFields = LoginSchema.safeParse(body);
+    
+    if (!validatedFields.success) {
+      return NextResponse.json(
+        { 
+          error: "Datos inválidos",
+          details: validatedFields.error.flatten().fieldErrors,
 
-    return NextResponse.json({ message: "User logged in successfully" });
+        },
+        { status: 400 }
+      );
+    }
+
+    const { email, password } = validatedFields.data;
+
+    const { data: user, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('id, email, password_hash, role')
+      .eq('email', email)
+      .single();
+
+    if (userError || !user) {
+      return NextResponse.json(
+        { error: "Credenciales incorrectas" },
+        { status: 401 }
+      );
+    }
+
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+    
+    if (!passwordMatch) {
+      return NextResponse.json(
+        { error: "Credenciales incorrectas" },
+        { status: 401 }
+      );
+    }
+
+    await createSession(user.id, user.email, user.role);
+
+    return NextResponse.json({ 
+      success: true,
+      message: "Inicio de sesión exitoso",
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role
+      }
+    });
+
   } catch (error) {
+    console.error("Error en login:", error);
     return NextResponse.json(
-      { error: "Failed to parse request body" },
-      { status: 400 }
+      { error: "Error interno del servidor" },
+      { status: 500 }
     );
   }
 }

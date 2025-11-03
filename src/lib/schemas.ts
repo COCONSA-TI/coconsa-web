@@ -15,3 +15,10 @@ export const ContactFormSchema = z.object({
     phone: z.string().optional(),
     message: z.string().min(10, { message: 'Tu mensaje debe tener al menos 10 caracteres.' }),
 });
+
+export const LoginSchema = z.object({
+    email: z.string().email({ message: 'Por favor, introduce un correo electrónico válido.' }),
+    password: z.string().min(6, { message: 'La contraseña debe tener al menos 6 caracteres.' }),
+});
+
+export type LoginFormData = z.infer<typeof LoginSchema>;

@@ -55,15 +55,11 @@ const machineryCatalog = [
 
 export default function VentaMaquinariaPage() {
   const { addItem, items } = useQuotation(); 
-  // 2. Crea un estado para rastrear los items recién añadidos
   const [justAdded, setJustAdded] = useState<string | null>(null);
 
-  // 3. Crea una función para manejar el clic
   const handleAddItem = (category: string) => {
     addItem(category);
-    setJustAdded(category); // Marca el item como recién añadido
-
-    // 4. Revierte el estado del botón después de 2 segundos
+    setJustAdded(category);
     setTimeout(() => {
       setJustAdded(null);
     }, 2000);
@@ -118,12 +114,12 @@ export default function VentaMaquinariaPage() {
                     {/* BOTÓN CON LÓGICA CONDICIONAL */}
                     <button 
                       onClick={() => handleAddItem(machine.category)}
-                      disabled={isAdded || wasJustAdded} // Deshabilitado si ya está añadido
+                      disabled={isAdded || wasJustAdded}
                       className={`
                         mt-6 w-full text-center font-bold py-2 px-4 rounded-lg transition-colors
                         ${isAdded || wasJustAdded 
-                          ? 'bg-green-500 text-white cursor-not-allowed' // Estilo para botón añadido
-                          : 'bg-red-600 text-white hover:bg-red-700' // Estilo normal
+                          ? 'bg-green-500 text-white cursor-not-allowed' 
+                          : 'bg-red-600 text-white hover:bg-red-700'
                         }
                       `}
                     >
