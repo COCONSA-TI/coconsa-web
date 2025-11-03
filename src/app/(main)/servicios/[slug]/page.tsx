@@ -48,7 +48,7 @@ export default function ServicioDetallePage({ params }: { params: { slug: string
       <div className="bg-white p-6 rounded-lg shadow-sm">
         <h3 className="text-2xl font-bold text-gray-800 mb-4">¿Interesado en este servicio?</h3>
         <p className="text-gray-600 mb-6">Nuestro equipo de expertos está listo para asesorarte en tu proyecto de {service.name}. Contáctanos para recibir una cotización personalizada.</p>
-        <Link href="/contacto" className="inline-block bg-blue-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-blue-700 transition-colors">
+        <Link href="/contacto" className="inline-block bg-red-600 text-white font-bold py-3 px-8 rounded-lg hover:bg-blue-700 transition-colors">
         Solicitar Información
         </Link>
       </div>

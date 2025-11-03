@@ -12,43 +12,43 @@ const machineryCatalog = [
   {
     category: 'Bulldozers',
     description: 'Potencia y precisión para empuje, desmonte y nivelación de grandes superficies de terreno.',
-    precio: 1500000,
+    // precio: 1500000,
     imageSrc: '/machines/bulldozer.jpg',
   },
   {
     category: 'Camiones de Volteo',
     description: 'Transporte eficiente y seguro de materiales a granel como tierra, grava y escombro.',
-    precio: 1200000,
+    // precio: 1200000,
     imageSrc: '/machines/camion-volteo.jpg',
   },
   {
     category: 'Excavadora',
     description: 'Versatilidad para excavación, zanjeo y movimiento de tierras en todo tipo de proyectos constructivos.',
-    precio: 1800000,
+    // precio: 1800000,
     imageSrc: '/machines/excavadora.jpg',
   },
   {
     category: 'Motoconformadora',
     description: 'Alta precisión para la nivelación final de superficies, ideal para la creación de caminos y plataformas.',
-    precio: 1600000,
+    // precio: 1600000,
     imageSrc: '/machines/motoconformadora.jpg',
   },
   {
     category: 'Pipa Freightliner',
     description: 'Suministro y riego de agua para control de polvo, compactación y otros usos esenciales en obra.',
-    precio: 900000,
+    // precio: 900000,
     imageSrc: '/machines/pipa-freightliner.jpg',
   },
   {
     category: 'Retroexcavadora',
     description: 'Equipo multifuncional, perfecto para zanjas, carga de materiales y trabajos en espacios reducidos.',
-    precio: 1100000,
+    // precio: 1100000,
     imageSrc: '/machines/retroexcavadora.jpg',
   },
   {
     category: 'Tractocamión con Góndola',
     description: 'Transporte de grandes volúmenes de material a granel para el abastecimiento eficiente de tus proyectos.',
-    precio: 1300000,
+    // precio: 1300000,
     imageSrc: '/machines/tractocamion-gondola.jpg',
   }
 ];
@@ -113,7 +113,7 @@ export default function VentaMaquinariaPage() {
                   </div>
                   <div className="p-6 flex-grow flex flex-col">
                     <h3 className="text-2xl font-bold text-gray-900">{machine.category}</h3>
-                    <p className="mt-2 text-gray-600">$ {machine.precio}</p>
+                    {/* <p className="mt-2 text-gray-600">$ {machine.precio}</p> */}
                     <p className="mt-2 text-gray-600 flex-grow">{machine.description}</p>
                     {/* BOTÓN CON LÓGICA CONDICIONAL */}
                     <button 

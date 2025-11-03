@@ -3,7 +3,6 @@ import dynamic from 'next/dynamic';
 import { useMemo } from 'react';
 
 export default function ProyectosPage() {
-    // Usamos useMemo para asegurarnos de que el componente del mapa no se vuelva a renderizar innecesariamente.
     const InteractiveMap = useMemo(() => dynamic(
         () => import('@/components/interactiveMap'),
         {
