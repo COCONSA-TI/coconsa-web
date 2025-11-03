@@ -1,4 +1,3 @@
-// src/lib/actions.ts
 'use server';
 
 import { z } from 'zod';
@@ -18,7 +17,6 @@ if (!salesEmail || !fromEmail) {
   throw new Error('Las variables de entorno SALES_EMAIL y FROM_EMAIL deben estar definidas');
 }
 
-// Define el esquema de validación
 const QuotationSchema = z.object({
   name: z.string().min(3, { message: 'El nombre debe tener al menos 3 caracteres.' }),
   email: z.string().email({ message: 'Por favor, introduce un correo electrónico válido.' }),
@@ -36,7 +34,6 @@ const QuotationSchema = z.object({
   }).refine(data => data.from, { message: "Debes seleccionar una fecha de inicio." }),
 });
 
-// Define un tipo para el estado que devolverá la acción
 export type FormState = {
   message: string;
   errors?: {
@@ -45,7 +42,6 @@ export type FormState = {
 };
 
 export async function sendQuotation(prevState: FormState, formData: FormData): Promise<FormState> {
-  // Convierte los datos del formulario a un objeto y parsea JSON
   const rawFormData = {
     name: formData.get('name') as string,
     email: formData.get('email') as string,
@@ -61,10 +57,8 @@ export async function sendQuotation(prevState: FormState, formData: FormData): P
     })(),
   };
 
-  // Valida los datos con Zod
   const validatedFields = QuotationSchema.safeParse(rawFormData);
 
-  // Si la validación falla, retorna los errores
   if (!validatedFields.success) {
     console.log(validatedFields.error.flatten().fieldErrors);
     return {
@@ -73,22 +67,16 @@ export async function sendQuotation(prevState: FormState, formData: FormData): P
     };
   }
 
-  // Si la validación es exitosa, continúa con el envío de correos
   const { name, email, phone, company, items, dateRange } = validatedFields.data;
 
   try {
         // 2. Prepara ambos correos y envíalos en paralelo
 
-
-
-        // Las plantillas deben ser funciones síncronas que devuelven JSX, no promesas
-        // Formatear las fechas como strings para los templates de email
         const formattedDateRange = {
           from: dateRange.from.toISOString(),
-          to: dateRange.to?.toISOString() || dateRange.from.toISOString() // Si no hay fecha final, usar la inicial
+          to: dateRange.to?.toISOString() || dateRange.from.toISOString()
         };
 
-        // Forzar el tipo de retorno a ReactElement
         const quotationEmailElement = QuotationEmail({ 
           name, 
           company: company || 'N/A', 
@@ -117,7 +105,6 @@ export async function sendQuotation(prevState: FormState, formData: FormData): P
             react: confirmationEmailElement,
         });
 
-        // Ejecuta ambas promesas
         const [salesResult, customerResult] = await Promise.all([sendToSales, sendToCustomer]);
 
         if (salesResult.error) {
@@ -129,20 +116,15 @@ export async function sendQuotation(prevState: FormState, formData: FormData): P
         }
         if (customerResult.error) {
             console.error("Error sending to customer:", customerResult.error);
-            // Aunque falle el correo al cliente, la cotización llegó a ventas,
-            // así que podríamos continuar y solo registrar el error.
         }
 
     } catch (exception) {
-        // ESTE LOG ES CLAVE
         console.error("ERROR AL ENVIAR CORREOS:", exception);
         return { 
           message: 'Ocurrió un error inesperado al enviar los correos.',
           errors: { form: ['Error interno del servidor.'] }
         };
     }
-
-    // 3. Redirigir a una página de agradecimiento (esto se queda igual)
     redirect('/gracias');
 }
 
@@ -166,10 +148,10 @@ export async function sendContactMessage(prevState: unknown, formData: FormData)
     const contactFormEmailElement = await ContactFormEmail({ name, email, phone, message });
 
     await resend.emails.send({
-      from: fromEmail, // Usa tu dominio verificado
-      to: [salesEmail], // El correo que recibirá los mensajes
+      from: fromEmail,
+      to: [salesEmail],
       subject: `Nuevo Mensaje de Contacto de ${name}`,
-      replyTo: email, // Para que al responder, le respondas al cliente
+      replyTo: email,
       react: contactFormEmailElement,
     });
 

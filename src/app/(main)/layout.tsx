@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
+import "../globals.css";
 import Navbar from "@/components/navbar";
 import Footer from "@/components/footer";
 import 'leaflet/dist/leaflet.css';
@@ -29,13 +29,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="{inter.className}">
-        <Navbar />
         <QuotationProvider>
         <main className={`min-h-screen flex flex-col ${geistSans.variable} ${geistMono.variable} font-sans`}>
           {children}
         </main>
         </QuotationProvider>
-        <Footer />
       </body>
     </html>
   );
