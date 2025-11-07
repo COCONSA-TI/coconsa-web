@@ -27,15 +27,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className="{inter.className}">
-        <Navbar />
+    <html lang="es">
+      <body className={`${geistSans.variable} ${geistMono.variable} font-sans`}>
         <QuotationProvider>
-        <main className={`min-h-screen flex flex-col ${geistSans.variable} ${geistMono.variable} font-sans`}>
           {children}
-        </main>
         </QuotationProvider>
-        <Footer />
       </body>
     </html>
   );
