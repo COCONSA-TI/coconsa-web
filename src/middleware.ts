@@ -3,9 +3,11 @@ import type { NextRequest } from 'next/server';
 import { decrypt } from '@/lib/auth';
 
 // Rutas protegidas que requieren autenticación
-const protectedRoutes = ['/dashboard', '/admin'];
-// Rutas públicas
-const publicRoutes = ['/login', '/', '/nosotros', '/servicios', '/contacto', '/clientes', '/galeria', '/proyectos', '/certificaciones'];
+const protectedRoutes = ['/dashboard'];
+// Rutas públicas (del sistema interno)
+const publicAuthRoutes = ['/login'];
+// Rutas públicas (del sitio web)
+const publicRoutes = ['/', '/nosotros', '/servicios', '/contacto', '/clientes', '/galeria', '/proyectos', '/certificaciones', '/cotizacion', '/venta-maquinaria', '/gracias'];
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
@@ -14,14 +16,14 @@ export async function middleware(request: NextRequest) {
 
   // Obtener el token de sesión
   const cookie = request.cookies.get('session')?.value;
-  const session = await decrypt(cookie);
+  const session = cookie ? await decrypt(cookie) : null;
 
   // Redirigir a login si intenta acceder a ruta protegida sin sesión
   if (isProtectedRoute && !session) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  // Redirigir a home si ya está logueado e intenta acceder a login
+  // Redirigir a dashboard si ya está logueado e intenta acceder a login
   if (path === '/login' && session) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }

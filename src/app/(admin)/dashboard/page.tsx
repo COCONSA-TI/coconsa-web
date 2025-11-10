@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 
 interface User {
   id: string;
@@ -38,16 +37,6 @@ export default function DashboardPage() {
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await fetch('/api/v1/logout', { method: 'POST' });
-      router.push('/login');
-      router.refresh();
-    } catch (error) {
-      console.error('Error al cerrar sesión:', error);
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -60,31 +49,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <Image
-              src="/logo-coconsa.png"
-              alt="COCONSA Logo"
-              width={50}
-              height={50}
-              priority
-            />
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard COCONSA</h1>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
-          >
-            Cerrar Sesión
-          </button>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="max-w-7xl mx-auto">
         {/* Welcome Card */}
         <div className="bg-white rounded-lg shadow-lg p-8 mb-8">
           <div className="flex items-center gap-4 mb-6">
@@ -205,7 +170,6 @@ export default function DashboardPage() {
             <p className="text-sm text-gray-600">Ver estadísticas</p>
           </button>
         </div>
-      </main>
-    </div>
+      </div>
   );
 }
