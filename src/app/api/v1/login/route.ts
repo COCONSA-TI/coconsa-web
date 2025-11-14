@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { LoginSchema } from "@/lib/schemas";
 import { createSession } from "@/lib/auth";
 import bcrypt from 'bcryptjs';
+import { verifyRecaptcha } from "@/lib/captcha";
 
 export async function POST(request: Request) {
   try {
@@ -21,7 +22,17 @@ export async function POST(request: Request) {
       );
     }
 
-    const { email, password } = validatedFields.data;
+    const { email, password, recaptchaToken } = validatedFields.data;
+
+    // Verifica el token de reCAPTCHA
+    const recaptchaResult = await verifyRecaptcha(recaptchaToken);
+    
+    if (!recaptchaResult.success) {
+      return NextResponse.json(
+        { error: "Verificación de seguridad fallida. Por favor, intenta nuevamente." },
+        { status: 403 }
+      );
+    }
 
     const { data: user, error: userError } = await supabaseAdmin
       .from('users')

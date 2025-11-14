@@ -134,6 +134,7 @@ export async function sendContactMessage(prevState: unknown, formData: FormData)
     email: formData.get('email'),
     phone: formData.get('phone'),
     message: formData.get('message'),
+    recaptchaToken: formData.get('recaptchaToken'),
   });
 
   if (!validatedFields.success) {
@@ -142,7 +143,20 @@ export async function sendContactMessage(prevState: unknown, formData: FormData)
     };
   }
 
-  const { name, email, phone, message } = validatedFields.data;
+  const { name, email, phone, message, recaptchaToken } = validatedFields.data;
+
+  // Verifica el token de reCAPTCHA
+  if (recaptchaToken) {
+    const { verifyRecaptcha } = await import('./captcha');
+    const recaptchaResult = await verifyRecaptcha(recaptchaToken);
+    
+    if (!recaptchaResult.success) {
+      return { 
+        success: false, 
+        message: 'Verificación de seguridad fallida. Por favor, intenta nuevamente.' 
+      };
+    }
+  }
   
   try {
     const contactFormEmailElement = await ContactFormEmail({ name, email, phone, message });

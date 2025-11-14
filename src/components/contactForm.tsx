@@ -1,17 +1,20 @@
                     'use client';
 
-import { useActionState, useEffect } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ContactFormSchema } from '@/lib/schemas';
 import { sendContactMessage } from '@/lib/actions';
 import { z } from 'zod';
+import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
 
 // Define el tipo de datos del formulario
 type ContactFormData = z.infer<typeof ContactFormSchema>;
 
 export default function ContactForm() {
   const [state, formAction] = useActionState(sendContactMessage, null);
+  const { executeRecaptcha } = useGoogleReCaptcha();
+  const [error, setError] = useState<string>('');
   
   const { register, handleSubmit, formState: { errors, isSubmitting }, reset } = useForm<ContactFormData>({
     resolver: zodResolver(ContactFormSchema),
@@ -25,10 +28,38 @@ export default function ContactForm() {
     }
   }, [state, reset]);
 
+  const onSubmit = async (data: ContactFormData) => {
+    setError('');
+
+    try {
+      if (!executeRecaptcha) {
+        setError('reCAPTCHA no está disponible. Por favor, recarga la página.');
+        return;
+      }
+
+      // Genera el token de reCAPTCHA v3
+      const recaptchaToken = await executeRecaptcha('contact');
+
+      // Crea FormData con los datos del formulario y el token
+      const formData = new FormData();
+      formData.append('name', data.name);
+      formData.append('email', data.email);
+      if (data.phone) formData.append('phone', data.phone);
+      formData.append('message', data.message);
+      formData.append('recaptchaToken', recaptchaToken);
+
+      // Envía el formulario con la acción del servidor
+      formAction(formData);
+    } catch (err) {
+      console.error('Error al procesar el formulario:', err);
+      setError('Error al procesar el formulario. Por favor, intenta nuevamente.');
+    }
+  };
+
   return (
     <div className="bg-white p-8 rounded-lg shadow-lg">
       <h3 className="text-2xl font-semibold text-gray-800 mb-6">Envíanos un Mensaje</h3>
-      <form action={formAction} className="space-y-6">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div>
           <label htmlFor="name" className="block text-sm font-medium text-gray-700">Nombre Completo</label>
           <input
@@ -76,11 +107,19 @@ export default function ContactForm() {
             {isSubmitting ? 'Enviando...' : 'Enviar Mensaje'}
           </button>
         </div>
+        {error && (
+          <p className="text-center font-medium text-red-500">
+            {error}
+          </p>
+        )}
         {state?.message && (
           <p className={`text-center font-medium ${state?.success ? 'text-green-500' : 'text-red-500'}`}>
             {state?.message}
           </p>
         )}
+        <p className="text-xs text-gray-500 text-center">
+          Protegido por reCAPTCHA v3
+        </p>
       </form>
     </div>
   );

@@ -3,7 +3,7 @@ import { deleteSession } from "@/lib/auth";
 
 export async function POST() {
   try {
-    deleteSession();
+    await deleteSession();
     
     return NextResponse.json({ 
       success: true,

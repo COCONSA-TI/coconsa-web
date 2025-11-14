@@ -37,7 +37,6 @@ export default function ChatBotPage() {
     setInput('');
     setIsLoading(true);
 
-    // Simular respuesta del bot (aquí conectarás tu IA)
     setTimeout(() => {
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
