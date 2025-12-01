@@ -4,6 +4,31 @@ Sitio web corporativo para COCONSA - Empresa líder en construcción industrial 
 
 Este proyecto está construido con [Next.js](https://nextjs.org) 15 y utiliza las últimas tecnologías web.
 
+## 🤖 Chatbot con IA
+
+Incluye un **chatbot inteligente** con Google Gemini AI que:
+- 💬 Conversa naturalmente con usuarios
+- 📝 Extrae información automáticamente
+- 🎯 Rellena formularios sin esfuerzo
+
+### 🚀 Configuración Rápida del Chatbot
+
+1. **Instalar dependencia:**
+```bash
+npm install @google/generative-ai
+```
+
+2. **Configurar API key en `.env.local`:**
+```bash
+GEMINI_API_KEY=tu_api_key_aqui
+```
+
+3. **Obtener API key:** [Google AI Studio](https://makersuite.google.com/app/apikey)
+
+📖 **Documentación completa:** Ver [CHATBOT_QUICKSTART.md](./CHATBOT_QUICKSTART.md)
+
+---
+
 ## 🛡️ Protección con reCAPTCHA v3
 
 Los formularios de este sitio están protegidos con **Google reCAPTCHA v3** (invisible):
@@ -70,6 +95,9 @@ FROM_EMAIL=noreply@coconsa.com
 # reCAPTCHA v3
 NEXT_PUBLIC_RECAPTCHA_SITE_KEY=your_site_key
 RECAPTCHA_SECRET_KEY=your_secret_key
+
+# Gemini AI (Chatbot)
+GEMINI_API_KEY=your_gemini_api_key
 ```
 
 Ver [.env.example](./.env.example) para más detalles.
@@ -80,6 +108,7 @@ Ver [.env.example](./.env.example) para más detalles.
 - ✅ **TypeScript** - Type safety
 - ✅ **Tailwind CSS** - Estilos modernos
 - ✅ **Supabase** - Base de datos y autenticación
+- ✅ **Gemini AI** - Chatbot inteligente con IA
 - ✅ **reCAPTCHA v3** - Protección de formularios (invisible)
 - ✅ **Resend** - Envío de emails
 - ✅ **React Hook Form** - Manejo de formularios
@@ -115,10 +144,17 @@ coconsa-web/
 
 ## Documentación Adicional
 
+### 🤖 Chatbot con IA
+- [CHATBOT_QUICKSTART.md](./CHATBOT_QUICKSTART.md) - Guía rápida del chatbot
+- [CHATBOT_DOCUMENTATION.md](./CHATBOT_DOCUMENTATION.md) - Documentación completa
+
+### 🛡️ reCAPTCHA v3
 - [RECAPTCHA_README.md](./RECAPTCHA_README.md) - Guía completa de reCAPTCHA
 - [RECAPTCHA_QUICKSTART.md](./RECAPTCHA_QUICKSTART.md) - Inicio rápido
 - [RECAPTCHA_CHECKLIST.md](./RECAPTCHA_CHECKLIST.md) - Checklist de configuración
 - [RECAPTCHA_SETUP.md](./RECAPTCHA_SETUP.md) - Configuración detallada
+
+### 🔐 Autenticación
 - [LOGIN_SETUP.md](./LOGIN_SETUP.md) - Configuración del sistema de login
 
 ## Learn More

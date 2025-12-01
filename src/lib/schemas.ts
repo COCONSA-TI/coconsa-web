@@ -24,3 +24,26 @@ export const LoginSchema = z.object({
 });
 
 export type LoginFormData = z.infer<typeof LoginSchema>;
+
+// Schema para el chatbot
+export const ChatbotMessageSchema = z.object({
+    message: z.string().min(1, { message: 'El mensaje no puede estar vacío.' }),
+    conversationHistory: z.array(z.object({
+        role: z.enum(['user', 'assistant']),
+        content: z.string(),
+    })).optional(),
+});
+
+export const ChatbotExtractedDataSchema = z.object({
+    name: z.string().optional(),
+    email: z.string().optional(),
+    phone: z.string().optional(),
+    company: z.string().optional(),
+    message: z.string().optional(),
+    projectType: z.string().optional(),
+    budget: z.string().optional(),
+    timeline: z.string().optional(),
+});
+
+export type ChatbotMessage = z.infer<typeof ChatbotMessageSchema>;
+export type ChatbotExtractedData = z.infer<typeof ChatbotExtractedDataSchema>;

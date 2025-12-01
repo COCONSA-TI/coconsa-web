@@ -24,14 +24,18 @@ export async function POST(request: Request) {
 
     const { email, password, recaptchaToken } = validatedFields.data;
 
-    // Verifica el token de reCAPTCHA
-    const recaptchaResult = await verifyRecaptcha(recaptchaToken);
-    
-    if (!recaptchaResult.success) {
-      return NextResponse.json(
-        { error: "Verificación de seguridad fallida. Por favor, intenta nuevamente." },
-        { status: 403 }
-      );
+    // Solo verificar reCAPTCHA en producción
+    if (process.env.NODE_ENV === 'production') {
+      const recaptchaResult = await verifyRecaptcha(recaptchaToken);
+      
+      if (!recaptchaResult.success) {
+        return NextResponse.json(
+          { error: "Verificación de seguridad fallida. Por favor, intenta nuevamente." },
+          { status: 403 }
+        );
+      }
+    } else {
+      console.log('⚠️ Modo desarrollo: Saltando verificación de reCAPTCHA');
     }
 
     const { data: user, error: userError } = await supabaseAdmin
