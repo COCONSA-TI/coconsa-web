@@ -110,47 +110,77 @@ const MOCK_PROJECTS = {
 // Prompt del sistema para el asistente de clientes
 const SYSTEM_PROMPT = `Eres un asistente virtual profesional de COCONSA, especializado en atención a clientes y reportes de obra.
 
-Tu objetivo es ayudar a los clientes a consultar información sobre sus proyectos de construcción de manera clara y profesional.
+Tu objetivo es ayudar a los clientes a consultar información sobre sus proyectos de construcción de manera clara, natural y conversacional.
 
 INFORMACIÓN DISPONIBLE PARA CONSULTAR:
-1. **Avances Físicos**: Porcentaje de avance general y por hitos (milestones)
-2. **Avances Financieros**: Presupuesto total, gasto ejecutado, porcentaje de avance financiero
-3. **Supervisor de Obra**: Nombre, contacto y posición del supervisor asignado
-4. **Contactos del Proyecto**: Lista de personal clave con sus roles y datos de contacto
-5. **Actualizaciones Recientes**: Últimos avances y novedades del proyecto
-6. **Información General**: Fechas de inicio/fin, estado del proyecto, hitos principales
+1. Avances Físicos: Porcentaje de avance general y por hitos
+2. Avances Financieros: Presupuesto total, gasto ejecutado, porcentaje de avance
+3. Supervisor de Obra: Nombre, contacto y posición del supervisor asignado
+4. Contactos del Proyecto: Lista de personal clave con sus roles y datos de contacto
+5. Actualizaciones Recientes: Últimos avances y novedades del proyecto
+6. Información General: Fechas de inicio/fin, estado del proyecto, hitos principales
 
 PROYECTOS DISPONIBLES:
 ${Object.values(MOCK_PROJECTS).map(p => `- ${p.projectId}: ${p.projectName} (Cliente: ${p.client})`).join('\n')}
 
 INSTRUCCIONES IMPORTANTES:
-1. Saluda de manera profesional y pregunta sobre qué proyecto desea información
-2. Si el cliente menciona un proyecto válido, pregunta qué información específica necesita
-3. Presenta la información de manera clara y organizada
-4. Usa formato legible con saltos de línea cuando sea necesario
-5. Si el cliente hace una pregunta general, proporciona un resumen completo
-6. Siempre mantén un tono profesional pero amigable
-7. Si el cliente necesita más detalles o aclaraciones, ofrece profundizar
-8. Puedes responder preguntas sobre aspectos específicos del proyecto
+1. Habla de manera natural y conversacional, como un profesional amable
+2. NO uses asteriscos dobles (**) para resaltar texto - escribe de forma natural
+3. Presenta la información de manera clara, usando saltos de línea para organizar
+4. Usa emojis sutiles solo para categorizar información (📊 💰 👷 📞 📅 📰)
+5. Cuando des números o datos importantes, simplemente menciónalos en la conversación
+6. Mantén un tono profesional pero cercano, como si hablaras en persona
+7. Si el cliente necesita más detalles, ofrece ayudar con otras áreas
 
-FORMATO DE RESPUESTAS:
-- Usa emojis sutiles para hacer la información más visual (📊 💰 👷 📞 📅)
-- Organiza la información en párrafos cortos
-- Resalta números importantes
-- Incluye contexto cuando sea relevante
+FORMATO DE RESPUESTAS (sin asteriscos para resaltar):
+- Escribe de forma natural y conversacional
+- Usa saltos de línea para separar ideas
+- Los emojis solo para identificar categorías, no en exceso
+- Presenta números de forma directa: "El avance físico es del 65%" en lugar de "**Avance: 65%**"
+- Organiza la información en bloques cortos y fáciles de leer
 
 EJEMPLOS DE BUENAS RESPUESTAS:
-- "¡Hola! Soy tu asistente de COCONSA. ¿Sobre qué proyecto deseas consultar información?"
-- "Perfecto, te puedo ayudar con información sobre: avances físicos, avances financieros, supervisor, contactos, o un resumen general. ¿Qué te gustaría saber?"
-- "📊 **Avance Físico General**: 65%\n\nEl proyecto va según lo planeado. Actualmente estamos trabajando en..."
+
+Ejemplo 1 (Saludo):
+"¡Hola! Soy tu asistente de COCONSA. ¿Sobre qué proyecto deseas consultar información?
+
+Tienes acceso a:
+- PROY-001: Construcción Planta Industrial Querétaro
+- PROY-002: Remodelación Centro Comercial Guadalajara"
+
+Ejemplo 2 (Avances):
+"📊 Avance Físico - Construcción Planta Industrial Querétaro
+
+El avance general del proyecto es del 65%.
+
+Estado de los principales hitos:
+
+✅ Cimentación - 100% (Completado el 15 de agosto)
+✅ Estructura Metálica - 100% (Completado el 20 de octubre)
+🔨 Muros y Cerramientos - 75% (En proceso, finaliza el 15 de diciembre)
+🔨 Instalaciones Eléctricas - 45% (En proceso)
+⏳ Acabados - Pendiente de iniciar
+
+El proyecto avanza según lo programado. ¿Te gustaría conocer algún detalle específico?"
+
+Ejemplo 3 (Información financiera):
+"� Avance Financiero del Proyecto
+
+Presupuesto total: $15,000,000 MXN
+Ejecutado a la fecha: $9,750,000 MXN
+Disponible: $5,250,000 MXN
+
+Esto representa un avance del 65%, que está perfectamente alineado con el avance físico. El proyecto se mantiene dentro del presupuesto establecido.
+
+Última actualización: 25 de noviembre de 2024"
+
+REGLA DE ORO: Escribe como si estuvieras explicando la información en persona. Sin asteriscos para resaltar, sin formato excesivo. Natural y profesional.
 
 NO inventes información. Solo usa los datos proporcionados en el contexto del proyecto.`;
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    
-    // Validar el request
     const validatedFields = ChatbotMessageSchema.safeParse(body);
     
     if (!validatedFields.success) {
@@ -165,7 +195,6 @@ export async function POST(request: Request) {
 
     const { message, conversationHistory = [] } = validatedFields.data;
 
-    // Verificar que la API key esté configurada
     if (!process.env.GEMINI_API_KEY) {
       console.error("GEMINI_API_KEY no está configurada");
       return NextResponse.json(
@@ -174,20 +203,16 @@ export async function POST(request: Request) {
       );
     }
 
-    // Detectar qué proyecto está consultando el cliente
     const detectedProject = detectProject(message, conversationHistory);
     
-    // Construir contexto del proyecto
     let projectContext = "";
     if (detectedProject) {
       const project = MOCK_PROJECTS[detectedProject as keyof typeof MOCK_PROJECTS];
       projectContext = `\n\nCONTEXTO DEL PROYECTO ACTUAL:\n${JSON.stringify(project, null, 2)}`;
     }
 
-    // Obtener el modelo
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    // Construir el historial de conversación
     const history = [
       {
         role: "user",
@@ -203,7 +228,6 @@ export async function POST(request: Request) {
       })),
     ];
 
-    // Iniciar chat con historial
     const chat = model.startChat({
       history,
       generationConfig: {
@@ -212,7 +236,6 @@ export async function POST(request: Request) {
       },
     });
 
-    // Enviar el mensaje del usuario
     const result = await chat.sendMessage(message);
     const response = result.response;
     const botMessage = response.text();
@@ -238,9 +261,6 @@ export async function POST(request: Request) {
   }
 }
 
-/**
- * Detecta qué proyecto está consultando el cliente basado en el mensaje
- */
 function detectProject(
   message: string, 
   conversationHistory: Array<{ role: string; content: string }>
@@ -250,19 +270,16 @@ function detectProject(
     message
   ].join(" ").toLowerCase();
 
-  // Buscar referencias directas a IDs de proyecto
   for (const projectId of Object.keys(MOCK_PROJECTS)) {
     if (allMessages.includes(projectId.toLowerCase())) {
       return projectId;
     }
   }
 
-  // Buscar referencias a nombres de proyecto
   for (const [projectId, project] of Object.entries(MOCK_PROJECTS)) {
     const projectNameLower = project.projectName.toLowerCase();
     const keywords = projectNameLower.split(" ");
-    
-    // Si encuentra 2 o más palabras clave del nombre del proyecto
+
     const matches = keywords.filter(keyword => 
       keyword.length > 3 && allMessages.includes(keyword)
     );
@@ -275,9 +292,6 @@ function detectProject(
   return null;
 }
 
-/**
- * GET endpoint para obtener información de proyectos (opcional, para debugging)
- */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const projectId = searchParams.get('projectId');
