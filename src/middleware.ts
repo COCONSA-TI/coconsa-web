@@ -4,15 +4,10 @@ import { decrypt } from '@/lib/auth';
 
 // Rutas protegidas que requieren autenticación
 const protectedRoutes = ['/dashboard'];
-// Rutas públicas (del sistema interno)
-const publicAuthRoutes = ['/login'];
-// Rutas públicas (del sitio web)
-const publicRoutes = ['/', '/nosotros', '/servicios', '/contacto', '/clientes', '/galeria', '/proyectos', '/certificaciones', '/cotizacion', '/venta-maquinaria', '/gracias'];
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isProtectedRoute = protectedRoutes.some(route => path.startsWith(route));
-  const isPublicRoute = publicRoutes.some(route => path === route || path.startsWith(route));
 
   // Obtener el token de sesión
   const cookie = request.cookies.get('session')?.value;

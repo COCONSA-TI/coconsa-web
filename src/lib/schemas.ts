@@ -1,4 +1,4 @@
-import {email, z} from 'zod';
+import { z } from 'zod';
 
 export const QuotationSchema = z.object({
     name: z.string().min(3, { message: "El nombre es muy corto." }).max(100, { message: "El nombre es muy largo." }),
