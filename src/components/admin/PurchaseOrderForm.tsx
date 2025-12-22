@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 interface Item {
   id: string;
@@ -8,12 +8,12 @@ interface Item {
   cantidad: string;
   unidad: string;
   precioUnitario: string;
+  proveedor: string;
 }
 
 interface OrderData {
   applicant_name: string;
   store_name: string;
-  supplier_name: string;
   justification: string;
   currency: string;
   retention: string;
@@ -26,22 +26,59 @@ interface PurchaseOrderFormProps {
 }
 
 export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) {
+  const [currentUser, setCurrentUser] = useState<{name: string, email: string} | null>(null);
+  const [availableStores, setAvailableStores] = useState<string[]>([]);
+  const [availableSuppliers, setAvailableSuppliers] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     applicant_name: "",
     store_name: "",
-    supplier_name: "",
+    store_custom: "",
     justification: "",
     currency: "MXN",
     retention: "",
   });
 
   const [items, setItems] = useState<Item[]>([
-    { id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "" },
+    { id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "", proveedor: "" },
   ]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Obtener usuario actual
+        const userResponse = await fetch('/api/v1/me');
+        if (userResponse.ok) {
+          const userData = await userResponse.json();
+          setCurrentUser({ name: userData.user.full_name, email: userData.user.email });
+          setFormData(prev => ({ ...prev, applicant_name: userData.user.full_name }));
+        }
+
+        // Obtener almacenes y proveedores disponibles
+        const botResponse = await fetch('/api/v1/bot', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: 'init' })
+        });
+
+        if (botResponse.ok) {
+          const botData = await botResponse.json();
+          if (botData.availableStores && Array.isArray(botData.availableStores)) {
+            setAvailableStores(botData.availableStores.map((store: { name: string }) => store.name));
+          }
+          if (botData.availableSuppliers && Array.isArray(botData.availableSuppliers)) {
+            setAvailableSuppliers(botData.availableSuppliers.map((supplier: { commercial_name: string }) => supplier.commercial_name));
+          }
+        }
+      } catch (error) {
+        console.error('Error obteniendo datos:', error);
+      }
+    };
+    fetchData();
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -58,7 +95,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     const newId = (Math.max(...items.map((i) => parseInt(i.id))) + 1).toString();
     setItems((prev) => [
       ...prev,
-      { id: newId, nombre: "", cantidad: "", unidad: "pza", precioUnitario: "" },
+      { id: newId, nombre: "", cantidad: "", unidad: "pza", precioUnitario: "", proveedor: "" },
     ]);
   };
 
@@ -81,18 +118,21 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     setError(null);
     setSuccess(false);
 
+    // Determinar el nombre del almacén (si es custom o seleccionado)
+    const storeName = formData.store_name === "custom" ? formData.store_custom : formData.store_name;
+
     // Validación básica
-    if (!formData.applicant_name || !formData.store_name || !formData.supplier_name) {
+    if (!formData.applicant_name || !storeName) {
       setError("Por favor completa todos los campos requeridos");
       return;
     }
 
     const validItems = items.filter(
-      (item) => item.nombre && item.cantidad && item.unidad && item.precioUnitario
+      (item) => item.nombre && item.cantidad && item.unidad && item.precioUnitario && item.proveedor && item.proveedor !== "custom"
     );
 
     if (validItems.length === 0) {
-      setError("Debes agregar al menos un artículo válido");
+      setError("Debes agregar al menos un artículo válido con su proveedor");
       return;
     }
 
@@ -101,10 +141,10 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
       return;
     }
 
+    // Preparar datos para el endpoint - cada item ya tiene su proveedor
     const orderData = {
       applicant_name: formData.applicant_name,
-      store_name: formData.store_name,
-      supplier_name: formData.supplier_name,
+      store_name: storeName,
       justification: formData.justification,
       currency: formData.currency,
       retention: formData.retention || '',
@@ -113,6 +153,8 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
         cantidad: parseFloat(item.cantidad),
         unidad: item.unidad,
         precioUnitario: parseFloat(item.precioUnitario),
+        proveedor: item.proveedor,
+        precioTotal: parseFloat(item.cantidad) * parseFloat(item.precioUnitario),
       })),
     };
 
@@ -134,29 +176,24 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
       }
 
       setSuccess(true);
-      
-      // Resetear formulario
       setFormData({
-        applicant_name: "",
+        applicant_name: currentUser?.name || "",
         store_name: "",
-        supplier_name: "",
+        store_custom: "",
         justification: "",
         currency: "MXN",
         retention: "",
       });
-      setItems([{ id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "" }]);
+      setItems([{ id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "", proveedor: "" }]);
 
       if (onSubmit) {
         onSubmit(data);
       }
       
-      // Auto-ocultar mensaje de éxito después de 5 segundos
       setTimeout(() => setSuccess(false), 5000);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
       setError(errorMessage);
-      
-      // Auto-ocultar mensaje de error después de 10 segundos
       setTimeout(() => setError(null), 10000);
     } finally {
       setLoading(false);
@@ -181,7 +218,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
       {/* Información del Solicitante */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          📋 Información del Solicitante
+          Información del Solicitante
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -191,48 +228,44 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
             <input
               type="text"
               name="applicant_name"
-              value={formData.applicant_name}
-              onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Ej: Juan Pérez"
-              required
+              value={formData.applicant_name || ""}
+              readOnly
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-900 cursor-not-allowed"
+              placeholder="Cargando..."
             />
+            {currentUser && (
+              <p className="text-xs text-gray-500 mt-1">Detectado automáticamente: {currentUser.email}</p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Almacén u Obra <span className="text-red-500">*</span>
             </label>
-            <input
-              type="text"
+            <select
               name="store_name"
-              value={formData.store_name}
+              value={formData.store_name || ""}
               onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Ej: Almacén Central"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
               required
-            />
+            >
+              <option value="">Selecciona un almacén u obra</option>
+              {availableStores.map((store) => (
+                <option key={store} value={store}>{store}</option>
+              ))}
+              <option value="custom">✏️ Otro (personalizado)</option>
+            </select>
+            {formData.store_name === "custom" && (
+              <input
+                type="text"
+                name="store_custom"
+                value={formData.store_custom || ""}
+                onChange={handleInputChange}
+                className="w-full mt-2 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                placeholder="Escribe el nombre del almacén u obra"
+                required
+              />
+            )}
           </div>
-        </div>
-      </div>
-
-      {/* Información del Proveedor */}
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          🏢 Información del Proveedor
-        </h3>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Nombre del Proveedor <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            name="supplier_name"
-            value={formData.supplier_name}
-            onChange={handleInputChange}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="Ej: Proveedores S.A. de C.V."
-            required
-          />
         </div>
       </div>
 
@@ -240,7 +273,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-900">
-            📦 Artículos / Servicios
+            Artículos / Servicios
           </h3>
           <button
             type="button"
@@ -277,9 +310,33 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                     type="text"
                     value={item.nombre}
                     onChange={(e) => handleItemChange(item.id, "nombre", e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900"
                     placeholder="Ej: Cemento gris 50kg"
                   />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Proveedor <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={item.proveedor}
+                    onChange={(e) => handleItemChange(item.id, "proveedor", e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900"
+                  >
+                    <option value="">Selecciona proveedor</option>
+                    {availableSuppliers.map((supplier) => (
+                      <option key={supplier} value={supplier}>{supplier}</option>
+                    ))}
+                    <option value="custom">✏️ Otro (personalizado)</option>
+                  </select>
+                  {item.proveedor === "custom" && (
+                    <input
+                      type="text"
+                      placeholder="Nombre del proveedor"
+                      onChange={(e) => handleItemChange(item.id, "proveedor", e.target.value || "custom")}
+                      className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900"
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -290,10 +347,12 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                     step="0.01"
                     value={item.cantidad}
                     onChange={(e) => handleItemChange(item.id, "cantidad", e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900"
                     placeholder="100"
                   />
                 </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
                     Unidad
@@ -301,7 +360,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                   <select
                     value={item.unidad}
                     onChange={(e) => handleItemChange(item.id, "unidad", e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900"
                   >
                     <option value="pza">Pieza</option>
                     <option value="kg">Kilogramo</option>
@@ -314,7 +373,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                     <option value="servicio">Servicio</option>
                   </select>
                 </div>
-                <div className="md:col-span-4">
+                <div className="md:col-span-2">
                   <label className="block text-xs font-medium text-gray-600 mb-1">
                     Precio Unitario (sin IVA)
                   </label>
@@ -325,15 +384,24 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                     onChange={(e) =>
                       handleItemChange(item.id, "precioUnitario", e.target.value)
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900"
                     placeholder="150.00"
                   />
                 </div>
               </div>
               {item.cantidad && item.precioUnitario && (
-                <div className="mt-3 text-right text-sm text-gray-600">
-                  <span className="font-semibold">Subtotal: </span>
-                  {formData.currency} ${(parseFloat(item.cantidad) * parseFloat(item.precioUnitario)).toFixed(2)}
+                <div className="mt-3 pt-3 border-t border-gray-300 flex justify-between items-center">
+                  <span className="text-sm text-gray-600">
+                    {item.proveedor && item.proveedor !== "custom" && (
+                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded mr-2">
+                        {item.proveedor}
+                      </span>
+                    )}
+                  </span>
+                  <div className="text-sm text-gray-600">
+                    <span className="font-semibold">Subtotal: </span>
+                    {formData.currency} ${(parseFloat(item.cantidad) * parseFloat(item.precioUnitario)).toFixed(2)}
+                  </div>
                 </div>
               )}
             </div>
@@ -354,7 +422,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
       {/* Detalles Adicionales */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          📝 Detalles Adicionales
+          Detalles Adicionales
         </h3>
         <div className="space-y-4">
           <div>
@@ -366,7 +434,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
               value={formData.justification}
               onChange={handleInputChange}
               rows={3}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
               placeholder="Describe el motivo de esta compra..."
               required
             />
@@ -380,7 +448,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                 name="currency"
                 value={formData.currency}
                 onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
               >
                 <option value="MXN">MXN - Pesos Mexicanos</option>
                 <option value="USD">USD - Dólares</option>
@@ -395,8 +463,8 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                 name="retention"
                 value={formData.retention}
                 onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Ej: 4%"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                placeholder="Ej: IVA 16%"
               />
             </div>
           </div>
@@ -409,14 +477,14 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
           type="button"
           onClick={() => {
             setFormData({
-              applicant_name: "",
+              applicant_name: currentUser?.name || "",
               store_name: "",
-              supplier_name: "",
+              store_custom: "",
               justification: "",
               currency: "MXN",
               retention: "",
             });
-            setItems([{ id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "" }]);
+            setItems([{ id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "", proveedor: "" }]);
           }}
           className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
         >
