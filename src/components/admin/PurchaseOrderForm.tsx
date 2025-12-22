@@ -10,8 +10,19 @@ interface Item {
   precioUnitario: string;
 }
 
+interface OrderData {
+  applicant_name: string;
+  store_name: string;
+  supplier_name: string;
+  justification: string;
+  currency: string;
+  retention: string;
+  items: Item[];
+  total: number;
+}
+
 interface PurchaseOrderFormProps {
-  onSubmit?: (data: any) => void;
+  onSubmit?: (data: OrderData) => void;
 }
 
 export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) {

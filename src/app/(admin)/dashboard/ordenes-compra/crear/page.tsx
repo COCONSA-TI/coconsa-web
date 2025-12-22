@@ -128,7 +128,7 @@ export default function CrearOrdenPage() {
       {lastOrderCreated && (
         <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 bg-green-600 text-white p-4 rounded-lg shadow-lg max-w-md animate-slide-up z-50">
           <div>
-            <h4 className="font-bold mb-1 text-sm sm:text-base">¡Orden Creada!</h4>
+            <h4 className="font-bold mb-1 text-sm sm:text-base">&iexcl;Orden Creada!</h4>
             <p className="text-xs sm:text-sm">
               Redirigiendo al hub de órdenes...
             </p>

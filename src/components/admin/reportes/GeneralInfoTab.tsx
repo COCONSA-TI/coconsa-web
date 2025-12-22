@@ -11,7 +11,7 @@ export default function GeneralInfoTab({
   formData,
   setFormData,
 }: GeneralInfoTabProps) {
-  const handleChange = (field: keyof Project, value: any) => {
+  const handleChange = (field: keyof Project, value: string | number | boolean) => {
     setFormData({ ...formData, [field]: value });
   };
 
