@@ -94,10 +94,10 @@ export default function ChatBotPage() {
 
         // Si la orden está completa, intentar crearla
         if (data.extractedData?.isComplete) {
-          console.log('🎯 Orden completa detectada, creando...', data.extractedData);
+          console.log('Orden completa detectada, creando...', data.extractedData);
           await createOrder(data.extractedData);
         } else {
-          console.log('📝 Datos recopilados hasta ahora:', data.extractedData);
+          console.log('Datos recopilados hasta ahora:', data.extractedData);
         }
       } else {
         throw new Error(data.error || 'Error al procesar el mensaje');

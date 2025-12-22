@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { ChatbotExtractedData } from '@/lib/schemas';
+import { PurchaseOrderExtractedData } from '@/lib/schemas';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -9,19 +9,30 @@ interface Message {
 }
 
 interface ChatbotProps {
-  onFormDataExtracted?: (data: ChatbotExtractedData) => void;
+  onFormDataExtracted?: (data: PurchaseOrderExtractedData) => void;
+  onOrderCreated?: (order: any) => void;
 }
 
-export default function Chatbot({ onFormDataExtracted }: ChatbotProps) {
+interface AvailableOption {
+  id: number;
+  name?: string;
+  commercial_name?: string;
+}
+
+export default function Chatbot({ onFormDataExtracted, onOrderCreated }: ChatbotProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: '¡Hola! Soy el asistente de COCONSA. ¿En qué proyecto puedo ayudarte hoy?',
+      content: '¡Hola! Soy el asistente de COCONSA. ¿Necesitas crear una orden de compra?',
     },
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [extractedData, setExtractedData] = useState<ChatbotExtractedData>({});
+  const [extractedData, setExtractedData] = useState<PurchaseOrderExtractedData>({});
+  const [isCreatingOrder, setIsCreatingOrder] = useState(false);
+  const [orderCreated, setOrderCreated] = useState(false);
+  const [availableStores, setAvailableStores] = useState<AvailableOption[]>([]);
+  const [availableSuppliers, setAvailableSuppliers] = useState<AvailableOption[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll al último mensaje
@@ -55,7 +66,9 @@ export default function Chatbot({ onFormDataExtracted }: ChatbotProps) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Error al enviar el mensaje');
+        const errorMessage = data.error || 'Error al enviar el mensaje';
+        const errorDetails = data.details ? `\n\n${data.details}` : '';
+        throw new Error(`${errorMessage}${errorDetails}`);
       }
 
       // Agregar respuesta del bot
@@ -66,15 +79,25 @@ export default function Chatbot({ onFormDataExtracted }: ChatbotProps) {
         setExtractedData(data.extractedData);
         onFormDataExtracted?.(data.extractedData);
       }
+
+      // Actualizar listas de opciones disponibles
+      if (data.availableStores) {
+        setAvailableStores(data.availableStores);
+      }
+      if (data.availableSuppliers) {
+        setAvailableSuppliers(data.availableSuppliers);
+      }
     } catch (error) {
       console.error('Error:', error);
-      setMessages([
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      const errorMessages = [
         ...newMessages,
         {
-          role: 'assistant',
-          content: 'Lo siento, hubo un error. Por favor, intenta nuevamente.',
+          role: 'assistant' as const,
+          content: `❌ ${errorMessage}\n\nSi el problema persiste, por favor contacta al administrador.`,
         },
-      ]);
+      ];
+      setMessages(errorMessages);
     } finally {
       setIsLoading(false);
     }
@@ -84,6 +107,58 @@ export default function Chatbot({ onFormDataExtracted }: ChatbotProps) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
+    }
+  };
+
+  const createOrder = async () => {
+    if (!extractedData.isComplete) return;
+
+    setIsCreatingOrder(true);
+
+    try {
+      const response = await fetch('/api/v1/orders/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(extractedData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Error al crear la orden');
+      }
+
+      setOrderCreated(true);
+      const ordersCount = data.orders?.length || 1;
+      const ordersInfo = ordersCount > 1 
+        ? `Se crearon ${ordersCount} órdenes (una por proveedor)`
+        : `Número de orden: ${data.order.id}`;
+      
+      const newMessages = [
+        ...messages,
+        {
+          role: 'assistant' as const,
+          content: `✅ ¡Órdenes creadas exitosamente!\n\n${ordersInfo}\nEstado: ${data.order.status}\n\n${data.message}`,
+        },
+      ];
+      setMessages(newMessages);
+
+      onOrderCreated?.(data.orders || [data.order]);
+    } catch (error) {
+      console.error('Error creando orden:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+      const newMessages = [
+        ...messages,
+        {
+          role: 'assistant' as const,
+          content: `❌ Error al crear la orden:\n\n${errorMessage}\n\nPor favor verifica que:\n• El nombre del solicitante esté registrado\n• El almacén/obra exista en el sistema\n• El proveedor esté dado de alta`,
+        },
+      ];
+      setMessages(newMessages);
+    } finally {
+      setIsCreatingOrder(false);
     }
   };
 
@@ -149,12 +224,68 @@ export default function Chatbot({ onFormDataExtracted }: ChatbotProps) {
         </div>
       </div>
 
+      {/* Botón para crear orden cuando está completa */}
+      {extractedData.isComplete === true && !orderCreated && (
+        <div className="border-t p-4 bg-green-50">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-green-900 mb-1">
+                ✅ Información completa
+              </p>
+              <p className="text-xs text-green-700">
+                Toda la información necesaria ha sido recopilada.
+              </p>
+            </div>
+            <button
+              onClick={createOrder}
+              disabled={isCreatingOrder}
+              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-semibold"
+            >
+              {isCreatingOrder ? 'Creando...' : 'Crear Orden'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Opciones disponibles */}
+      {(availableStores.length > 0 || availableSuppliers.length > 0) && !orderCreated && (
+        <div className="border-t p-4 bg-blue-50">
+          <details className="text-xs">
+            <summary className="cursor-pointer font-semibold text-blue-900 mb-2">
+              📋 Ver opciones disponibles
+            </summary>
+            <div className="space-y-3 mt-2">
+              {availableStores.length > 0 && (
+                <div>
+                  <p className="font-semibold text-blue-800 mb-1">Almacenes/Obras:</p>
+                  <ul className="text-blue-700 space-y-1 max-h-32 overflow-y-auto">
+                    {availableStores.map((store) => (
+                      <li key={store.id}>• {store.name}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {availableSuppliers.length > 0 && (
+                <div>
+                  <p className="font-semibold text-blue-800 mb-1">Proveedores:</p>
+                  <ul className="text-blue-700 space-y-1 max-h-32 overflow-y-auto">
+                    {availableSuppliers.map((supplier) => (
+                      <li key={supplier.id}>• {supplier.commercial_name}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </details>
+        </div>
+      )}
+
       {/* Datos extraídos (solo para desarrollo - puedes ocultarlo) */}
       {Object.values(extractedData).some(v => v) && (
         <div className="border-t p-4 bg-gray-50">
           <details className="text-xs">
             <summary className="cursor-pointer font-semibold text-gray-700 mb-2">
-              Información extraída
+              Información extraída (Debug)
             </summary>
             <pre className="text-gray-600 overflow-auto">
               {JSON.stringify(extractedData, null, 2)}

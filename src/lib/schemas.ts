@@ -45,5 +45,25 @@ export const ChatbotExtractedDataSchema = z.object({
     timeline: z.string().optional(),
 });
 
+// Schema para datos extraídos de órdenes de compra
+export const PurchaseOrderExtractedDataSchema = z.object({
+    applicant_name: z.string().nullable().optional(),
+    applicant_id: z.string().nullable().optional(),
+    store_name: z.string().nullable().optional(),
+    store_id: z.number().nullable().optional(),
+    supplier_name: z.string().nullable().optional(),
+    items: z.array(z.object({
+        nombre: z.string(),
+        cantidad: z.union([z.string(), z.number()]),
+        unidad: z.string(),
+        precioUnitario: z.number(),
+    })).optional(),
+    justification: z.string().nullable().optional(),
+    currency: z.string().nullable().optional(),
+    retention: z.string().nullable().optional(),
+    isComplete: z.boolean().optional(),
+});
+
 export type ChatbotMessage = z.infer<typeof ChatbotMessageSchema>;
 export type ChatbotExtractedData = z.infer<typeof ChatbotExtractedDataSchema>;
+export type PurchaseOrderExtractedData = z.infer<typeof PurchaseOrderExtractedDataSchema>;
