@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/hooks/useAuth";
 
 // Tipos para las órdenes
 type OrderStatus = "pending" | "approved" | "rejected" | "in_progress" | "completed";
@@ -27,16 +28,16 @@ const statusConfig: Record<OrderStatus, { label: string; color: string; bgColor:
 
 export default function OrdenesCompraHub() {
   const router = useRouter();
+  const { user, isAdmin, hasPermission, loading: authLoading } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<OrderStatus | "all">("all");
 
-  // TODO: Obtener rol del usuario para mostrar diferentes acciones
-  const userRole = "admin"; // Esto vendría de la sesión
-
   useEffect(() => {
-    fetchOrders();
-  }, []);
+    if (!authLoading) {
+      fetchOrders();
+    }
+  }, [authLoading]);
 
   const fetchOrders = async () => {
     try {
@@ -58,9 +59,58 @@ export default function OrdenesCompraHub() {
     }
   };
 
+  const handleApproveReject = async (orderId: string, action: 'approve' | 'reject') => {
+    try {
+      const response = await fetch(`/api/v1/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+
+      console.log('Response status:', response.status);
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Error al actualizar orden');
+      }
+
+      // Recargar órdenes
+      await fetchOrders();
+      alert(`Orden ${action === 'approve' ? 'aprobada' : 'rechazada'} exitosamente`);
+    } catch (error) {
+      console.error('Error al actualizar orden:', error);
+      alert('Error al actualizar la orden. Por favor, intenta nuevamente.');
+    }
+  };
+
   const filteredOrders = filter === "all" 
     ? orders 
     : orders.filter(order => order.status === filter);
+
+  // Mostrar loading mientras se carga autenticación
+  if (authLoading || loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Verificar permisos de visualización
+  if (!hasPermission('orders', 'view')) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Acceso Denegado</h2>
+          <p className="text-gray-600">No tienes permisos para ver las órdenes de compra</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-4 sm:py-8">
@@ -75,13 +125,15 @@ export default function OrdenesCompraHub() {
           </p>
         </div>
         
-        <button
-          onClick={() => router.push('/dashboard/ordenes-compra/crear')}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 shadow-lg w-full sm:w-auto"
-        >
-          <span className="text-xl">+</span>
-          <span>Nueva Orden</span>
-        </button>
+        {hasPermission('orders', 'create') && (
+          <button
+            onClick={() => router.push('/dashboard/ordenes-compra/crear')}
+            className="bg-red-600 hover:bg-red-700 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 shadow-lg w-full sm:w-auto"
+          >
+            <span className="text-xl">+</span>
+            <span>Nueva Orden</span>
+          </button>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -205,13 +257,23 @@ export default function OrdenesCompraHub() {
                       >
                         Ver Detalles
                       </button>
-                      {userRole === "admin" && order.status === "pending" && (
-                        <button
-                          onClick={() => {/* TODO: Aprobar */}}
-                          className="px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-medium hover:bg-green-200 transition-colors"
-                        >
-                          ✓
-                        </button>
+                      {isAdmin && order.status === "pending" && (
+                        <>
+                          <button
+                            onClick={() => handleApproveReject(order.id, 'approve')}
+                            className="px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-medium hover:bg-green-200 transition-colors"
+                            title="Aprobar orden"
+                          >
+                            ✓
+                          </button>
+                          <button
+                            onClick={() => handleApproveReject(order.id, 'reject')}
+                            className="px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200 transition-colors"
+                            title="Rechazar orden"
+                          >
+                            ✗
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -294,17 +356,17 @@ export default function OrdenesCompraHub() {
                           >
                             Ver
                           </button>
-                          {userRole === "admin" && order.status === "pending" && (
+                          {isAdmin && order.status === "pending" && (
                             <>
                               <button
                                 className="text-green-600 hover:text-green-900 mr-3"
-                                onClick={() => {/* TODO: Aprobar */}}
+                                onClick={() => handleApproveReject(order.id, 'approve')}
                               >
                                 Aprobar
                               </button>
                               <button
                                 className="text-red-600 hover:text-red-900"
-                                onClick={() => {/* TODO: Rechazar */}}
+                                onClick={() => handleApproveReject(order.id, 'reject')}
                               >
                                 Rechazar
                               </button>

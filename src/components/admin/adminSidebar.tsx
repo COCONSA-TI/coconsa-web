@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useAuth } from '@/hooks/useAuth';
 
 const menuItems = [
   {
@@ -73,11 +74,26 @@ const menuItems = [
 
 export default function AdminSidebar() {
   const pathname = usePathname();
+  const { user, isAdmin } = useAuth();
+
+  // Filtrar items según rol
+  const allowedItems = menuItems.filter(item => {
+    // Dashboard y Órdenes de compra: todos pueden ver
+    if (item.href === '/dashboard' || item.href === '/dashboard/ordenes-compra') {
+      return true;
+    }
+    // Reportes: admin y supervisor
+    if (item.href === '/dashboard/reportes') {
+      return isAdmin || user?.role === 'supervisor';
+    }
+    // Todo lo demás: solo admin
+    return isAdmin;
+  });
 
   return (
     <aside className="w-64 bg-white border-r border-gray-200 min-h-screen p-4">
       <nav className="space-y-1">
-        {menuItems.map((item) => {
+        {allowedItems.map((item) => {
           const isActive = pathname === item.href;
           return (
             <Link

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/api-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 interface OrderItem {
@@ -31,13 +31,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json(
-        { error: "No autorizado. Debes iniciar sesión." },
-        { status: 401 }
-      );
-    }
+    // Verificar permisos de visualización
+    const { error, session } = await requirePermission('orders', 'view');
+    if (error) return error;
 
     const { id } = await params;
     const orderId = id;

@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/api-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { use } from "react";
 
+
+//interfaces
 interface OrderItem {
   nombre: string;
   cantidad: number;
@@ -25,57 +28,51 @@ type SupabaseOrder = {
 
 export async function GET(request: Request) {
   try {
-    // Obtener sesión del usuario
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json(
-        { error: "No autorizado. Debes iniciar sesión." },
-        { status: 401 }
-      );
-    }
+    const { error: authError, session } = await requirePermission('orders', 'view');
+    if (authError) return authError;
 
-    // Obtener parámetros de búsqueda
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
 
-    // Construir query
-    const { data: orders, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('orders')
-      .select('id, created_at, store_id, total, currency, status, applicant_id, items')
-      .order('created_at', { ascending: false });
+      .select('id, created_at, store_id, total, currency, status, applicant_id, items');
 
-    if (error) {
-      console.error('Error obteniendo órdenes:', error);
+    if (session!.role !== 'admin') {
+      query = query.eq('applicant_id', session!.userId);
+    }
+
+    query = query.order('created_at', { ascending: false });
+
+    const { data: orders, error: ordersError } = await query;
+
+    if (ordersError) {
+      console.error('Error obteniendo órdenes:', ordersError);
       return NextResponse.json(
         { 
           error: "Error al obtener las órdenes",
-          details: error.message 
+          details: ordersError.message 
         },
         { status: 500 }
       );
     }
 
-    // Obtener IDs únicos de stores y users
     const storeIds = [...new Set(orders.map((o: { store_id: number }) => o.store_id))];
     const userIds = [...new Set(orders.map((o: { applicant_id: string }) => o.applicant_id))];
 
-    // Obtener stores
     const { data: stores } = await supabaseAdmin
       .from('stores')
       .select('id, name')
       .in('id', storeIds);
 
-    // Obtener users
     const { data: users } = await supabaseAdmin
       .from('users')
       .select('id, full_name')
       .in('id', userIds);
 
-    // Crear mapas para búsqueda rápida
     const storesMap = new Map(stores?.map(s => [s.id, s.name]) || []);
     const usersMap = new Map(users?.map(u => [u.id, u.full_name]) || []);
 
-    // Mapear status de español a inglés
     const statusMap: Record<string, string> = {
       'PENDIENTE': 'pending',
       'APROBADA': 'approved',
@@ -88,7 +85,6 @@ export async function GET(request: Request) {
     const formattedOrders = (orders as SupabaseOrder[]).map((order) => {
       let itemsArray: OrderItem[] = [];
       try {
-        // Parsear items desde string JSON
         if (typeof order.items === 'string' && order.items.trim()) {
           itemsArray = JSON.parse(order.items) as OrderItem[];
         }

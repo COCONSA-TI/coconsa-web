@@ -2,20 +2,36 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { decrypt } from '@/lib/auth';
 
-// Rutas protegidas que requieren autenticación
-const protectedRoutes = ['/dashboard'];
+// Definición de rutas protegidas con roles permitidos
+const protectedRoutes = [
+  { path: '/dashboard', roles: ['admin', 'user', 'supervisor'] },
+  { path: '/dashboard/chatbot', roles: ['admin'] },
+  { path: '/dashboard/ordenes-compra', roles: ['admin', 'user', 'supervisor'] },
+  { path: '/dashboard/reportes', roles: ['admin', 'supervisor'] },
+];
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
-  const isProtectedRoute = protectedRoutes.some(route => path.startsWith(route));
 
   // Obtener el token de sesión
   const cookie = request.cookies.get('session')?.value;
   const session = cookie ? await decrypt(cookie) : null;
 
-  // Redirigir a login si intenta acceder a ruta protegida sin sesión
-  if (isProtectedRoute && !session) {
-    return NextResponse.redirect(new URL('/login', request.url));
+  // Verificar si es una ruta protegida
+  const protectedRoute = protectedRoutes.find(route => path.startsWith(route.path));
+
+  if (protectedRoute) {
+    // Redirigir a login si no hay sesión
+    if (!session) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    // Verificar permisos de rol
+    const userRole = session.role;
+    if (userRole && !protectedRoute.roles.includes(userRole)) {
+      // Redirigir a dashboard principal si no tiene permisos
+      return NextResponse.redirect(new URL('/dashboard?error=unauthorized', request.url));
+    }
   }
 
   // Redirigir a dashboard si ya está logueado e intenta acceder a login

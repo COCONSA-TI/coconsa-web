@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
+import { requirePermission } from "@/lib/api-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   try {
+    // Verificar permisos de creación
+    const { error: authError } = await requirePermission('orders', 'create');
+    if (authError) return authError;
+
     const body = await request.json();
     console.log('Datos recibidos para crear orden:', body);
     

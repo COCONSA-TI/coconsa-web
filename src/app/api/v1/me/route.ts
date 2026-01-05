@@ -16,7 +16,14 @@ export async function GET() {
     // Obtener información completa del usuario desde la base de datos
     const { data: userData, error: userError } = await supabaseAdmin
       .from('users')
-      .select('id, email, full_name, role')
+      .select(`
+        id, 
+        email, 
+        full_name,
+        roles (
+          name
+        )
+      `)
       .eq('id', session.userId)
       .single();
 
@@ -27,13 +34,15 @@ export async function GET() {
       );
     }
 
+    const roleName = (userData.roles as any)?.name || 'user';
+
     return NextResponse.json({ 
       success: true,
       user: {
         id: userData.id,
         email: userData.email,
         full_name: userData.full_name,
-        role: userData.role
+        role: roleName
       }
     });
   } catch (error) {

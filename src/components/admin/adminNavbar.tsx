@@ -3,9 +3,11 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function AdminNavbar() {
   const router = useRouter();
+  const { isAdmin } = useAuth();
 
   const handleLogout = async () => {
     try {
@@ -48,23 +50,27 @@ export default function AdminNavbar() {
               Dashboard
             </Link>
             <Link 
-              href="/dashboard/cotizaciones" 
+              href="/dashboard/ordenes-compra" 
               className="text-gray-700 hover:text-red-600 font-medium transition-colors"
             >
-              Cotizaciones
+              Órdenes de Compra
             </Link>
-            <Link 
-              href="/dashboard/proyectos" 
-              className="text-gray-700 hover:text-red-600 font-medium transition-colors"
-            >
-              Proyectos
-            </Link>
-            <Link 
-              href="/dashboard/clientes" 
-              className="text-gray-700 hover:text-red-600 font-medium transition-colors"
-            >
-              Clientes
-            </Link>
+            {isAdmin && (
+              <>
+                <Link 
+                  href="/dashboard/proyectos" 
+                  className="text-gray-700 hover:text-red-600 font-medium transition-colors"
+                >
+                  Proyectos
+                </Link>
+                <Link 
+                  href="/dashboard/clientes" 
+                  className="text-gray-700 hover:text-red-600 font-medium transition-colors"
+                >
+                  Clientes
+                </Link>
+              </>
+            )}
           </nav>
 
           {/* Botón de logout */}

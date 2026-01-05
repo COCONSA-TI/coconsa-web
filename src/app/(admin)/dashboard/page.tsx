@@ -1,41 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-
-interface User {
-  id: string;
-  email: string;
-  role?: string;
-}
+import { useRequireAuth } from '@/hooks/useAuth';
+import { AdminOnly } from '@/components/auth/Protected';
 
 export default function DashboardPage() {
-  const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchUser();
-  }, []);
-
-  const fetchUser = async () => {
-    try {
-      const response = await fetch('/api/v1/me');
-      const data = await response.json();
-      
-      if (!response.ok) {
-        router.push('/login');
-        return;
-      }
-      
-      setUser(data.user);
-    } catch (error) {
-      console.error('Error al cargar usuario:', error);
-      router.push('/login');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { user, loading } = useRequireAuth();
 
   if (loading) {
     return (

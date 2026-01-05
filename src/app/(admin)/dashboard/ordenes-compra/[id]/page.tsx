@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useAuth } from "@/hooks/useAuth";
 
 type OrderStatus = "pending" | "approved" | "rejected" | "in_progress" | "completed";
 
@@ -42,6 +43,7 @@ export default function OrdenDetallesPage() {
   const router = useRouter();
   const params = useParams();
   const orderId = params.id as string;
+  const { isAdmin, hasPermission } = useAuth();
   
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,6 +70,28 @@ export default function OrdenDetallesPage() {
       router.push('/dashboard/ordenes-compra');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleApproveReject = async (action: 'approve' | 'reject') => {
+    try {
+      const response = await fetch(`/api/v1/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Error al actualizar orden');
+      }
+
+      alert(`Orden ${action === 'approve' ? 'aprobada' : 'rechazada'} exitosamente`);
+      router.push('/dashboard/ordenes-compra');
+    } catch (error) {
+      console.error('Error al actualizar orden:', error);
+      alert('Error al actualizar la orden. Por favor, intenta nuevamente.');
     }
   };
 
@@ -302,17 +326,17 @@ export default function OrdenDetallesPage() {
                 <span>{downloadingPdf ? 'Generando...' : 'Descargar PDF'}</span>
               </button>
               
-              {order.status === 'pending' && (
+              {isAdmin && order.status === 'pending' && (
                 <>
                   <button
-                    onClick={() => {/* TODO: Aprobar */}}
+                    onClick={() => handleApproveReject('approve')}
                     className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm sm:text-base font-medium transition-colors"
                   >
                     Aprobar Orden
                   </button>
                   
                   <button
-                    onClick={() => {/* TODO: Rechazar */}}
+                    onClick={() => handleApproveReject('reject')}
                     className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm sm:text-base font-medium transition-colors"
                   >
                     Rechazar Orden
