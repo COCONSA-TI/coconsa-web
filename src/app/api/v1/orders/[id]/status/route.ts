@@ -50,7 +50,8 @@ export async function PATCH(
     }
 
     // Actualizar el estado de la orden
-    const newStatus = action === 'approve' ? 'APROBADA' : 'RECHAZADA';
+    // Cuando se aprueba, pasa directamente a EN_PROCESO
+    const newStatus = action === 'approve' ? 'EN_PROCESO' : 'RECHAZADA';
     
     const { error: updateError } = await supabaseAdmin
       .from('orders')
@@ -73,7 +74,7 @@ export async function PATCH(
 
     return NextResponse.json({
       success: true,
-      message: `Orden ${action === 'approve' ? 'aprobada' : 'rechazada'} exitosamente`,
+      message: `Orden ${action === 'approve' ? 'aprobada y en progreso' : 'rechazada'} exitosamente`,
       order: {
         id,
         status: newStatus.toLowerCase()
