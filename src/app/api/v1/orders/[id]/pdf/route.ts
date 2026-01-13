@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import QRCode from 'qrcode';
 
 export async function GET(
   request: Request,
@@ -54,7 +55,7 @@ export async function GET(
     
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('REQUISICIÓN DE COMPRA / ORDEN DE COMPRA', pageWidth / 2, 40, { align: 'center' });
+    doc.text('ORDEN DE COMPRA', pageWidth / 2, 40, { align: 'center' });
     
     // Línea divisoria
     doc.setLineWidth(0.5);
@@ -190,13 +191,46 @@ export async function GET(
       { x: 165, label: 'AUTORIZACIÓN\nDIRECCIÓN' },
     ];
 
-    signaturePositions.forEach(pos => {
+    // Generar QR para el solicitante con su información
+    const applicantInfo = {
+      nombre: order.applicant?.full_name || 'N/A',
+      email: order.applicant?.email || 'N/A',
+      orderId: order.id,
+      fecha: new Date(order.created_at).toLocaleDateString('es-MX')
+    };
+    
+    // URL que contendrá la información del solicitante
+    const verificationUrl = `${request.url.split('/api')[0]}/verify-applicant?data=${encodeURIComponent(JSON.stringify(applicantInfo))}`;
+    
+    // Generar código QR
+    const qrCodeDataUrl = await QRCode.toDataURL(verificationUrl, {
+      width: 80,
+      margin: 1,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      }
+    });
+
+    signaturePositions.forEach((pos, index) => {
+      // Si es el solicitante (index 0), agregar el QR
+      if (index === 0) {
+        // Insertar código QR más arriba
+        doc.addImage(qrCodeDataUrl, 'PNG', pos.x + 5, signatureY - 35, 25, 25);
+        doc.setFontSize(6);
+        doc.setFont('helvetica', 'italic');
+        doc.text('Escanea para verificar', pos.x + 17.5, signatureY - 37, { align: 'center' });
+      }
+      
+      // Línea para firma
       doc.line(pos.x, signatureY, pos.x + 35, signatureY);
+      
+      // Etiqueta
       doc.setFontSize(7);
       doc.setFont('helvetica', 'bold');
       const lines = pos.label.split('\n');
-      lines.forEach((line, index) => {
-        doc.text(line, pos.x + 17.5, signatureY + 5 + (index * 4), { align: 'center' });
+      lines.forEach((line, idx) => {
+        doc.text(line, pos.x + 17.5, signatureY + 5 + (idx * 4), { align: 'center' });
       });
     });
 

@@ -17,18 +17,18 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await request.json();
-    const { action, reason } = body; // action: 'approve' | 'reject'
+    const { action, reason } = body; // action: 'approve' | 'reject' | 'complete'
 
     console.log(`Usuario ${session!.userId} intenta ${action} la orden ${id}`);
 
-    if (!action || !['approve', 'reject'].includes(action)) {
+    if (!action || !['approve', 'reject', 'complete'].includes(action)) {
       return NextResponse.json(
-        { error: "Acción inválida. Usa 'approve' o 'reject'" },
+        { error: "Acción inválida. Usa 'approve', 'reject' o 'complete'" },
         { status: 400 }
       );
     }
 
-    // Verificar que la orden existe y está pendiente
+    // Verificar que la orden existe
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
       .select('id, status')
@@ -42,16 +42,37 @@ export async function PATCH(
       );
     }
 
-    if (order.status !== 'PENDIENTE') {
+    // Validar transiciones de estado
+    if (action === 'approve' && order.status !== 'PENDIENTE') {
       return NextResponse.json(
-        { error: `No se puede ${action === 'approve' ? 'aprobar' : 'rechazar'} una orden que no está pendiente` },
+        { error: 'Solo se pueden aprobar órdenes pendientes' },
+        { status: 400 }
+      );
+    }
+
+    if (action === 'reject' && order.status !== 'PENDIENTE') {
+      return NextResponse.json(
+        { error: 'Solo se pueden rechazar órdenes pendientes' },
+        { status: 400 }
+      );
+    }
+
+    if (action === 'complete' && order.status !== 'EN_PROCESO') {
+      return NextResponse.json(
+        { error: 'Solo se pueden completar órdenes que están en proceso' },
         { status: 400 }
       );
     }
 
     // Actualizar el estado de la orden
-    // Cuando se aprueba, pasa directamente a EN_PROCESO
-    const newStatus = action === 'approve' ? 'EN_PROCESO' : 'RECHAZADA';
+    let newStatus: string;
+    if (action === 'approve') {
+      newStatus = 'EN_PROCESO'; // Cuando se aprueba, pasa directamente a EN_PROCESO
+    } else if (action === 'reject') {
+      newStatus = 'RECHAZADA';
+    } else {
+      newStatus = 'COMPLETADA'; // action === 'complete'
+    }
     
     const { error: updateError } = await supabaseAdmin
       .from('orders')
@@ -74,7 +95,11 @@ export async function PATCH(
 
     return NextResponse.json({
       success: true,
-      message: `Orden ${action === 'approve' ? 'aprobada y en progreso' : 'rechazada'} exitosamente`,
+      message: action === 'approve' 
+        ? 'Orden aprobada y en progreso exitosamente' 
+        : action === 'reject'
+        ? 'Orden rechazada exitosamente'
+        : 'Orden completada exitosamente',
       order: {
         id,
         status: newStatus.toLowerCase()

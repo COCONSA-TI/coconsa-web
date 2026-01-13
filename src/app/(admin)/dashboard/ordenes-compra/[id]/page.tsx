@@ -48,6 +48,7 @@ export default function OrdenDetallesPage() {
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [confirmComplete, setConfirmComplete] = useState(false);
 
   useEffect(() => {
     fetchOrderDetails();
@@ -92,6 +93,34 @@ export default function OrdenDetallesPage() {
     } catch (error) {
       console.error('Error al actualizar orden:', error);
       alert('Error al actualizar la orden. Por favor, intenta nuevamente.');
+    }
+  };
+
+  const handleCompleteOrder = async () => {
+    if (!confirmComplete) {
+      alert('Por favor, confirma que el proceso ha sido completado.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/v1/orders/${orderId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'complete' }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Error al completar orden');
+      }
+
+      alert('Orden completada exitosamente');
+      await fetchOrderDetails(); // Recargar los detalles
+      setConfirmComplete(false);
+    } catch (error) {
+      console.error('Error al completar orden:', error);
+      alert('Error al completar la orden. Por favor, intenta nuevamente.');
     }
   };
 
@@ -145,6 +174,52 @@ export default function OrdenDetallesPage() {
   const subtotalItems = order.items.reduce((sum, item) => sum + item.subtotal, 0);
   const retentionAmount = order.retention ? (subtotalItems * order.retention / 100) : 0;
 
+  const steps = [
+    { key: 'pending', label: 'Pendiente' },
+    { key: 'in_progress', label: 'En Proceso' },
+    { key: 'completed', label: 'Completada' },
+  ];
+
+  const getStepIcon = (stepKey: string, isActive: boolean, isCompleted: boolean) => {
+    if (isCompleted) {
+      return (
+        <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+        </svg>
+      );
+    }
+
+    switch (stepKey) {
+      case 'pending':
+        return (
+          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+        );
+      case 'in_progress':
+        return (
+          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        );
+      case 'completed':
+        return (
+          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const getCurrentStepIndex = () => {
+    if (order.status === 'rejected') return -1;
+    return steps.findIndex(step => step.key === order.status);
+  };
+
+  const currentStepIndex = getCurrentStepIndex();
+
   return (
     <div className="container mx-auto px-4 py-4 sm:py-8">
       {/* Header */}
@@ -179,6 +254,74 @@ export default function OrdenDetallesPage() {
           </span>
         </div>
       </div>
+
+      {/* Stepper de Progreso */}
+      {order.status !== 'rejected' && (
+        <div className="mb-6 sm:mb-8 bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+          <div className="flex items-center justify-between relative">
+            {/* Línea de progreso */}
+            <div className="absolute top-5 left-0 right-0 h-1 bg-gray-200 -z-10 mx-8 sm:mx-12"></div>
+            <div 
+              className="absolute top-5 left-0 h-1 bg-red-600 -z-10 transition-all duration-500 mx-8 sm:mx-12"
+              style={{ 
+                width: currentStepIndex >= 0 
+                  ? `calc(${(currentStepIndex / (steps.length - 1)) * 100}%)`
+                  : '0%'
+              }}
+            ></div>
+
+            {steps.map((step, index) => {
+              const isActive = index === currentStepIndex;
+              const isCompleted = index < currentStepIndex;
+              const isPending = index > currentStepIndex;
+
+              return (
+                <div key={step.key} className="flex flex-col items-center flex-1 relative z-10">
+                  {/* Círculo del step */}
+                  <div
+                    className={`
+                      w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center
+                      transition-all duration-300 border-4
+                      ${isCompleted ? 'bg-red-600 border-red-600 text-white' : ''}
+                      ${isActive ? 'bg-red-600 border-red-600 text-white scale-110 shadow-lg' : ''}
+                      ${isPending ? 'bg-white border-gray-300 text-gray-400' : ''}
+                    `}
+                  >
+                    {getStepIcon(step.key, isActive, isCompleted)}
+                  </div>
+                  
+                  {/* Label */}
+                  <span
+                    className={`
+                      mt-2 text-xs sm:text-sm font-medium text-center whitespace-nowrap
+                      ${isActive || isCompleted ? 'text-gray-900' : 'text-gray-400'}
+                    `}
+                  >
+                    {step.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Mensaje de orden rechazada */}
+      {order.status === 'rejected' && (
+        <div className="mb-6 sm:mb-8 bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <svg className="w-8 h-8 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <div>
+              <h3 className="text-red-900 font-bold text-sm sm:text-base">Orden Rechazada</h3>
+              <p className="text-red-700 text-xs sm:text-sm mt-1">
+                Esta orden de compra ha sido rechazada y no continuará con el proceso.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Información General */}
@@ -342,6 +485,36 @@ export default function OrdenDetallesPage() {
                     Rechazar Orden
                   </button>
                 </>
+              )}
+
+              {isAdmin && order.status === 'in_progress' && (
+                <div className="border-t pt-4 mt-4">
+                  <div className="mb-3">
+                    <label className="flex items-start gap-3 cursor-pointer group">
+                      <input
+                        type="checkbox"
+                        checked={confirmComplete}
+                        onChange={(e) => setConfirmComplete(e.target.checked)}
+                        className="mt-1 w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                      />
+                      <span className="text-sm text-gray-700 group-hover:text-gray-900">
+                        Confirmo que se ha completado todo el proceso de esta orden de compra
+                      </span>
+                    </label>
+                  </div>
+                  
+                  <button
+                    onClick={handleCompleteOrder}
+                    disabled={!confirmComplete}
+                    className={`w-full px-4 py-2 rounded-lg text-sm sm:text-base font-medium transition-colors ${
+                      confirmComplete
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    Completar Orden
+                  </button>
+                </div>
               )}
             </div>
           </div>
