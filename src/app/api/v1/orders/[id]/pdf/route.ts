@@ -40,6 +40,17 @@ export async function GET(
       );
     }
 
+    // Obtener aprobaciones con información del aprobador
+    const { data: approvals } = await supabaseAdmin
+      .from('order_approvals')
+      .select(`
+        *,
+        department:departments(name, code),
+        approver:users(full_name, email)
+      `)
+      .eq('order_id', orderId)
+      .order('approval_order');
+
     // Crear el PDF
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.width;
@@ -186,10 +197,10 @@ export async function GET(
     doc.setLineWidth(0.3);
     
     const signaturePositions = [
-      { x: 20, label: 'SOLICITANTE' },
-      { x: 65, label: 'REVISIÓN\nCONTROL DE OBRA' },
-      { x: 120, label: 'REVISIÓN\nGERENTE CONSTRUCCIÓN' },
-      { x: 165, label: 'AUTORIZACIÓN\nDIRECCIÓN' },
+      { x: 20, label: 'SOLICITANTE', order: 0 },
+      { x: 65, label: 'REVISIÓN\nCONTROL DE OBRA', order: 2 }, // Contraloría
+      { x: 120, label: 'REVISIÓN\nGERENTE CONSTRUCCIÓN', order: 1 }, // Gerencia
+      { x: 165, label: 'AUTORIZACIÓN\nDIRECCIÓN', order: 3 }, // Dirección
     ];
 
     // Generar QR para el solicitante con su información
@@ -203,7 +214,7 @@ export async function GET(
     // URL que contendrá la información del solicitante
     const verificationUrl = `${request.url.split('/api')[0]}/verify-applicant?data=${encodeURIComponent(JSON.stringify(applicantInfo))}`;
     
-    // Generar código QR
+    // Generar código QR del solicitante
     const qrCodeDataUrl = await QRCode.toDataURL(verificationUrl, {
       width: 80,
       margin: 1,
@@ -213,14 +224,56 @@ export async function GET(
       }
     });
 
+    // Generar QRs de aprobadores antes del loop
+    const approverQRs: { [key: number]: string } = {};
+    for (const pos of signaturePositions) {
+      if (pos.order > 0) { // No es el solicitante
+        const approval = approvals?.find((a: any) => a.approval_order === pos.order);
+        
+        if (approval?.status === 'approved' && approval.approver && approval.approval_order <= 3) {
+          const approverInfo = {
+            nombre: approval.approver.full_name,
+            email: approval.approver.email,
+            departamento: approval.department?.name || 'N/A',
+            orderId: order.id,
+            fecha: new Date(approval.approved_at).toLocaleDateString('es-MX'),
+            rol: approval.department?.code || 'N/A'
+          };
+          
+          const approverVerificationUrl = `${request.url.split('/api')[0]}/verify-applicant?data=${encodeURIComponent(JSON.stringify(approverInfo))}`;
+          
+          try {
+            approverQRs[pos.order] = await QRCode.toDataURL(approverVerificationUrl, {
+              width: 80,
+              margin: 1,
+              color: {
+                dark: '#000000',
+                light: '#FFFFFF'
+              }
+            });
+          } catch (err) {
+            console.error('Error generando QR del aprobador:', err);
+          }
+        }
+      }
+    }
+
     signaturePositions.forEach((pos, index) => {
-      // Si es el solicitante (index 0), agregar el QR
+      // Si es el solicitante (index 0), agregar el QR del solicitante
       if (index === 0) {
-        // Insertar código QR más arriba
+        // Insertar código QR del solicitante
         doc.addImage(qrCodeDataUrl, 'PNG', pos.x + 5, signatureY - 35, 25, 25);
         doc.setFontSize(6);
         doc.setFont('helvetica', 'italic');
         doc.text('Escanea para verificar', pos.x + 17.5, signatureY - 37, { align: 'center' });
+      } else {
+        // Para los demás (Gerencia, Contraloría, Dirección), verificar si tiene QR generado
+        if (approverQRs[pos.order]) {
+          doc.addImage(approverQRs[pos.order], 'PNG', pos.x + 5, signatureY - 35, 25, 25);
+          doc.setFontSize(6);
+          doc.setFont('helvetica', 'italic');
+          doc.text('Firmado digitalmente', pos.x + 17.5, signatureY - 37, { align: 'center' });
+        }
       }
       
       // Línea para firma

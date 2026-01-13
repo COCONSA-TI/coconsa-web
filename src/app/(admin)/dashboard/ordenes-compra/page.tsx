@@ -16,6 +16,7 @@ interface Order {
   status: OrderStatus;
   applicant_name: string;
   items_count: number;
+  my_department_status?: 'pending' | 'approved' | 'rejected' | null;
 }
 
 const statusConfig: Record<OrderStatus, { label: string; color: string; bgColor: string }> = {
@@ -233,6 +234,19 @@ export default function OrdenesCompraHub() {
                 const statusInfo = statusConfig[order.status] || statusConfig.pending;
                 const date = new Date(order.created_at);
                 
+                // Determinar el estado que se muestra
+                let displayStatus = statusInfo;
+                let displayLabel = statusInfo.label;
+                
+                // Si tiene estado de departamento, mostrarlo como información adicional
+                if (order.my_department_status === 'approved') {
+                  displayLabel = `${statusInfo.label} • Aprobado`;
+                } else if (order.my_department_status === 'rejected') {
+                  displayLabel = `${statusInfo.label} • Rechazado`;
+                } else if (order.my_department_status === 'pending' && (order.status === 'pending' || order.status === 'in_progress')) {
+                  displayLabel = `${statusInfo.label} • Requiere aprobación`;
+                }
+                
                 return (
                   <div key={order.id} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
                     <div className="flex items-start justify-between mb-3">
@@ -242,11 +256,10 @@ export default function OrdenesCompraHub() {
                           {date.toLocaleDateString('es-MX', { month: 'short', day: 'numeric' })} • {date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
                         </div>
                       </div>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusInfo.bgColor} ${statusInfo.color}`}>
-                        {statusInfo.label}
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${displayStatus.bgColor} ${displayStatus.color}`}>
+                        {displayLabel}
                       </span>
                     </div>
-                    
                     <div className="space-y-2 mb-3 text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-600">Solicitante:</span>
@@ -273,24 +286,6 @@ export default function OrdenesCompraHub() {
                       >
                         Ver Detalles
                       </button>
-                      {isAdmin && order.status === "pending" && (
-                        <>
-                          <button
-                            onClick={() => handleApproveReject(order.id, 'approve')}
-                            className="px-4 py-2 bg-green-100 text-green-700 rounded-lg text-sm font-medium hover:bg-green-200 transition-colors"
-                            title="Aprobar orden"
-                          >
-                            ✓
-                          </button>
-                          <button
-                            onClick={() => handleApproveReject(order.id, 'reject')}
-                            className="px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm font-medium hover:bg-red-200 transition-colors"
-                            title="Rechazar orden"
-                          >
-                            ✗
-                          </button>
-                        </>
-                      )}
                     </div>
                   </div>
                 );
@@ -333,6 +328,19 @@ export default function OrdenesCompraHub() {
                     const statusInfo = statusConfig[order.status] || statusConfig.pending;
                     const date = new Date(order.created_at);
                     
+                    // Determinar el estado que se muestra
+                    let displayStatus = statusInfo;
+                    let displayLabel = statusInfo.label;
+                    
+                    // Si tiene estado de departamento, mostrarlo
+                    if (order.my_department_status === 'approved') {
+                      displayLabel = `${statusInfo.label} • Aprobado`;
+                    } else if (order.my_department_status === 'rejected') {
+                      displayLabel = `${statusInfo.label} • Rechazado`;
+                    } else if (order.my_department_status === 'pending' && (order.status === 'pending' || order.status === 'in_progress')) {
+                      displayLabel = `${statusInfo.label} • Requiere aprobación`;
+                    }
+                    
                     return (
                       <tr key={order.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
@@ -361,33 +369,17 @@ export default function OrdenesCompraHub() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusInfo.bgColor} ${statusInfo.color}`}>
-                            {statusInfo.label}
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${displayStatus.bgColor} ${displayStatus.color}`}>
+                            {displayLabel}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <button
-                            className="text-blue-600 hover:text-blue-900 mr-3"
+                            className="text-blue-600 hover:text-blue-900"
                             onClick={() => router.push(`/dashboard/ordenes-compra/${order.id}`)}
                           >
-                            Ver
+                            Ver Detalles
                           </button>
-                          {isAdmin && order.status === "pending" && (
-                            <>
-                              <button
-                                className="text-green-600 hover:text-green-900 mr-3"
-                                onClick={() => handleApproveReject(order.id, 'approve')}
-                              >
-                                Aprobar
-                              </button>
-                              <button
-                                className="text-red-600 hover:text-red-900"
-                                onClick={() => handleApproveReject(order.id, 'reject')}
-                              >
-                                Rechazar
-                              </button>
-                            </>
-                          )}
                         </td>
                       </tr>
                     );

@@ -3,7 +3,20 @@ import { requirePermission } from "@/lib/api-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 // Función para crear aprobaciones en el servidor
-async function createOrderApprovalsServer(orderId: string, applicantDepartmentId: string) {
+async function createOrderApprovalsServer(orderId: string, applicantDepartmentId: string, applicantId: string) {
+  // Obtener información del solicitante
+  const { data: applicant, error: applicantError } = await supabaseAdmin
+    .from('users')
+    .select('is_department_head, department_id')
+    .eq('id', applicantId)
+    .single();
+
+  if (applicantError) {
+    throw new Error('Error al obtener información del solicitante');
+  }
+
+  const isApplicantDeptHead = applicant?.is_department_head && applicant?.department_id === applicantDepartmentId;
+
   // Obtener todos los departamentos que requieren aprobación
   const { data: departments, error: deptError } = await supabaseAdmin
     .from('departments')
@@ -21,11 +34,15 @@ async function createOrderApprovalsServer(orderId: string, applicantDepartmentId
   // 1. Aprobación del departamento del solicitante (gerencia)
   const applicantDept = departments.find((d: any) => d.id === applicantDepartmentId);
   if (applicantDept) {
+    // Si el solicitante ES el jefe de su departamento, auto-aprobar su nivel
     approvalsToCreate.push({
       order_id: orderId,
       department_id: applicantDept.id,
-      status: 'pending',
+      status: isApplicantDeptHead ? 'approved' : 'pending',
       approval_order: applicantDept.approval_order,
+      approver_id: isApplicantDeptHead ? applicantId : null,
+      approved_at: isApplicantDeptHead ? new Date().toISOString() : null,
+      comments: isApplicantDeptHead ? 'Auto-aprobado (solicitante es jefe de departamento)' : null,
     });
   }
 
@@ -49,6 +66,14 @@ async function createOrderApprovalsServer(orderId: string, applicantDepartmentId
 
   if (insertError) {
     throw new Error('Error al crear aprobaciones: ' + insertError.message);
+  }
+
+  // Si se auto-aprobó el primer nivel, actualizar estado de la orden a in_progress
+  if (isApplicantDeptHead) {
+    await supabaseAdmin
+      .from('orders')
+      .update({ status: 'in_progress' })
+      .eq('id', orderId);
   }
 
   return true;
@@ -265,7 +290,7 @@ export async function POST(request: Request) {
           // Crear el flujo de aprobaciones automáticamente
           if (userDepartmentId) {
             try {
-              await createOrderApprovalsServer(orderCreated.id, userDepartmentId);
+              await createOrderApprovalsServer(orderCreated.id, userDepartmentId, userId);
               console.log(`✅ Flujo de aprobaciones creado para orden ${orderCreated.id}`);
             } catch (approvalError) {
               console.error(`⚠️ Error creando aprobaciones para orden ${orderCreated.id}:`, approvalError);

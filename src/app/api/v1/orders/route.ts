@@ -67,11 +67,29 @@ export async function GET(request: Request) {
 
     const { data: users } = await supabaseAdmin
       .from('users')
-      .select('id, full_name')
+      .select('id, full_name, department_id, is_department_head')
       .in('id', userIds);
 
     const storesMap = new Map(stores?.map(s => [s.id, s.name]) || []);
     const usersMap = new Map(users?.map(u => [u.id, u.full_name]) || []);
+
+    // Obtener el usuario actual con su departamento
+    const currentUser = users?.find(u => u.id === session!.userId);
+    
+    // Si el usuario es jefe de departamento, obtener todas las aprobaciones de las órdenes para su departamento
+    let userDeptApprovals = new Map();
+    if (currentUser?.is_department_head && currentUser?.department_id) {
+      const { data: approvals } = await supabaseAdmin
+        .from('order_approvals')
+        .select('order_id, status, department_id')
+        .eq('department_id', currentUser.department_id);
+      
+      if (approvals) {
+        approvals.forEach(a => {
+          userDeptApprovals.set(a.order_id, a.status);
+        });
+      }
+    }
 
     const statusMap: Record<string, string> = {
       'PENDIENTE': 'pending',
@@ -102,6 +120,7 @@ export async function GET(request: Request) {
         status: statusMap[order.status] || 'pending',
         applicant_name: usersMap.get(order.applicant_id) || 'N/A',
         items_count: itemsArray.length,
+        my_department_status: userDeptApprovals.get(order.id) || null,
       };
     });
 
