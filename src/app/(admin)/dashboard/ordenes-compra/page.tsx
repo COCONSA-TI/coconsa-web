@@ -61,13 +61,28 @@ export default function OrdenesCompraHub() {
 
   const handleApproveReject = async (orderId: string, action: 'approve' | 'reject') => {
     try {
-      const response = await fetch(`/api/v1/orders/${orderId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
-      });
+      let reason = null;
+      
+      // Si es rechazo, pedir razón
+      if (action === 'reject') {
+        reason = prompt('¿Por qué rechazas esta orden? (obligatorio)');
+        if (!reason || reason.trim() === '') {
+          alert('Debes proporcionar una razón para rechazar la orden');
+          return;
+        }
+      }
 
-      console.log('Response status:', response.status);
+      // Confirmar acción
+      if (!confirm(`¿Estás seguro de ${action === 'approve' ? 'aprobar' : 'rechazar'} esta orden?`)) {
+        return;
+      }
+
+      const endpoint = `/api/v1/orders/${orderId}/${action}`;
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comments: reason }),
+      });
 
       const data = await response.json();
 
@@ -77,10 +92,11 @@ export default function OrdenesCompraHub() {
 
       // Recargar órdenes
       await fetchOrders();
-      alert(`Orden ${action === 'approve' ? 'aprobada' : 'rechazada'} exitosamente`);
+      alert(data.message || `Orden ${action === 'approve' ? 'aprobada' : 'rechazada'} exitosamente`);
     } catch (error) {
       console.error('Error al actualizar orden:', error);
-      alert('Error al actualizar la orden. Por favor, intenta nuevamente.');
+      const errorMessage = error instanceof Error ? error.message : 'Error al actualizar la orden';
+      alert(errorMessage);
     }
   };
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { getOrderApprovals, canUserApprove, getApprovalIconType, type OrderApproval, type ApprovalIconType } from "@/lib/approvalFlow";
 
 type OrderStatus = "pending" | "approved" | "rejected" | "in_progress" | "completed";
 
@@ -43,16 +44,25 @@ export default function OrdenDetallesPage() {
   const router = useRouter();
   const params = useParams();
   const orderId = params.id as string;
-  const { isAdmin, hasPermission } = useAuth();
+  const { isAdmin, user } = useAuth();
   
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [confirmComplete, setConfirmComplete] = useState(false);
+  const [approvals, setApprovals] = useState<OrderApproval[]>([]);
+  const [canApprove, setCanApprove] = useState(false);
+  const [comments, setComments] = useState('');
 
   useEffect(() => {
     fetchOrderDetails();
   }, [orderId]);
+
+  useEffect(() => {
+    if (order && user) {
+      checkUserCanApprove();
+    }
+  }, [order, user]);
 
   const fetchOrderDetails = async () => {
     try {
@@ -65,6 +75,10 @@ export default function OrdenDetallesPage() {
       }
       
       setOrder(data.order);
+      
+      // Cargar aprobaciones
+      const orderApprovals = await getOrderApprovals(orderId);
+      setApprovals(orderApprovals);
     } catch (error) {
       console.error("Error al cargar orden:", error);
       alert('Error al cargar los detalles de la orden.');
@@ -74,25 +88,72 @@ export default function OrdenDetallesPage() {
     }
   };
 
-  const handleApproveReject = async (action: 'approve' | 'reject') => {
+  const checkUserCanApprove = async () => {
+    if (!user?.id) return;
+    
     try {
-      const response = await fetch(`/api/v1/orders/${orderId}/status`, {
-        method: 'PATCH',
+      const result = await canUserApprove(user.id, orderId);
+      setCanApprove(result.canApprove);
+    } catch (error) {
+      console.error('Error checking approval permissions:', error);
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!confirm('¿Estás seguro de aprobar esta orden de compra?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/v1/orders/${orderId}/approve`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ comments }),
       });
 
       const data = await response.json();
 
       if (!data.success) {
-        throw new Error(data.error || 'Error al actualizar orden');
+        throw new Error(data.error || 'Error al aprobar la orden');
       }
 
-      alert(`Orden ${action === 'approve' ? 'aprobada' : 'rechazada'} exitosamente`);
-      router.push('/dashboard/ordenes-compra');
+      alert(data.message);
+      setComments('');
+      await fetchOrderDetails(); // Recargar datos
     } catch (error) {
-      console.error('Error al actualizar orden:', error);
-      alert('Error al actualizar la orden. Por favor, intenta nuevamente.');
+      console.error('Error al aprobar:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Error al aprobar la orden';
+      alert(errorMessage);
+    }
+  };
+
+  const handleReject = async () => {
+    const reason = prompt('¿Por qué rechazas esta orden? (obligatorio)');
+    
+    if (!reason || reason.trim() === '') {
+      alert('Debes proporcionar una razón para rechazar la orden');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/v1/orders/${orderId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comments: reason }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Error al rechazar la orden');
+      }
+
+      alert(data.message);
+      await fetchOrderDetails(); // Recargar datos
+    } catch (error) {
+      console.error('Error al rechazar:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Error al rechazar la orden';
+      alert(errorMessage);
     }
   };
 
@@ -174,51 +235,48 @@ export default function OrdenDetallesPage() {
   const subtotalItems = order.items.reduce((sum, item) => sum + item.subtotal, 0);
   const retentionAmount = order.retention ? (subtotalItems * order.retention / 100) : 0;
 
-  const steps = [
-    { key: 'pending', label: 'Pendiente' },
-    { key: 'in_progress', label: 'En Proceso' },
-    { key: 'completed', label: 'Completada' },
-  ];
-
-  const getStepIcon = (stepKey: string, isActive: boolean, isCompleted: boolean) => {
-    if (isCompleted) {
-      return (
-        <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-        </svg>
-      );
-    }
-
-    switch (stepKey) {
-      case 'pending':
-        return (
-          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-        );
-      case 'in_progress':
-        return (
-          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-        );
-      case 'completed':
-        return (
-          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        );
-      default:
-        return null;
-    }
-  };
-
-  const getCurrentStepIndex = () => {
+  // Obtener el paso actual basado en aprobaciones
+  const getCurrentApprovalStep = () => {
     if (order.status === 'rejected') return -1;
-    return steps.findIndex(step => step.key === order.status);
+    if (order.status === 'completed') return approvals.length;
+    
+    // Encontrar la primera aprobación pendiente
+    const firstPending = approvals.findIndex(a => a.status === 'pending');
+    return firstPending === -1 ? approvals.length : firstPending;
   };
 
-  const currentStepIndex = getCurrentStepIndex();
+  const currentApprovalStep = getCurrentApprovalStep();
+
+  // Renderizar icono según el tipo
+  const renderApprovalIcon = (iconType: ApprovalIconType) => {
+    switch (iconType) {
+      case 'approved':
+        return (
+          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+          </svg>
+        );
+      case 'rejected':
+        return (
+          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        );
+      case 'active':
+        return (
+          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
+          </svg>
+        );
+      case 'pending':
+      default:
+        return (
+          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="currentColor" viewBox="0 0 20 20">
+            <circle cx="10" cy="10" r="3" />
+          </svg>
+        );
+    }
+  };
 
   return (
     <div className="container mx-auto px-4 py-4 sm:py-8">
@@ -255,54 +313,121 @@ export default function OrdenDetallesPage() {
         </div>
       </div>
 
-      {/* Stepper de Progreso */}
+      {/* Stepper de Progreso - Flujo de Aprobaciones */}
       {order.status !== 'rejected' && (
         <div className="mb-6 sm:mb-8 bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
-          <div className="flex items-center justify-between relative">
+          <h2 className="text-lg font-bold text-gray-900 mb-4">Flujo de Aprobaciones</h2>
+          
+          {approvals.length === 0 ? (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <p className="text-sm text-yellow-800">
+                Esta orden aún no tiene aprobaciones configuradas. Las aprobaciones se crearán automáticamente según el flujo establecido.
+              </p>
+            </div>
+          ) : (
+          <div className="relative">
             {/* Línea de progreso */}
-            <div className="absolute top-5 left-0 right-0 h-1 bg-gray-200 -z-10 mx-8 sm:mx-12"></div>
+            <div className="absolute top-5 left-8 right-8 h-1 bg-gray-200 -z-10"></div>
             <div 
-              className="absolute top-5 left-0 h-1 bg-red-600 -z-10 transition-all duration-500 mx-8 sm:mx-12"
+              className="absolute top-5 left-8 h-1 bg-red-600 -z-10 transition-all duration-500"
               style={{ 
-                width: currentStepIndex >= 0 
-                  ? `calc(${(currentStepIndex / (steps.length - 1)) * 100}%)`
+                width: approvals.length > 0
+                  ? `calc(${(currentApprovalStep / (approvals.length - 1)) * 100}% - 64px)`
                   : '0%'
               }}
             ></div>
 
-            {steps.map((step, index) => {
-              const isActive = index === currentStepIndex;
-              const isCompleted = index < currentStepIndex;
-              const isPending = index > currentStepIndex;
+            {/* Steps */}
+            <div className="flex justify-between">
+              {approvals.map((approval, index) => {
+                const isActive = index === currentApprovalStep;
+                const isCompleted = approval.status === 'approved';
+                const isRejected = approval.status === 'rejected';
+                const isPending = approval.status === 'pending';
+                const iconType = getApprovalIconType(approval.status, isActive);
 
-              return (
-                <div key={step.key} className="flex flex-col items-center flex-1 relative z-10">
-                  {/* Círculo del step */}
-                  <div
-                    className={`
-                      w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center
-                      transition-all duration-300 border-4
-                      ${isCompleted ? 'bg-red-600 border-red-600 text-white' : ''}
-                      ${isActive ? 'bg-red-600 border-red-600 text-white scale-110 shadow-lg' : ''}
-                      ${isPending ? 'bg-white border-gray-300 text-gray-400' : ''}
-                    `}
-                  >
-                    {getStepIcon(step.key, isActive, isCompleted)}
+                return (
+                  <div key={approval.id} className="flex flex-col items-center flex-1 relative z-10">
+                    {/* Círculo del step */}
+                    <div
+                      className={`
+                        w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center
+                        transition-all duration-300 border-4
+                        ${isCompleted ? 'bg-green-600 border-green-600 text-white' : ''}
+                        ${isRejected ? 'bg-red-600 border-red-600 text-white' : ''}
+                        ${isActive && isPending ? 'bg-rojo-coconsa border-rojo-coconsa text-white scale-110 shadow-lg' : ''}
+                        ${isPending && !isActive ? 'bg-white border-gray-300 text-gray-400' : ''}
+                      `}
+                    >
+                      {renderApprovalIcon(iconType)}
+                    </div>
+                    
+                    {/* Label */}
+                    <div className="mt-2 text-center">
+                      <span className={`
+                        text-xs sm:text-sm font-medium block
+                        ${isCompleted || isActive ? 'text-gray-900' : 'text-gray-400'}
+                      `}>
+                        {approval.department?.name || 'Departamento'}
+                      </span>
+                      
+                      {/* Información de aprobación */}
+                      {isCompleted && approval.approver && (
+                        <div className="mt-1 text-xs text-gray-600">
+                          <div className="font-medium">{approval.approver.full_name}</div>
+                          <div className="text-gray-500">
+                            {new Date(approval.approved_at!).toLocaleDateString('es-MX')}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {isRejected && approval.approver && (
+                        <div className="mt-1 text-xs text-red-600">
+                          <div className="font-medium">Rechazado</div>
+                          <div className="text-red-500">
+                            {approval.approver.full_name}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {isActive && isPending && (
+                        <div className="mt-1 text-xs text-blue-600 font-medium">
+                          Pendiente
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  
-                  {/* Label */}
-                  <span
-                    className={`
-                      mt-2 text-xs sm:text-sm font-medium text-center whitespace-nowrap
-                      ${isActive || isCompleted ? 'text-gray-900' : 'text-gray-400'}
-                    `}
-                  >
-                    {step.label}
-                  </span>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+
+          {/* Mostrar comentarios de aprobaciones */}
+          {approvals.some(a => a.comments) && (
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Comentarios</h3>
+              <div className="space-y-2">
+                {approvals
+                  .filter(a => a.comments)
+                  .map(approval => (
+                    <div key={approval.id} className="bg-gray-50 rounded p-3">
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="text-sm font-medium text-gray-900">
+                          {approval.department?.name}
+                        </span>
+                        <span className={`text-xs px-2 py-0.5 rounded ${
+                          approval.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }`}>
+                          {approval.status === 'approved' ? 'Aprobado' : 'Rechazado'}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600">{approval.comments}</p>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
           </div>
+          )}
         </div>
       )}
 
@@ -469,25 +594,40 @@ export default function OrdenDetallesPage() {
                 <span>{downloadingPdf ? 'Generando...' : 'Descargar PDF'}</span>
               </button>
               
-              {isAdmin && order.status === 'pending' && (
+              {/* Botones de Aprobación/Rechazo - Solo para jefes de departamento con permiso */}
+              {canApprove && order.status !== 'completed' && order.status !== 'rejected' && (
                 <>
-                  <button
-                    onClick={() => handleApproveReject('approve')}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm sm:text-base font-medium transition-colors"
-                  >
-                    Aprobar Orden
-                  </button>
-                  
-                  <button
-                    onClick={() => handleApproveReject('reject')}
-                    className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm sm:text-base font-medium transition-colors"
-                  >
-                    Rechazar Orden
-                  </button>
+                  <div className="border-t pt-4 mt-4">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-2">Aprobar/Rechazar Orden</h3>
+                    <textarea
+                      value={comments}
+                      onChange={(e) => setComments(e.target.value)}
+                      placeholder="Comentarios (opcional)"
+                      className="w-full px-3 py- text-gray-900 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-3"
+                      rows={3}
+                    />
+                    
+                    <div className="space-y-2">
+                      <button
+                        onClick={handleApprove}
+                        className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm sm:text-base font-medium transition-colors"
+                      >
+                        Aprobar Orden
+                      </button>
+                      
+                      <button
+                        onClick={handleReject}
+                        className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm sm:text-base font-medium transition-colors"
+                      >
+                        Rechazar Orden
+                      </button>
+                    </div>
+                  </div>
                 </>
               )}
 
-              {isAdmin && order.status === 'in_progress' && (
+              {/* Botón de completar orden - Solo para admin cuando está aprobada */}
+              {isAdmin && order.status === 'approved' && (
                 <div className="border-t pt-4 mt-4">
                   <div className="mb-3">
                     <label className="flex items-start gap-3 cursor-pointer group">

@@ -8,14 +8,15 @@ import { supabaseAdmin } from "@/lib/supabase/server";
  */
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Verificar que el usuario sea admin
     const { error: authError, session } = await requireAdmin();
     if (authError) return authError;
 
-    const { id } = await params;
+    const resolvedParams = await params;
+    const { id } = resolvedParams;
     const body = await request.json();
     const { action, reason } = body; // action: 'approve' | 'reject' | 'complete'
 

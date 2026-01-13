@@ -6,10 +6,11 @@ import QRCode from 'qrcode';
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const orderId = params.id;
+    const resolvedParams = await params;
+    const orderId = resolvedParams.id;
 
     // Obtener la orden de la base de datos con datos relacionados
     const { data: order, error } = await supabaseAdmin

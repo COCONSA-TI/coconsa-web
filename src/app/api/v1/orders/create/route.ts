@@ -2,6 +2,58 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/api-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
+// Función para crear aprobaciones en el servidor
+async function createOrderApprovalsServer(orderId: string, applicantDepartmentId: string) {
+  // Obtener todos los departamentos que requieren aprobación
+  const { data: departments, error: deptError } = await supabaseAdmin
+    .from('departments')
+    .select('*')
+    .eq('requires_approval', true)
+    .order('approval_order');
+
+  if (deptError || !departments) {
+    throw new Error('Error al obtener departamentos');
+  }
+
+  // Crear aprobaciones para cada departamento en el flujo
+  const approvalsToCreate = [];
+
+  // 1. Aprobación del departamento del solicitante (gerencia)
+  const applicantDept = departments.find((d: any) => d.id === applicantDepartmentId);
+  if (applicantDept) {
+    approvalsToCreate.push({
+      order_id: orderId,
+      department_id: applicantDept.id,
+      status: 'pending',
+      approval_order: applicantDept.approval_order,
+    });
+  }
+
+  // 2. Aprobaciones para el resto del flujo (contraloría, dirección, contabilidad, pagos)
+  const subsequentDepartments = departments.filter(
+    (d: any) => d.approval_order > 1
+  );
+
+  for (const dept of subsequentDepartments) {
+    approvalsToCreate.push({
+      order_id: orderId,
+      department_id: dept.id,
+      status: 'pending',
+      approval_order: dept.approval_order,
+    });
+  }
+
+  const { error: insertError } = await supabaseAdmin
+    .from('order_approvals')
+    .insert(approvalsToCreate);
+
+  if (insertError) {
+    throw new Error('Error al crear aprobaciones: ' + insertError.message);
+  }
+
+  return true;
+}
+
 export async function POST(request: Request) {
   try {
     // Verificar permisos de creación
@@ -57,11 +109,12 @@ export async function POST(request: Request) {
 
     // Buscar el usuario por nombre o usar el ID proporcionado
     let userId = applicant_id;
+    let userDepartmentId = null;
     
     if (!userId) {
       const { data: userData, error: userError } = await supabaseAdmin
         .from('users')
-        .select('id')
+        .select('id, department_id')
         .ilike('full_name', `%${applicant_name}%`)
         .limit(1)
         .single();
@@ -77,6 +130,18 @@ export async function POST(request: Request) {
         );
       }
       userId = userData.id;
+      userDepartmentId = userData.department_id;
+    } else {
+      // Si tenemos el ID, obtener el departamento
+      const { data: userData, error: userError } = await supabaseAdmin
+        .from('users')
+        .select('department_id')
+        .eq('id', userId)
+        .single();
+      
+      if (userData) {
+        userDepartmentId = userData.department_id;
+      }
     }
 
     // Buscar el almacén por nombre o usar el ID proporcionado
@@ -181,7 +246,7 @@ export async function POST(request: Request) {
           currency: currency,
           justification: justification || '',
           retention: retention || '',
-          status: 'PENDIENTE',
+          status: 'pending',
         };
 
         const { data: orderCreated, error: orderError } = await supabaseAdmin
@@ -196,6 +261,19 @@ export async function POST(request: Request) {
         } else {
           console.log(`✅ Orden creada para ${supplierKey}:`, orderCreated.id);
           createdOrders.push(orderCreated);
+          
+          // Crear el flujo de aprobaciones automáticamente
+          if (userDepartmentId) {
+            try {
+              await createOrderApprovalsServer(orderCreated.id, userDepartmentId);
+              console.log(`✅ Flujo de aprobaciones creado para orden ${orderCreated.id}`);
+            } catch (approvalError) {
+              console.error(`⚠️ Error creando aprobaciones para orden ${orderCreated.id}:`, approvalError);
+              // No fallar la creación de la orden si falla la creación de aprobaciones
+            }
+          } else {
+            console.warn(`⚠️ No se pudo crear flujo de aprobaciones: usuario sin departamento asignado`);
+          }
         }
       } catch (error) {
         console.error(`Error procesando proveedor ${supplierKey}:`, error);
