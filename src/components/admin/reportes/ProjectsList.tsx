@@ -7,32 +7,64 @@ interface ProjectsListProps {
   onEdit: (project: Project) => void;
   onCreate: () => void;
   selectedProjectId: string | null;
+  refreshTrigger?: number;
 }
 
 export default function ProjectsList({
   onEdit,
   onCreate,
   selectedProjectId,
+  refreshTrigger,
 }: ProjectsListProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProjects();
-  }, []);
+  }, [refreshTrigger]);
 
   const fetchProjects = async () => {
     try {
-      const response = await fetch("/api/v1/bot/client");
+      setLoading(true);
+      const response = await fetch("/api/v1/projects");
       const data = await response.json();
       if (data.success) {
-        setProjects(Object.values(data.projects));
+        setProjects(data.projects);
       }
     } catch (error) {
       console.error("Error al cargar proyectos:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (e: React.MouseEvent, projectId: string) => {
+    e.stopPropagation();
+    
+    if (!confirm('¿Estás seguro de eliminar este proyecto? Esta acción no se puede deshacer.')) {
+      return;
+    }
+
+    try {
+      setDeleting(projectId);
+      const response = await fetch(`/api/v1/projects/${projectId}`, {
+        method: 'DELETE'
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        alert('Proyecto eliminado exitosamente');
+        fetchProjects();
+      } else {
+        alert('Error al eliminar: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error al eliminar:', error);
+      alert('Error al eliminar el proyecto');
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -97,16 +129,18 @@ export default function ProjectsList({
           </div>
         ) : (
           filteredProjects.map((project) => (
-            <button
+            <div
               key={project.projectId}
-              onClick={() => onEdit(project)}
-              className={`w-full p-4 text-left hover:bg-gray-50 border-b transition-colors ${
+              className={`w-full p-4 text-left hover:bg-gray-50 border-b transition-colors cursor-pointer ${
                 selectedProjectId === project.projectId
                   ? "bg-red-50 border-l-4 border-l-[#e52b2d]"
                   : ""
               }`}
             >
-              <div className="flex items-start justify-between gap-2">
+              <div 
+                onClick={() => onEdit(project)}
+                className="flex items-start justify-between gap-2"
+              >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-mono text-gray-500">
@@ -135,14 +169,26 @@ export default function ProjectsList({
                 </div>
               </div>
 
-              {/* Progress Bar */}
-              <div className="mt-3 bg-gray-200 rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-[#e52b2d] h-full transition-all duration-300"
-                  style={{ width: `${project.physicalProgress}%` }}
-                />
+              {/* Progress Bar y Botón eliminar */}
+              <div className="mt-3 flex items-center gap-3">
+                <div 
+                  onClick={() => onEdit(project)}
+                  className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden cursor-pointer"
+                >
+                  <div
+                    className="bg-[#e52b2d] h-full transition-all duration-300"
+                    style={{ width: `${project.physicalProgress}%` }}
+                  />
+                </div>
+                <button
+                  onClick={(e) => handleDelete(e, project.projectId)}
+                  disabled={deleting === project.projectId}
+                  className="text-xs text-red-600 hover:text-red-800 hover:underline disabled:text-gray-400 flex-shrink-0"
+                >
+                  {deleting === project.projectId ? 'Eliminando...' : 'Eliminar'}
+                </button>
               </div>
-            </button>
+            </div>
           ))
         )}
       </div>

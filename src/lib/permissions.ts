@@ -24,6 +24,13 @@ export const PERMISSIONS = {
     edit: ['admin', 'supervisor'],
     delete: ['admin'],
   },
+  // Proyectos
+  projects: {
+    view: ['admin', 'supervisor', 'client'],
+    create: ['admin', 'supervisor'],
+    update: ['admin', 'supervisor'],
+    delete: ['admin'],
+  },
   // Chatbot
   chatbot: {
     access: ['admin'],

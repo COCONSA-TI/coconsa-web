@@ -72,16 +72,40 @@ export default function ProjectForm({
   const handleSave = async () => {
     if (!formData) return;
 
+    // Validaciones básicas
+    if (!formData.projectName.trim()) {
+      alert('El nombre del proyecto es requerido');
+      return;
+    }
+    if (!formData.client.trim()) {
+      alert('El cliente es requerido');
+      return;
+    }
+
     setSaving(true);
     try {
-      // Aquí se implementaría la llamada al API cuando exista
-      console.log("Guardando proyecto:", formData);
+      const url = isCreating 
+        ? '/api/v1/projects' 
+        : `/api/v1/projects/${formData.projectId}`;
       
-      // Simular guardado
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const method = isCreating ? 'POST' : 'PUT';
       
-      alert("Proyecto guardado exitosamente");
-      onSave();
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        alert(isCreating ? 'Proyecto creado exitosamente' : 'Proyecto actualizado exitosamente');
+        onSave();
+      } else {
+        alert('Error: ' + (data.error || 'Error desconocido'));
+      }
     } catch (error) {
       console.error("Error al guardar:", error);
       alert("Error al guardar el proyecto");

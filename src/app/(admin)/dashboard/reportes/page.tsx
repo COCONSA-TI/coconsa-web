@@ -8,6 +8,7 @@ import { Project } from "@/types/project";
 export default function ReportesPage() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const handleEdit = (project: Project) => {
     setSelectedProject(project);
@@ -27,6 +28,8 @@ export default function ReportesPage() {
   const handleSave = () => {
     setSelectedProject(null);
     setIsCreating(false);
+    // Trigger para refrescar la lista
+    setRefreshTrigger(prev => prev + 1);
   };
 
   return (
@@ -49,6 +52,7 @@ export default function ReportesPage() {
               onEdit={handleEdit}
               onCreate={handleCreate}
               selectedProjectId={selectedProject?.projectId || null}
+              refreshTrigger={refreshTrigger}
             />
           </div>
 
