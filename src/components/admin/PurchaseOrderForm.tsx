@@ -45,6 +45,8 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -113,6 +115,25 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     }, 0);
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files);
+      setEvidenceFiles(prev => [...prev, ...newFiles]);
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setEvidenceFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -141,6 +162,11 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
       return;
     }
 
+    if (evidenceFiles.length === 0) {
+      setError("Debes adjuntar al menos un archivo de evidencia");
+      return;
+    }
+
     // Preparar datos para el endpoint - cada item ya tiene su proveedor
     const orderData = {
       applicant_name: formData.applicant_name,
@@ -159,14 +185,21 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     };
 
     setLoading(true);
+    setUploadingFiles(evidenceFiles.length > 0);
 
     try {
+      // Crear FormData para enviar datos y archivos
+      const formDataToSend = new FormData();
+      formDataToSend.append('orderData', JSON.stringify(orderData));
+      
+      // Agregar archivos de evidencia
+      evidenceFiles.forEach((file) => {
+        formDataToSend.append('evidence', file);
+      });
+
       const response = await fetch("/api/v1/orders/create", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(orderData),
+        body: formDataToSend,
       });
 
       const data = await response.json();
@@ -185,6 +218,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
         retention: "",
       });
       setItems([{ id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "", proveedor: "" }]);
+      setEvidenceFiles([]);
 
       if (onSubmit) {
         onSubmit(data);
@@ -197,6 +231,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
       setTimeout(() => setError(null), 10000);
     } finally {
       setLoading(false);
+      setUploadingFiles(false);
     }
   };
 
@@ -439,6 +474,64 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
               required
             />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Evidencias / Comprobantes <span className="text-red-500">*</span>
+            </label>
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-400 transition-colors">
+              <input
+                type="file"
+                id="evidence-upload"
+                multiple
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <label
+                htmlFor="evidence-upload"
+                className="flex flex-col items-center justify-center cursor-pointer"
+              >
+                <svg className="w-10 h-10 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <span className="text-sm text-gray-600 font-medium">Haz clic para subir archivos</span>
+                <span className="text-xs text-gray-500 mt-1">Imágenes, PDF, Word, Excel (máx. 50MB por archivo)</span>
+              </label>
+            </div>
+            
+            {/* Lista de archivos seleccionados */}
+            {evidenceFiles.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <p className="text-sm font-medium text-gray-700">Archivos seleccionados ({evidenceFiles.length}):</p>
+                {evidenceFiles.map((file, index) => (
+                  <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded-lg border border-gray-200">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="text-lg">
+                        {file.type.startsWith('image/') ? '🖼️' : 
+                         file.type === 'application/pdf' ? '📄' : 
+                         file.type.includes('word') ? '📝' : 
+                         file.type.includes('excel') || file.type.includes('spreadsheet') ? '📊' : '📎'}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-gray-700 truncate">{file.name}</p>
+                        <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeFile(index)}
+                      className="text-red-500 hover:text-red-700 p-1 flex-shrink-0"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -485,6 +578,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
               retention: "",
             });
             setItems([{ id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "", proveedor: "" }]);
+            setEvidenceFiles([]);
           }}
           className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
         >
@@ -495,7 +589,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
           disabled={loading}
           className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-semibold"
         >
-          {loading ? "Creando..." : "Crear Orden de Compra"}
+          {loading ? (uploadingFiles ? "Subiendo archivos..." : "Creando...") : "Crear Orden de Compra"}
         </button>
       </div>
     </form>

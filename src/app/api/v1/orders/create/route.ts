@@ -2,6 +2,64 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/api-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
+const BUCKET_NAME = "Coconsa";
+
+// Función para subir archivos a Supabase Storage
+async function uploadEvidenceFiles(files: File[], orderId: string): Promise<string[]> {
+  const uploadedUrls: string[] = [];
+  
+  console.log(`📁 Iniciando subida de ${files.length} archivos para orden ${orderId}`);
+  
+  // Verificar que el bucket existe
+  const { data: buckets, error: bucketError } = await supabaseAdmin.storage.listBuckets();
+  console.log('📦 Buckets disponibles:', buckets?.map(b => b.name));
+  if (bucketError) {
+    console.error('❌ Error listando buckets:', bucketError);
+  }
+  
+  for (const file of files) {
+    console.log(`📤 Subiendo archivo: ${file.name}, tipo: ${file.type}, tamaño: ${file.size} bytes`);
+    
+    const timestamp = Date.now();
+    const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const filePath = `orders/${orderId}/evidence/${timestamp}_${sanitizedName}`;
+    
+    console.log(`📂 Ruta del archivo: ${filePath}`);
+    
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    const { data, error } = await supabaseAdmin.storage
+      .from(BUCKET_NAME)
+      .upload(filePath, buffer, {
+        contentType: file.type,
+        upsert: false
+      });
+    
+    if (error) {
+      console.error(`❌ Error uploading file ${file.name}:`, error);
+      console.error('Detalles del error:', JSON.stringify(error, null, 2));
+      continue;
+    }
+    
+    console.log(`✅ Archivo subido exitosamente:`, data);
+    
+    // Obtener la URL pública del archivo
+    const { data: urlData } = supabaseAdmin.storage
+      .from(BUCKET_NAME)
+      .getPublicUrl(filePath);
+    
+    console.log(`🔗 URL generada:`, urlData?.publicUrl);
+    
+    if (urlData?.publicUrl) {
+      uploadedUrls.push(urlData.publicUrl);
+    }
+  }
+  
+  console.log(`📊 Total de URLs subidas: ${uploadedUrls.length}`);
+  return uploadedUrls;
+}
+
 // Función para crear aprobaciones en el servidor
 async function createOrderApprovalsServer(orderId: string, applicantDepartmentId: string, applicantId: string) {
   // Obtener información del solicitante
@@ -85,7 +143,35 @@ export async function POST(request: Request) {
     const { error: authError } = await requirePermission('orders', 'create');
     if (authError) return authError;
 
-    const body = await request.json();
+    // Detectar tipo de contenido para manejar FormData o JSON
+    const contentType = request.headers.get('content-type') || '';
+    let body: any;
+    let evidenceFiles: File[] = [];
+
+    if (contentType.includes('multipart/form-data')) {
+      // Procesar FormData (desde el formulario manual)
+      const formData = await request.formData();
+      const orderDataString = formData.get('orderData');
+      
+      if (typeof orderDataString === 'string') {
+        body = JSON.parse(orderDataString);
+      } else {
+        return NextResponse.json(
+          { error: 'Datos de orden inválidos' },
+          { status: 400 }
+        );
+      }
+      
+      // Obtener archivos de evidencia
+      const evidenceEntries = formData.getAll('evidence');
+      evidenceFiles = evidenceEntries.filter((entry): entry is File => entry instanceof File);
+      
+      console.log(`Recibidos ${evidenceFiles.length} archivos de evidencia`);
+    } else {
+      // Procesar JSON (desde el chatbot u otras fuentes)
+      body = await request.json();
+    }
+
     console.log('Datos recibidos para crear orden:', body);
     
     const {
@@ -254,7 +340,7 @@ export async function POST(request: Request) {
           proveedor: supplierKey
         }));
 
-        // Crear la orden
+        // Crear la orden primero (sin evidencias) para obtener el ID
         const orderData = {
           applicant_id: userId,
           store_id: storeIdToUse,
@@ -285,6 +371,34 @@ export async function POST(request: Request) {
           errors.push(`Error al crear orden para ${supplierKey}: ${orderError.message}`);
         } else {
           console.log(`✅ Orden creada para ${supplierKey}:`, orderCreated.id);
+          
+          // Subir archivos de evidencia si existen (solo para la primera orden)
+          if (evidenceFiles.length > 0 && createdOrders.length === 0) {
+            try {
+              const evidenceUrls = await uploadEvidenceFiles(evidenceFiles, orderCreated.id);
+              
+              if (evidenceUrls.length > 0) {
+                // Actualizar la orden con las URLs de las evidencias
+                const { error: updateError } = await supabaseAdmin
+                  .from('orders')
+                  .update({ 
+                    justification_prove: evidenceUrls.join(',') 
+                  })
+                  .eq('id', orderCreated.id);
+                
+                if (updateError) {
+                  console.error('Error actualizando justification_prove:', updateError);
+                } else {
+                  console.log(`✅ ${evidenceUrls.length} archivos de evidencia subidos para orden ${orderCreated.id}`);
+                  orderCreated.justification_prove = evidenceUrls.join(',');
+                }
+              }
+            } catch (uploadError) {
+              console.error('Error subiendo archivos de evidencia:', uploadError);
+              // No fallar la orden si falla la subida de archivos
+            }
+          }
+          
           createdOrders.push(orderCreated);
           
           // Crear el flujo de aprobaciones automáticamente

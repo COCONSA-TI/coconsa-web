@@ -22,6 +22,7 @@ type DBOrderDetail = {
   status: string;
   applicant_id: string;
   justification: string;
+  justification_prove: string | null;
   retention: number | null;
   items: string;
 };
@@ -41,7 +42,7 @@ export async function GET(
     // Obtener detalles de la orden
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
-      .select('id, created_at, store_id, supplier_id, total, currency, status, applicant_id, justification, retention, items')
+      .select('id, created_at, store_id, supplier_id, total, currency, status, applicant_id, justification, justification_prove, retention, items')
       .eq('id', orderId)
       .single();
 
@@ -112,6 +113,7 @@ export async function GET(
       applicant_name: user?.full_name || 'N/A',
       applicant_email: user?.email || 'N/A',
       justification: typedOrder.justification,
+      justification_prove: typedOrder.justification_prove,
       retention: typedOrder.retention,
       items: itemsArray.map((item, index: number) => ({
         id: `${typedOrder.id}-${index}`,
