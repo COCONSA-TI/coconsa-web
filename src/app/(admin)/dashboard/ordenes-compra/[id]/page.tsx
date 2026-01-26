@@ -55,16 +55,6 @@ export default function OrdenDetallesPage() {
   const [canApprove, setCanApprove] = useState(false);
   const [comments, setComments] = useState('');
 
-  useEffect(() => {
-    fetchOrderDetails();
-  }, [orderId]);
-
-  useEffect(() => {
-    if (order && user) {
-      checkUserCanApprove();
-    }
-  }, [order, user]);
-
   const fetchOrderDetails = async () => {
     try {
       setLoading(true);
@@ -99,6 +89,18 @@ export default function OrdenDetallesPage() {
       console.error('Error checking approval permissions:', error);
     }
   };
+
+  useEffect(() => {
+    fetchOrderDetails();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId]);
+
+  useEffect(() => {
+    if (order && user) {
+      checkUserCanApprove();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [order, user]);
 
   const handleApprove = async () => {
     if (!confirm('¿Estás seguro de aprobar esta orden de compra?')) {
