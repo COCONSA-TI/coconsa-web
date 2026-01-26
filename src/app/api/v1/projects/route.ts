@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/api-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { Contact, Milestone, RecentUpdate } from "@/types/project";
 
 // GET - Obtener todos los proyectos
 export async function GET() {
@@ -59,7 +60,7 @@ export async function GET() {
         email: '',
         position: ''
       },
-      contacts: project.project_contacts?.map((c: any) => ({
+      contacts: project.project_contacts?.map((c: Contact) => ({
         name: c.name,
         role: c.role,
         phone: c.phone,
@@ -67,7 +68,7 @@ export async function GET() {
       })) || [],
       milestones: project.project_milestones
         ?.sort((a: any, b: any) => a.sort_order - b.sort_order)
-        .map((m: any) => ({
+        .map((m: Milestone) => ({
           name: m.name,
           status: m.status,
           progress: m.progress,
@@ -75,7 +76,7 @@ export async function GET() {
         })) || [],
       recentUpdates: project.project_updates
         ?.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
-        .map((u: any) => ({
+        .map((u: RecentUpdate) => ({
           date: u.date,
           title: u.title,
           description: u.description
@@ -179,7 +180,7 @@ export async function POST(request: Request) {
 
     // Crear contactos
     if (contacts && contacts.length > 0) {
-      const contactsToInsert = contacts.map((c: any) => ({
+      const contactsToInsert = contacts.map((c: Contact) => ({
         project_id: projectUUID,
         name: c.name,
         role: c.role || '',
@@ -191,7 +192,7 @@ export async function POST(request: Request) {
 
     // Crear hitos
     if (milestones && milestones.length > 0) {
-      const milestonesToInsert = milestones.map((m: any, index: number) => ({
+      const milestonesToInsert = milestones.map((m: Milestone, index: number) => ({
         project_id: projectUUID,
         name: m.name,
         status: m.status || 'Pendiente',
@@ -204,7 +205,7 @@ export async function POST(request: Request) {
 
     // Crear actualizaciones
     if (recentUpdates && recentUpdates.length > 0) {
-      const updatesToInsert = recentUpdates.map((u: any) => ({
+      const updatesToInsert = recentUpdates.map((u: RecentUpdate) => ({
         project_id: projectUUID,
         date: u.date || new Date().toISOString().split('T')[0],
         title: u.title,

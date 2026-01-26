@@ -1,7 +1,10 @@
 import { SignJWT, jwtVerify, JWTPayload } from 'jose';
 import { cookies } from 'next/headers';
 
-const secretKey = process.env.JWT_SECRET || 'your-secret-key-change-this';
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET is not defined");
+}
+const secretKey = process.env.JWT_SECRET;
 const key = new TextEncoder().encode(secretKey);
 
 export interface SessionPayload extends JWTPayload {

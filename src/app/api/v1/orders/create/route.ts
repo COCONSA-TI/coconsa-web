@@ -8,23 +8,16 @@ const BUCKET_NAME = "Coconsa";
 async function uploadEvidenceFiles(files: File[], orderId: string): Promise<string[]> {
   const uploadedUrls: string[] = [];
   
-  console.log(`📁 Iniciando subida de ${files.length} archivos para orden ${orderId}`);
-  
   // Verificar que el bucket existe
   const { data: buckets, error: bucketError } = await supabaseAdmin.storage.listBuckets();
-  console.log('📦 Buckets disponibles:', buckets?.map(b => b.name));
   if (bucketError) {
     console.error('❌ Error listando buckets:', bucketError);
   }
   
   for (const file of files) {
-    console.log(`📤 Subiendo archivo: ${file.name}, tipo: ${file.type}, tamaño: ${file.size} bytes`);
-    
     const timestamp = Date.now();
     const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
     const filePath = `orders/${orderId}/evidence/${timestamp}_${sanitizedName}`;
-    
-    console.log(`📂 Ruta del archivo: ${filePath}`);
     
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
@@ -42,21 +35,16 @@ async function uploadEvidenceFiles(files: File[], orderId: string): Promise<stri
       continue;
     }
     
-    console.log(`✅ Archivo subido exitosamente:`, data);
-    
     // Obtener la URL pública del archivo
     const { data: urlData } = supabaseAdmin.storage
       .from(BUCKET_NAME)
       .getPublicUrl(filePath);
-    
-    console.log(`🔗 URL generada:`, urlData?.publicUrl);
     
     if (urlData?.publicUrl) {
       uploadedUrls.push(urlData.publicUrl);
     }
   }
   
-  console.log(`📊 Total de URLs subidas: ${uploadedUrls.length}`);
   return uploadedUrls;
 }
 
@@ -166,14 +154,11 @@ export async function POST(request: Request) {
       const evidenceEntries = formData.getAll('evidence');
       evidenceFiles = evidenceEntries.filter((entry): entry is File => entry instanceof File);
       
-      console.log(`Recibidos ${evidenceFiles.length} archivos de evidencia`);
     } else {
       // Procesar JSON (desde el chatbot u otras fuentes)
       body = await request.json();
     }
 
-    console.log('Datos recibidos para crear orden:', body);
-    
     const {
       applicant_name,
       applicant_id, // ID opcional desde el chatbot
@@ -187,7 +172,6 @@ export async function POST(request: Request) {
 
     // Validaciones básicas
     if (!applicant_name || !store_name || !items || items.length === 0) {
-      console.log('❌ Faltan datos requeridos');
       const missing = [];
       if (!applicant_name) missing.push('Nombre del solicitante');
       if (!store_name) missing.push('Almacén u obra');
@@ -211,7 +195,7 @@ export async function POST(request: Request) {
     );
 
     if (invalidItems.length > 0) {
-      console.log('❌ Items inválidos:', invalidItems);
+      console.error('❌ Items inválidos:', invalidItems);
       return NextResponse.json(
         { error: "Algunos artículos tienen datos incompletos o inválidos" },
         { status: 400 }
@@ -231,7 +215,7 @@ export async function POST(request: Request) {
         .single();
 
       if (userError || !userData) {
-        console.log('❌ Usuario no encontrado:', applicant_name, userError);
+        console.error('❌ Usuario no encontrado:', applicant_name, userError);
         return NextResponse.json(
           { 
             error: `No se encontró el usuario "${applicant_name}". Verifica que el nombre esté registrado en el sistema.`,
@@ -267,7 +251,7 @@ export async function POST(request: Request) {
         .single();
 
       if (storeError || !storeData) {
-        console.log('❌ Almacén no encontrado:', store_name, storeError);
+        console.error('❌ Almacén no encontrado:', store_name, storeError);
         return NextResponse.json(
           { 
             error: `No se encontró el almacén u obra "${store_name}". Verifica que esté registrado en el sistema.`,
@@ -289,8 +273,6 @@ export async function POST(request: Request) {
       }
       itemsBySupplier[supplierKey].push(item);
     }
-
-    console.log(`Creando ${Object.keys(itemsBySupplier).length} orden(es) (una por proveedor)`);
 
     // Crear una orden por cada proveedor
     const createdOrders = [];
@@ -370,7 +352,6 @@ export async function POST(request: Request) {
           console.error(`❌ Error creating order for ${supplierKey}:`, orderError);
           errors.push(`Error al crear orden para ${supplierKey}: ${orderError.message}`);
         } else {
-          console.log(`✅ Orden creada para ${supplierKey}:`, orderCreated.id);
           
           // Subir archivos de evidencia si existen (solo para la primera orden)
           if (evidenceFiles.length > 0 && createdOrders.length === 0) {
@@ -389,7 +370,6 @@ export async function POST(request: Request) {
                 if (updateError) {
                   console.error('Error actualizando justification_prove:', updateError);
                 } else {
-                  console.log(`✅ ${evidenceUrls.length} archivos de evidencia subidos para orden ${orderCreated.id}`);
                   orderCreated.justification_prove = evidenceUrls.join(',');
                 }
               }
@@ -405,7 +385,6 @@ export async function POST(request: Request) {
           if (userDepartmentId) {
             try {
               await createOrderApprovalsServer(orderCreated.id, userDepartmentId, userId);
-              console.log(`✅ Flujo de aprobaciones creado para orden ${orderCreated.id}`);
             } catch (approvalError) {
               console.error(`⚠️ Error creando aprobaciones para orden ${orderCreated.id}:`, approvalError);
               // No fallar la creación de la orden si falla la creación de aprobaciones

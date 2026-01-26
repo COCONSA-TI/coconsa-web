@@ -12,9 +12,6 @@ export async function POST(
     // Obtener sesión usando el sistema JWT de la app
     const session = await getSession();
 
-    console.log('Session:', session ? 'válida' : 'no válida');
-    console.log('User ID:', session?.userId);
-
     if (!session) {
       return NextResponse.json(
         { success: false, error: 'No autorizado - Sesión no válida. Por favor, cierra sesión y vuelve a iniciar sesión.' },
@@ -31,9 +28,6 @@ export async function POST(
       .select('*, department:departments(*)')
       .eq('id', session.userId)
       .single();
-
-    console.log('Usuario encontrado:', user);
-    console.log('Error al buscar usuario:', userError);
 
     if (userError || !user) {
       return NextResponse.json(
