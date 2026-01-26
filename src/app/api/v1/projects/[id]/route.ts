@@ -2,6 +2,98 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/api-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
+// Interfaces for Database Types
+interface DBContact {
+  name: string;
+  role: string;
+  phone: string;
+  email: string;
+}
+
+interface DBMilestone {
+  name: string;
+  status: string;
+  progress: number;
+  date: string;
+  sort_order: number;
+}
+
+interface DBUpdate {
+  date: string;
+  title: string;
+  description: string;
+}
+
+interface DBSupervisor {
+  name: string;
+  phone: string;
+  email: string;
+  position: string;
+}
+
+interface DBFinancial {
+  total_budget: number;
+  currency: string;
+  spent: number;
+  percentage: number;
+  last_update: string;
+}
+
+interface DBProject {
+  id: string; 
+  project_id: string; 
+  project_name: string;
+  client: string;
+  status: string;
+  start_date: string;
+  estimated_end_date: string;
+  physical_progress: number;
+  project_financials: DBFinancial[];
+  project_supervisors: DBSupervisor[];
+  project_contacts: DBContact[];
+  project_milestones: DBMilestone[];
+  project_updates: DBUpdate[];
+}
+
+interface ProjectBody {
+  projectName: string;
+  client: string;
+  status: string;
+  startDate: string;
+  estimatedEndDate: string;
+  physicalProgress: number;
+  financialProgress?: {
+    totalBudget: number;
+    currency: string;
+    spent: number;
+    percentage: number;
+    lastUpdate: string;
+  };
+  supervisor?: {
+    name: string;
+    phone: string;
+    email: string;
+    position: string;
+  };
+  contacts?: {
+    name: string;
+    role: string;
+    phone: string;
+    email: string;
+  }[];
+  milestones?: {
+    name: string;
+    status: string;
+    progress: number;
+    date: string;
+  }[];
+  recentUpdates?: {
+    date: string;
+    title: string;
+    description: string;
+  }[];
+}
+
 // GET - Obtener un proyecto específico
 export async function GET(
   request: Request,
@@ -11,7 +103,7 @@ export async function GET(
     const { id } = await params;
 
     // Obtener el proyecto con sus relaciones
-    const { data: project, error } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from('projects')
       .select(`
         *,
@@ -24,12 +116,15 @@ export async function GET(
       .eq('project_id', id)
       .single();
 
-    if (error || !project) {
+    if (error || !data) {
       return NextResponse.json(
         { success: false, error: 'Proyecto no encontrado' },
         { status: 404 }
       );
     }
+    
+    // Cast data to DBProject to ensure type safety in map/sort operations
+    const project = data as unknown as DBProject;
 
     // Transformar al formato esperado
     const formattedProject = {
@@ -64,23 +159,23 @@ export async function GET(
         email: '',
         position: ''
       },
-      contacts: project.project_contacts?.map((c: any) => ({
+      contacts: project.project_contacts?.map((c) => ({
         name: c.name,
         role: c.role,
         phone: c.phone,
         email: c.email
       })) || [],
       milestones: project.project_milestones
-        ?.sort((a: any, b: any) => a.sort_order - b.sort_order)
-        .map((m: any) => ({
+        ?.sort((a, b) => a.sort_order - b.sort_order)
+        .map((m) => ({
           name: m.name,
           status: m.status,
           progress: m.progress,
           date: m.date
         })) || [],
       recentUpdates: project.project_updates
-        ?.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
-        .map((u: any) => ({
+        ?.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .map((u) => ({
           date: u.date,
           title: u.title,
           description: u.description
@@ -113,7 +208,7 @@ export async function PUT(
     if (authError) return authError;
 
     const { id } = await params;
-    const body = await request.json();
+    const body: ProjectBody = await request.json();
 
     const {
       projectName,
@@ -204,7 +299,7 @@ export async function PUT(
       .eq('project_id', projectUUID);
 
     if (contacts && contacts.length > 0) {
-      const contactsToInsert = contacts.map((c: any) => ({
+      const contactsToInsert = contacts.map((c) => ({
         project_id: projectUUID,
         name: c.name,
         role: c.role || '',
@@ -221,7 +316,7 @@ export async function PUT(
       .eq('project_id', projectUUID);
 
     if (milestones && milestones.length > 0) {
-      const milestonesToInsert = milestones.map((m: any, index: number) => ({
+      const milestonesToInsert = milestones.map((m, index) => ({
         project_id: projectUUID,
         name: m.name,
         status: m.status || 'Pendiente',
@@ -239,7 +334,7 @@ export async function PUT(
       .eq('project_id', projectUUID);
 
     if (recentUpdates && recentUpdates.length > 0) {
-      const updatesToInsert = recentUpdates.map((u: any) => ({
+      const updatesToInsert = recentUpdates.map((u) => ({
         project_id: projectUUID,
         date: u.date || new Date().toISOString().split('T')[0],
         title: u.title,

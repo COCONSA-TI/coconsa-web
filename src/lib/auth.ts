@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 if (!process.env.JWT_SECRET) {
   throw new Error("JWT_SECRET is not defined");
 }
-const secretKey = process.env.JWT_SECRET;
+const secretKey: string = process.env.JWT_SECRET;
 const key = new TextEncoder().encode(secretKey);
 
 export interface SessionPayload extends JWTPayload {
@@ -15,7 +15,7 @@ export interface SessionPayload extends JWTPayload {
 }
 
 export async function encrypt(payload: Omit<SessionPayload, keyof JWTPayload>) {
-  return await new SignJWT(payload as JWTPayload)
+  return await new SignJWT(payload as unknown as JWTPayload)
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('24h')
