@@ -4,6 +4,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 
+interface AdminSidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
 const menuItems = [
   {
     name: 'Dashboard',
@@ -72,7 +77,7 @@ const menuItems = [
   },
 ];
 
-export default function AdminSidebar() {
+export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
   const { user, isAdmin } = useAuth();
 
@@ -90,43 +95,81 @@ export default function AdminSidebar() {
     return isAdmin;
   });
 
-  return (
-    <aside className="w-64 bg-white border-r border-gray-200 min-h-screen p-4">
-      <nav className="space-y-1">
-        {allowedItems.map((item) => {
-          const isActive = pathname === item.href;
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                isActive
-                  ? 'bg-red-50 text-red-600 font-medium'
-                  : 'text-gray-700 hover:bg-gray-50 hover:text-red-600'
-              }`}
-            >
-              {item.icon}
-              <span className="flex-1">{item.name}</span>
-              {item.badge && (
-                <span className="px-2 py-0.5 text-xs font-semibold bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full">
-                  {item.badge}
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </nav>
+  const handleLinkClick = () => {
+    // Cerrar sidebar en móvil al hacer clic en un enlace
+    if (onClose) {
+      onClose();
+    }
+  };
 
-      {/* Sección de ayuda */}
-      <div className="mt-8 p-4 bg-gray-50 rounded-lg">
-        <h3 className="text-sm font-semibold text-gray-900 mb-2">¿Necesitas ayuda?</h3>
-        <p className="text-xs text-gray-600 mb-3">
-          Contacta al equipo de soporte técnico
-        </p>
-        <button className="w-full bg-red-600 text-white text-sm py-2 rounded-lg hover:bg-red-700 transition-colors">
-          Soporte
-        </button>
-      </div>
-    </aside>
+  return (
+    <>
+      {/* Sidebar - Desktop: siempre visible, Móvil: drawer lateral */}
+      <aside
+        className={`
+          fixed lg:static inset-y-0 left-0 z-50
+          w-64 bg-white border-r border-gray-200
+          transform transition-transform duration-300 ease-in-out
+          lg:transform-none lg:translate-x-0
+          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+          flex flex-col
+          pt-16 lg:pt-0
+        `}
+      >
+        {/* Header del sidebar (solo móvil) */}
+        <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-200">
+          <span className="font-semibold text-gray-900">Menú</span>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
+            aria-label="Cerrar menú"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Navegación */}
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          {allowedItems.map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                onClick={handleLinkClick}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                  isActive
+                    ? 'bg-red-50 text-red-600 font-medium'
+                    : 'text-gray-700 hover:bg-gray-50 hover:text-red-600'
+                }`}
+              >
+                {item.icon}
+                <span className="flex-1">{item.name}</span>
+                {item.badge && (
+                  <span className="px-2 py-0.5 text-xs font-semibold bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full">
+                    {item.badge}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* Sección de ayuda */}
+        <div className="p-4 border-t border-gray-200">
+          <div className="p-4 bg-gray-50 rounded-lg">
+            <h3 className="text-sm font-semibold text-gray-900 mb-2">¿Necesitas ayuda?</h3>
+            <p className="text-xs text-gray-600 mb-3">
+              Contacta al equipo de soporte técnico
+            </p>
+            <button className="w-full bg-red-600 text-white text-sm py-2 rounded-lg hover:bg-red-700 transition-colors">
+              Soporte
+            </button>
+          </div>
+        </div>
+      </aside>
+    </>
   );
 }

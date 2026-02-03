@@ -1,16 +1,8 @@
 'use client';
 
-import { useState } from 'react';
 import ContactForm from '../contactForm';
 
 export default function ContactSection() {
-    const [formData, setFormData] = useState({
-        name: '',
-        email: '',
-        phone: '',
-        message: '',
-    });
-
     return (
         <section id="contacto" className="py-16 sm:py-24 bg-gray-50">
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">

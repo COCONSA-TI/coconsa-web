@@ -8,6 +8,11 @@ interface Message {
   content: string;
 }
 
+interface AttachedFile {
+  file: File;
+  preview: string | null;
+}
+
 interface ChatbotProps {
   onFormDataExtracted?: (data: PurchaseOrderExtractedData) => void;
   onOrderCreated?: (order: any) => void;
@@ -23,7 +28,7 @@ export default function Chatbot({ onFormDataExtracted, onOrderCreated }: Chatbot
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: '¡Hola! Soy el asistente de COCONSA. ¿Necesitas crear una orden de compra?',
+      content: '¡Hola! Soy el asistente de COCONSA. ¿Necesitas crear una orden de compra? Puedes darme toda la info de golpe o ir paso a paso. También puedes adjuntar evidencias.',
     },
   ]);
   const [input, setInput] = useState('');
@@ -33,12 +38,66 @@ export default function Chatbot({ onFormDataExtracted, onOrderCreated }: Chatbot
   const [orderCreated, setOrderCreated] = useState(false);
   const [availableStores, setAvailableStores] = useState<AvailableOption[]>([]);
   const [availableSuppliers, setAvailableSuppliers] = useState<AvailableOption[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-scroll al último mensaje
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Manejar selección de archivos
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    const newFiles: AttachedFile[] = [];
+    Array.from(files).forEach((file) => {
+      // Validar tipo de archivo
+      const isImage = file.type.startsWith('image/');
+      const isPdf = file.type === 'application/pdf';
+      
+      if (!isImage && !isPdf) {
+        alert(`El archivo "${file.name}" no es válido. Solo se permiten imágenes y PDFs.`);
+        return;
+      }
+
+      // Validar tamaño (máx 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        alert(`El archivo "${file.name}" es muy grande. Máximo 10MB.`);
+        return;
+      }
+
+      // Crear preview para imágenes
+      let preview: string | null = null;
+      if (isImage) {
+        preview = URL.createObjectURL(file);
+      }
+
+      newFiles.push({ file, preview });
+    });
+
+    setAttachedFiles((prev) => [...prev, ...newFiles]);
+    
+    // Limpiar el input para permitir seleccionar el mismo archivo de nuevo
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // Eliminar archivo adjunto
+  const removeFile = (index: number) => {
+    setAttachedFiles((prev) => {
+      const newFiles = [...prev];
+      // Liberar la URL del preview si existe
+      if (newFiles[index].preview) {
+        URL.revokeObjectURL(newFiles[index].preview!);
+      }
+      newFiles.splice(index, 1);
+      return newFiles;
+    });
+  };
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
@@ -116,13 +175,32 @@ export default function Chatbot({ onFormDataExtracted, onOrderCreated }: Chatbot
     setIsCreatingOrder(true);
 
     try {
-      const response = await fetch('/api/v1/orders/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(extractedData),
-      });
+      let response: Response;
+      
+      // Si hay archivos adjuntos, usar FormData
+      if (attachedFiles.length > 0) {
+        const formData = new FormData();
+        formData.append('orderData', JSON.stringify(extractedData));
+        
+        // Agregar cada archivo
+        attachedFiles.forEach((af) => {
+          formData.append('evidence', af.file);
+        });
+        
+        response = await fetch('/api/v1/orders/create', {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        // Sin archivos, usar JSON normal
+        response = await fetch('/api/v1/orders/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(extractedData),
+        });
+      }
 
       const data = await response.json();
 
@@ -131,6 +209,13 @@ export default function Chatbot({ onFormDataExtracted, onOrderCreated }: Chatbot
       }
 
       setOrderCreated(true);
+      
+      // Limpiar archivos adjuntos después de crear la orden
+      attachedFiles.forEach((af) => {
+        if (af.preview) URL.revokeObjectURL(af.preview);
+      });
+      setAttachedFiles([]);
+      
       const ordersCount = data.orders?.length || 1;
       const ordersInfo = ordersCount > 1 
         ? `Se crearon ${ordersCount} órdenes (una por proveedor)`
@@ -204,7 +289,60 @@ export default function Chatbot({ onFormDataExtracted, onOrderCreated }: Chatbot
 
       {/* Input */}
       <div className="border-t p-4">
+        {/* Archivos adjuntos preview */}
+        {attachedFiles.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {attachedFiles.map((af, index) => (
+              <div
+                key={index}
+                className="relative group bg-gray-100 rounded-lg p-2 flex items-center gap-2"
+              >
+                {af.preview ? (
+                  <img
+                    src={af.preview}
+                    alt={af.file.name}
+                    className="w-10 h-10 object-cover rounded"
+                  />
+                ) : (
+                  <div className="w-10 h-10 bg-red-100 rounded flex items-center justify-center">
+                    <span className="text-red-600 text-xs font-bold">PDF</span>
+                  </div>
+                )}
+                <span className="text-xs text-gray-700 max-w-[100px] truncate">
+                  {af.file.name}
+                </span>
+                <button
+                  onClick={() => removeFile(index)}
+                  className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-xs hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        
         <div className="flex space-x-2">
+          {/* Botón para adjuntar archivos */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+            accept="image/*,.pdf"
+            multiple
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isLoading}
+            className="px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors"
+            title="Adjuntar evidencia"
+          >
+            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+            </svg>
+          </button>
+          
           <input
             type="text"
             value={input}

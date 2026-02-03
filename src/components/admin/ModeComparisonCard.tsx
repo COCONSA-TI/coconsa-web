@@ -46,7 +46,7 @@ export default function ModeComparisonCard() {
 
         <div className="mt-4 pt-4 border-t border-blue-300">
           <p className="text-xs text-blue-700 italic">
-            "Ideal para tu primera vez o cuando necesitas orientación"
+            &ldquo;Ideal para tu primera vez o cuando necesitas orientación&rdquo;
           </p>
         </div>
       </div>
@@ -96,7 +96,7 @@ export default function ModeComparisonCard() {
 
         <div className="mt-4 pt-4 border-t border-green-300">
           <p className="text-xs text-green-700 italic">
-            "Ideal cuando conoces bien el proceso y quieres ir directo"
+            &ldquo;Ideal cuando conoces bien el proceso y quieres ir directo&rdquo;
           </p>
         </div>
       </div>

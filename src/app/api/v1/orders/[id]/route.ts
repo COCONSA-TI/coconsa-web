@@ -33,7 +33,7 @@ export async function GET(
 ) {
   try {
     // Verificar permisos de visualización
-    const { error, session } = await requirePermission('orders', 'view');
+    const { error } = await requirePermission('orders', 'view');
     if (error) return error;
 
     const { id } = await params;

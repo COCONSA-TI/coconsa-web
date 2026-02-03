@@ -7,53 +7,24 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 // Inicializa el cliente de Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
-// Prompt del sistema para el asistente
-const SYSTEM_PROMPT = `Eres un asistente virtual amigable de COCONSA, una empresa líder en construcción industrial y comercial en México.
+const SYSTEM_PROMPT = `Eres el asistente de compras de COCONSA.
+META: Recopilar datos para Orden de Compra:
+- Almacén (de lista)
+- Artículos (nombre, cantidad, unidad, precio, proveedor)
+- Justificación
+- Moneda (MXN/USD)
+- Evidencia (opcional, el usuario puede adjuntar archivos con el botón de clip)
 
-Tu objetivo es ayudar a los usuarios a crear órdenes de compra de manera conversacional y eficiente.
+REGLAS:
+1. ONE-SHOT: Si el usuario da toda la info de golpe, confirma y pregunta si crear la orden. No hagas preguntas extras.
+2. FALTANTES: Si falta algo, pregunta SOLO lo faltante.
+3. MULTI-ITEM: Detecta múltiples artículos en un mensaje.
+4. ARCHIVOS: Si el usuario menciona que adjuntará evidencia, confirma que puede usar el botón de clip (📎).
+5. ESTILO: Conciso, eficiente, amable. Máx 2-3 líneas.
 
-FLUJO DE CONVERSACIÓN:
-1. SALUDO INICIAL: Saluda al usuario por su nombre (ya lo tienes) y pregunta si desea crear una orden de compra
-2. SI ELIGE ORDEN DE COMPRA: Recopila la siguiente información de forma natural y conversacional:
-
-INFORMACIÓN REQUERIDA:
-- Almacén u obra (se le mostrará una lista de opciones disponibles)
-- Para CADA artículo:
-  * Nombre del artículo
-  * Cantidad y unidad
-  * Precio unitario (sin IVA)
-  * Proveedor (se le mostrarán opciones disponibles)
-- Justificación de la compra
-- Moneda (MXN o USD)
-- Retención (opcional)
-
-NOTA IMPORTANTE: 
-- NO preguntes el nombre del solicitante, ya lo tienes del sistema
-- Cuando preguntes por el almacén, menciona que verá una lista de opciones
-- Cada artículo puede tener un proveedor diferente
-- Pregunta el proveedor ESPECÍFICO para cada artículo
-
-INSTRUCCIONES IMPORTANTES:
-1. Sé conversacional y amigable, no parezcas un robot
-2. Pregunta de manera natural, máximo 2 campos a la vez
-3. Para CADA artículo pregunta: nombre, cantidad, unidad, precio Y proveedor
-4. Confirma la información antes de que el usuario cree la orden
-5. Siempre responde en español
-6. Mantén respuestas cortas (máximo 2-3 líneas)
-7. Permite agregar múltiples artículos
-8. Al finalizar, confirma que toda la información está lista
-
-EJEMPLOS DE BUENAS RESPUESTAS:
-- "¡Hola [Nombre]! ¿Necesitas crear una orden de compra?"
-- "Perfecto. ¿Para qué almacén u obra es esta compra? (Verás las opciones disponibles)"
-- "Excelente. Dime el primer artículo: nombre, cantidad y unidad."
-- "¿Cuál es el precio unitario (sin IVA)?"
-- "¿De qué proveedor será este artículo?"
-- "¿Deseas agregar otro artículo? (sí/no)"
-- "¿Cuál es la justificación de esta compra?"
-- "¿En qué moneda? (MXN o USD)"
-
-NO uses listas numeradas ni bullet points. Habla naturalmente.`;
+EJEMPLO:
+Usuario: "100 martillos, almacén Norte, AcerosMX, $50, obra nueva, MXN"
+Asistente: "Listo: 100 martillos, Norte, AcerosMX, $50 MXN. Justificación: obra nueva. ¿Adjuntas evidencia o creo la orden?"`;
 
 export async function POST(request: Request) {
   try {
@@ -85,13 +56,13 @@ export async function POST(request: Request) {
     }
 
     // Obtener lista de almacenes disponibles
-    const { data: stores, error: storesError } = await supabaseAdmin
+    const { data: stores } = await supabaseAdmin
       .from('stores')
       .select('id, name')
       .order('name');
 
     // Obtener lista de proveedores disponibles
-    const { data: suppliers, error: suppliersError } = await supabaseAdmin
+    const { data: suppliers } = await supabaseAdmin
       .from('suppliers')
       .select('id, commercial_name')
       .order('commercial_name');
@@ -162,9 +133,10 @@ export async function POST(request: Request) {
       throw new Error(`Error de Gemini API: ${geminiError?.message || 'Error desconocido'}`);
     }
 
-    // Extraer información estructurada usando parsing local (sin IA extra)
-    const extractedData = extractInformationLocal(
-      [...conversationHistory, { role: "user", content: message }, { role: "assistant", content: botMessage }],
+    // Extraer información estructurada usando IA (segunda pasada) para mayor precisión
+    const fullHistory = [...conversationHistory, { role: "user", content: message }, { role: "assistant", content: botMessage }];
+    const extractedData = await extractOrderDataWithAI(
+      fullHistory,
       userData,
       stores || [],
       suppliers || []
@@ -198,115 +170,90 @@ export async function POST(request: Request) {
 }
 
 /**
- * Extrae información estructurada usando parsing local (SIN llamadas extra de IA)
- * Esto reduce de 2 llamadas por mensaje a solo 1 llamada
+ * Extrae información estructurada usando una llamada dedicada a la IA.
+ * Esto es mucho más robusto que Regex para estructuras complejas como arrays de items.
  */
-function extractInformationLocal(
+async function extractOrderDataWithAI(
   conversationHistory: Array<{ role: string; content: string }>,
   userData: any,
   stores: any[],
   suppliers: any[]
 ) {
-  // Inicializar estructura de datos
-  const extracted: any = {
-    store_name: null,
-    items: [],
-    justification: null,
-    currency: null,
-    retention: null,
-    isComplete: false,
-    applicant_name: userData.full_name,
-    applicant_id: userData.id
-  };
-
-  // Convertir conversación a texto para análisis
-  const conversationText = conversationHistory
-    .map((msg) => msg.content)
-    .join(" ");
-
-  // Buscar almacén mencionado
-  const storePatterns = [
-    /almacén[:\s]+([^\n,.?!]+)/i,
-    /obra[:\s]+([^\n,.?!]+)/i,
-  ];
-  
-  for (const pattern of storePatterns) {
-    const match = conversationText.match(pattern);
-    if (match && match[1]) {
-      const storeName = match[1].trim();
-      if (storeName.length >= 3) {
-        extracted.store_name = storeName;
-        // Buscar coincidencia en BD
-        const matchingStore = stores.find(s => 
-          s.name.toLowerCase().includes(storeName.toLowerCase()) ||
-          storeName.toLowerCase().includes(s.name.toLowerCase())
-        );
-        if (matchingStore) {
-          extracted.store_id = matchingStore.id;
-        }
-        break;
+  try {
+    const extractionModel = genAI.getGenerativeModel({ 
+      model: "gemini-2.5-flash",
+      generationConfig: {
+        responseMimeType: "application/json",
+        temperature: 0.1, // Baja temperatura para mayor determinismo en JSON
       }
-    }
+    });
+
+    // Convertir conversación a texto plano para el prompt
+    const conversationText = conversationHistory
+      .map((msg) => `${msg.role === 'user' ? 'USUARIO' : 'ASISTENTE'}: ${msg.content}`)
+      .join("\n");
+
+    const extractionPrompt = `
+      Analiza la siguiente conversación entre un asistente de compras y un usuario.
+      Tu objetivo es extraer los datos de la Orden de Compra en formato JSON ESTRICTO.
+
+      INFORMACIÓN DE CONTEXTO:
+      - Solicitante: ${userData.full_name} (ID: ${userData.id})
+      - Almacenes disponibles: ${JSON.stringify(stores.map(s => ({ id: s.id, name: s.name })))}
+      - Proveedores disponibles: ${JSON.stringify(suppliers.map(s => ({ id: s.id, commercial_name: s.commercial_name })))}
+
+      INSTRUCCIONES:
+      1. Extrae el nombre del almacén/obra. Intenta coincidir con la lista de disponibles. Si encuentras coincidencia, incluye el ID.
+      2. Extrae la lista de artículos (items). Para cada uno: nombre, cantidad (número), unidad, precio unitario (número) y proveedor.
+      3. Para el proveedor, intenta coincidir con la lista. Si encuentras coincidencia exacta o muy cercana, incluye el ID.
+      4. Extrae la justificación, moneda (MXN/USD) y retención (si existe).
+      5. Determina 'isComplete' como true SOLO SI tienes: almacén, justificación, moneda y AL MENOS un artículo completo (con todos sus campos: nombre, cantidad, unidad, precio, proveedor).
+
+      FORMATO JSON ESPERADO:
+      {
+        "store_name": "Nombre extraído o null",
+        "store_id": "UUID coincidente o null",
+        "items": [
+          {
+            "nombre": "Nombre del artículo",
+            "cantidad": 10,
+            "unidad": "pza",
+            "precioUnitario": 100.50,
+            "proveedor": "Nombre proveedor",
+            "proveedor_id": "UUID coincidente o null"
+          }
+        ],
+        "justification": "Texto o null",
+        "currency": "MXN",
+        "retention": "Texto o null",
+        "applicant_name": "${userData.full_name}",
+        "applicant_id": "${userData.id}",
+        "isComplete": boolean
+      }
+
+      CONVERSACIÓN:
+      ${conversationText}
+    `;
+
+    const result = await extractionModel.generateContent(extractionPrompt);
+    const responseText = result.response.text();
+    
+    // Limpiar bloques de código markdown si existen (aunque responseMimeType ayuda, a veces añade ```json)
+    const cleanedJson = responseText.replace(/```json\n?|\n?```/g, "").trim();
+    
+    return JSON.parse(cleanedJson);
+
+  } catch (error) {
+    console.error("Error en extracción IA:", error);
+    // Fallback básico para no romper el flujo si falla la IA de extracción
+    return {
+      store_name: null,
+      items: [],
+      isComplete: false,
+      applicant_name: userData.full_name,
+      applicant_id: userData.id
+    };
   }
-
-  // Buscar moneda
-  if (conversationText.match(/\b(MXN|pesos?|mexicanos?)\b/i)) {
-    extracted.currency = 'MXN';
-  } else if (conversationText.match(/\b(USD|dólares?)\b/i)) {
-    extracted.currency = 'USD';
-  }
-
-  // Buscar justificación
-  const justificationPatterns = [
-    /justificación[:\s]+(.+?)(?:\n|\.|\?|$)/i,
-    /motivo[:\s]+(.+?)(?:\n|\.|\?|$)/i,
-  ];
-  
-  for (const pattern of justificationPatterns) {
-    const match = conversationText.match(pattern);
-    if (match && match[1] && match[1].trim().length >= 10) {
-      extracted.justification = match[1].trim();
-      break;
-    }
-  }
-
-  // Buscar retención
-  const retentionMatch = conversationText.match(/retención[:\s]+([^\n,.?!]+)/i);
-  if (retentionMatch) {
-    extracted.retention = retentionMatch[1].trim();
-  }
-
-  // Nota: El parsing de items es complejo con regex, por lo que la IA del chatbot
-  // debe estructurar mejor la conversación. Por ahora dejamos items vacío
-  // y confiamos en que el formulario manual sea la opción principal
-
-  // Validación estricta de isComplete
-  const hasValidApplicant = true;
-  const hasValidStore = extracted.store_name !== null && extracted.store_name.length >= 3;
-  const hasValidJustification = extracted.justification && extracted.justification.length >= 10;
-  const hasValidCurrency = extracted.currency === 'MXN' || extracted.currency === 'USD';
-  
-  const hasValidItems = Array.isArray(extracted.items) && 
-    extracted.items.length > 0 &&
-    extracted.items.every((item: any) => 
-      item.nombre && 
-      item.nombre.trim().length > 0 &&
-      typeof item.cantidad === 'number' && 
-      item.cantidad > 0 &&
-      item.unidad && 
-      item.unidad.trim().length > 0 &&
-      typeof item.precioUnitario === 'number' && 
-      item.precioUnitario > 0 &&
-      item.proveedor &&
-      item.proveedor.trim().length > 0
-    );
-
-  extracted.isComplete = hasValidApplicant && 
-                        hasValidStore && 
-                        hasValidJustification && 
-                        hasValidCurrency &&
-                        hasValidItems;
-
-  return extracted;
 }
+
 

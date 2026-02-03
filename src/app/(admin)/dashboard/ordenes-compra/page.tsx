@@ -235,7 +235,7 @@ export default function OrdenesCompraHub() {
                 const date = new Date(order.created_at);
                 
                 // Determinar el estado que se muestra
-                let displayStatus = statusInfo;
+                const displayStatus = statusInfo;
                 let displayLabel = statusInfo.label;
                 
                 // Si tiene estado de departamento, mostrarlo como información adicional
@@ -329,7 +329,7 @@ export default function OrdenesCompraHub() {
                     const date = new Date(order.created_at);
                     
                     // Determinar el estado que se muestra
-                    let displayStatus = statusInfo;
+                    const displayStatus = statusInfo;
                     let displayLabel = statusInfo.label;
                     
                     // Si tiene estado de departamento, mostrarlo

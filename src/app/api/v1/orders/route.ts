@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/api-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { use } from "react";
 
 
 //interfaces
@@ -32,7 +31,8 @@ export async function GET(request: Request) {
     if (authError) return authError;
 
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status');
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _status = searchParams.get('status'); // Reserved for future filtering
 
     let query = supabaseAdmin
       .from('orders')
@@ -77,7 +77,7 @@ export async function GET(request: Request) {
     const currentUser = users?.find(u => u.id === session!.userId);
     
     // Si el usuario es jefe de departamento, obtener todas las aprobaciones de las órdenes para su departamento
-    let userDeptApprovals = new Map();
+    const userDeptApprovals = new Map();
     if (currentUser?.is_department_head && currentUser?.department_id) {
       const { data: approvals } = await supabaseAdmin
         .from('order_approvals')

@@ -9,7 +9,7 @@ async function uploadEvidenceFiles(files: File[], orderId: string): Promise<stri
   const uploadedUrls: string[] = [];
   
   // Verificar que el bucket existe
-  const { data: buckets, error: bucketError } = await supabaseAdmin.storage.listBuckets();
+  const { error: bucketError } = await supabaseAdmin.storage.listBuckets();
   if (bucketError) {
     console.error('❌ Error listando buckets:', bucketError);
   }
@@ -22,7 +22,7 @@ async function uploadEvidenceFiles(files: File[], orderId: string): Promise<stri
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     
-    const { data, error } = await supabaseAdmin.storage
+    const { error } = await supabaseAdmin.storage
       .from(BUCKET_NAME)
       .upload(filePath, buffer, {
         contentType: file.type,
@@ -228,7 +228,7 @@ export async function POST(request: Request) {
       userDepartmentId = userData.department_id;
     } else {
       // Si tenemos el ID, obtener el departamento
-      const { data: userData, error: userError } = await supabaseAdmin
+      const { data: userData } = await supabaseAdmin
         .from('users')
         .select('department_id')
         .eq('id', userId)

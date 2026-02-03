@@ -18,7 +18,8 @@ export async function PATCH(
     const resolvedParams = await params;
     const { id } = resolvedParams;
     const body = await request.json();
-    const { action, reason } = body; // action: 'approve' | 'reject' | 'complete'
+    const { action } = body; // action: 'approve' | 'reject' | 'complete'
+    // Note: 'reason' field available for rejection logging when needed
 
     console.log(`Usuario ${session!.userId} intenta ${action} la orden ${id}`);
 
