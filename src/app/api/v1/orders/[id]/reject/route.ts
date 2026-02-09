@@ -111,11 +111,11 @@ export async function POST(
       );
     }
 
-    // 6. Cambiar estado de la orden a 'rejected'
+    // 6. Cambiar estado de la orden a 'RECHAZADA'
     const { error: orderUpdateError } = await supabaseAdmin
       .from('orders')
       .update({ 
-        status: 'rejected',
+        status: 'RECHAZADA',
         updated_at: new Date().toISOString()
       })
       .eq('id', orderId);
