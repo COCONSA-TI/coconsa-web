@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { getSession } from '@/lib/auth';
+import { OrderApprovalWithRelations, ApprovalStatus } from '@/types/database';
 
 export async function POST(
   request: Request,
@@ -65,7 +66,7 @@ export async function POST(
     }
 
     // 3. Encontrar la aprobación del usuario
-    const myApproval = approvals.find((a: any) => a.department_id === user.department_id);
+    const myApproval = approvals.find((a: OrderApprovalWithRelations) => a.department_id === user.department_id);
 
     if (!myApproval) {
       return NextResponse.json(
@@ -82,8 +83,8 @@ export async function POST(
     }
 
     // 4. Verificar que aprobaciones previas estén completadas
-    const previousApprovals = approvals.filter((a: any) => a.approval_order < myApproval.approval_order);
-    const allPreviousApproved = previousApprovals.every((a: any) => a.status === 'approved');
+    const previousApprovals = approvals.filter((a: OrderApprovalWithRelations) => (a.approval_order ?? 0) < (myApproval.approval_order ?? 0));
+    const allPreviousApproved = previousApprovals.every((a: OrderApprovalWithRelations) => a.status === 'approved');
 
     if (!allPreviousApproved) {
       return NextResponse.json(
@@ -104,7 +105,6 @@ export async function POST(
       .eq('id', myApproval.id);
 
     if (updateError) {
-      console.error('Error updating approval:', updateError);
       return NextResponse.json(
         { success: false, error: 'Error al aprobar la orden: ' + updateError.message },
         { status: 500 }
@@ -118,10 +118,10 @@ export async function POST(
       .eq('order_id', orderId);
 
     if (checkError) {
-      console.error('Error checking approvals:', checkError);
+      // Error silencioso - no crítico
     }
 
-    const allApproved = updatedApprovals?.every((a: any) => a.status === 'approved');
+    const allApproved = updatedApprovals?.every((a: { status: ApprovalStatus | null }) => a.status === 'approved');
 
     // 7. Si todas están aprobadas, cambiar estado de la orden
     if (allApproved) {
@@ -134,7 +134,7 @@ export async function POST(
         .eq('id', orderId);
 
       if (orderUpdateError) {
-        console.error('Error updating order status:', orderUpdateError);
+        // Error silencioso - no crítico para la respuesta
       }
     } else {
       // Si no están todas aprobadas, actualizar estado a 'in_progress'
@@ -147,7 +147,7 @@ export async function POST(
         .eq('id', orderId);
 
       if (orderUpdateError) {
-        console.error('Error updating order status:', orderUpdateError);
+        // Error silencioso - no crítico para la respuesta
       }
     }
 
@@ -157,7 +157,6 @@ export async function POST(
       allApproved,
     });
   } catch (error) {
-    console.error('Error in approve endpoint:', error);
     return NextResponse.json(
       { success: false, error: 'Error interno del servidor' },
       { status: 500 }

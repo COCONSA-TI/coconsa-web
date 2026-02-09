@@ -4,14 +4,44 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Chatbot from "@/components/Chatbot";
 import PurchaseOrderForm from "@/components/admin/PurchaseOrderForm";
+import { Order } from "@/types/database";
+
+// Tipo para datos del formulario manual
+interface OrderFormData {
+  applicant_name: string;
+  store_name: string;
+  justification: string;
+  currency: string;
+  retention: string;
+  items: {
+    id: string;
+    nombre: string;
+    cantidad: string;
+    unidad: string;
+    precioUnitario: string;
+    proveedor: string;
+  }[];
+  total: number;
+}
+
+// Unión de tipos para órdenes creadas
+type CreatedOrderData = Order[] | OrderFormData;
 
 export default function CrearOrdenPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"asistido" | "manual">("asistido");
-  const [lastOrderCreated, setLastOrderCreated] = useState<any>(null);
+  const [lastOrderCreated, setLastOrderCreated] = useState<CreatedOrderData | null>(null);
 
-  const handleOrderCreated = (order: any) => {
-    setLastOrderCreated(order);
+  const handleChatbotOrderCreated = (orders: Order[]) => {
+    setLastOrderCreated(orders);
+    // Redirigir al hub después de 2 segundos
+    setTimeout(() => {
+      router.push('/dashboard/ordenes-compra');
+    }, 2000);
+  };
+
+  const handleFormOrderCreated = (data: OrderFormData) => {
+    setLastOrderCreated(data);
     // Redirigir al hub después de 2 segundos
     setTimeout(() => {
       router.push('/dashboard/ordenes-compra');
@@ -101,7 +131,7 @@ export default function CrearOrdenPage() {
               </div>
             </div>
             <Chatbot 
-              onOrderCreated={handleOrderCreated}
+              onOrderCreated={handleChatbotOrderCreated}
             />
           </div>
         ) : (
@@ -118,7 +148,7 @@ export default function CrearOrdenPage() {
               </div>
             </div>
             <PurchaseOrderForm
-              onSubmit={handleOrderCreated}
+              onSubmit={handleFormOrderCreated}
             />
           </div>
         )}

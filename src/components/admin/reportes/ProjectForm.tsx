@@ -107,7 +107,6 @@ export default function ProjectForm({
         alert('Error: ' + (data.error || 'Error desconocido'));
       }
     } catch (error) {
-      console.error("Error al guardar:", error);
       alert("Error al guardar el proyecto");
     } finally {
       setSaving(false);

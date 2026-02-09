@@ -58,9 +58,8 @@ export default function LoginForm() {
       // Redirigir al dashboard
       router.push('/dashboard');
       router.refresh();
-    } catch (err) {
+    } catch {
       setError('Error de conexión. Por favor, intenta nuevamente.');
-      console.error('Error en login:', err);
     } finally {
       setIsLoading(false);
     }

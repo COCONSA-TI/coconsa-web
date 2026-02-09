@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { getSession } from '@/lib/auth';
+import { OrderApprovalWithRelations } from '@/types/database';
 
 export async function POST(
   request: Request,
@@ -11,9 +12,6 @@ export async function POST(
     
     // Obtener sesión usando el sistema JWT de la app
     const session = await getSession();
-
-    console.log('Session:', session ? 'válida' : 'no válida');
-    console.log('User ID:', session?.userId);
 
     if (!session) {
       return NextResponse.json(
@@ -31,9 +29,6 @@ export async function POST(
       .select('*, department:departments(*)')
       .eq('id', session.userId)
       .single();
-
-    console.log('Usuario encontrado:', user);
-    console.log('Error al buscar usuario:', userError);
 
     if (userError || !user) {
       return NextResponse.json(
@@ -71,7 +66,7 @@ export async function POST(
     }
 
     // 3. Encontrar la aprobación del usuario
-    const myApproval = approvals.find((a: any) => a.department_id === user.department_id);
+    const myApproval = approvals.find((a: OrderApprovalWithRelations) => a.department_id === user.department_id);
 
     if (!myApproval) {
       return NextResponse.json(
@@ -88,8 +83,8 @@ export async function POST(
     }
 
     // 4. Verificar que aprobaciones previas estén completadas
-    const previousApprovals = approvals.filter((a: any) => a.approval_order < myApproval.approval_order);
-    const allPreviousApproved = previousApprovals.every((a: any) => a.status === 'approved');
+    const previousApprovals = approvals.filter((a: OrderApprovalWithRelations) => (a.approval_order ?? 0) < (myApproval.approval_order ?? 0));
+    const allPreviousApproved = previousApprovals.every((a: OrderApprovalWithRelations) => a.status === 'approved');
 
     if (!allPreviousApproved) {
       return NextResponse.json(
@@ -110,7 +105,6 @@ export async function POST(
       .eq('id', myApproval.id);
 
     if (updateError) {
-      console.error('Error updating approval:', updateError);
       return NextResponse.json(
         { success: false, error: 'Error al rechazar la orden: ' + updateError.message },
         { status: 500 }
@@ -127,7 +121,6 @@ export async function POST(
       .eq('id', orderId);
 
     if (orderUpdateError) {
-      console.error('Error updating order status:', orderUpdateError);
       return NextResponse.json(
         { success: false, error: 'Error al actualizar estado de la orden' },
         { status: 500 }
@@ -139,7 +132,6 @@ export async function POST(
       message: 'Orden rechazada exitosamente',
     });
   } catch (error) {
-    console.error('Error in reject endpoint:', error);
     return NextResponse.json(
       { success: false, error: 'Error interno del servidor' },
       { status: 500 }

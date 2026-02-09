@@ -47,7 +47,6 @@ export async function GET(
       .single();
 
     if (orderError) {
-      console.error('Error obteniendo orden:', orderError);
       return NextResponse.json(
         { 
           error: "Orden no encontrada",
@@ -93,9 +92,7 @@ export async function GET(
       if (typeof typedOrder.items === 'string' && typedOrder.items.trim()) {
         itemsArray = JSON.parse(typedOrder.items) as OrderItem[];
       }
-      console.log('Items parseados:', itemsArray);
-    } catch (e) {
-      console.error('Error parseando items:', e, 'Raw value:', typedOrder.items);
+    } catch {
       itemsArray = [];
     }
 
@@ -133,7 +130,6 @@ export async function GET(
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
-    console.error("Error en GET /api/v1/orders/[id]:", error);
     return NextResponse.json(
       { 
         error: "Error al procesar la solicitud",

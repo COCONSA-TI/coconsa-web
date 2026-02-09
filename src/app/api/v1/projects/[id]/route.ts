@@ -189,7 +189,6 @@ export async function GET(
     });
 
   } catch (error) {
-    console.error('Error en GET /api/v1/projects/[id]:', error);
     return NextResponse.json(
       { success: false, error: 'Error interno del servidor' },
       { status: 500 }
@@ -254,7 +253,6 @@ export async function PUT(
       .eq('id', projectUUID);
 
     if (updateError) {
-      console.error('Error actualizando proyecto:', updateError);
       return NextResponse.json(
         { success: false, error: 'Error al actualizar el proyecto' },
         { status: 500 }
@@ -349,7 +347,6 @@ export async function PUT(
     });
 
   } catch (error) {
-    console.error('Error en PUT /api/v1/projects/[id]:', error);
     return NextResponse.json(
       { success: false, error: 'Error interno del servidor' },
       { status: 500 }
@@ -390,7 +387,6 @@ export async function DELETE(
       .eq('id', existingProject.id);
 
     if (deleteError) {
-      console.error('Error eliminando proyecto:', deleteError);
       return NextResponse.json(
         { success: false, error: 'Error al eliminar el proyecto' },
         { status: 500 }
@@ -403,7 +399,6 @@ export async function DELETE(
     });
 
   } catch (error) {
-    console.error('Error en DELETE /api/v1/projects/[id]:', error);
     return NextResponse.json(
       { success: false, error: 'Error interno del servidor' },
       { status: 500 }

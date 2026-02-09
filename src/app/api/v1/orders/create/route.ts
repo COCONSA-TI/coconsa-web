@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/api-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import type { Department, OrderItem, CreateOrderRequest } from "@/types/database";
 
 const BUCKET_NAME = "Coconsa";
 
@@ -9,10 +10,7 @@ async function uploadEvidenceFiles(files: File[], orderId: string): Promise<stri
   const uploadedUrls: string[] = [];
   
   // Verificar que el bucket existe
-  const { error: bucketError } = await supabaseAdmin.storage.listBuckets();
-  if (bucketError) {
-    console.error('❌ Error listando buckets:', bucketError);
-  }
+  await supabaseAdmin.storage.listBuckets();
   
   for (const file of files) {
     const timestamp = Date.now();
@@ -30,8 +28,6 @@ async function uploadEvidenceFiles(files: File[], orderId: string): Promise<stri
       });
     
     if (error) {
-      console.error(`❌ Error uploading file ${file.name}:`, error);
-      console.error('Detalles del error:', JSON.stringify(error, null, 2));
       continue;
     }
     
@@ -78,7 +74,7 @@ async function createOrderApprovalsServer(orderId: string, applicantDepartmentId
   const approvalsToCreate = [];
 
   // 1. Aprobación del departamento del solicitante (gerencia)
-  const applicantDept = departments.find((d: any) => d.id === applicantDepartmentId);
+  const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
   if (applicantDept) {
     // Si el solicitante ES el jefe de su departamento, auto-aprobar su nivel
     approvalsToCreate.push({
@@ -94,7 +90,7 @@ async function createOrderApprovalsServer(orderId: string, applicantDepartmentId
 
   // 2. Aprobaciones para el resto del flujo (contraloría, dirección, contabilidad, pagos)
   const subsequentDepartments = departments.filter(
-    (d: any) => d.approval_order > 1
+    (d: Department) => d.approval_order && d.approval_order > 1
   );
 
   for (const dept of subsequentDepartments) {
@@ -133,7 +129,7 @@ export async function POST(request: Request) {
 
     // Detectar tipo de contenido para manejar FormData o JSON
     const contentType = request.headers.get('content-type') || '';
-    let body: any;
+    let body: CreateOrderRequest;
     let evidenceFiles: File[] = [];
 
     if (contentType.includes('multipart/form-data')) {
@@ -184,18 +180,17 @@ export async function POST(request: Request) {
     }
 
     // Validar estructura de items (ahora cada item tiene su proveedor)
-    const invalidItems = items.filter((item: any) => 
+    const invalidItems = items.filter((item: OrderItem) => 
       !item.nombre || 
       !item.cantidad || 
       !item.unidad || 
       !item.precioUnitario ||
       !item.proveedor ||
-      parseFloat(item.cantidad) <= 0 ||
-      parseFloat(item.precioUnitario) <= 0
+      parseFloat(String(item.cantidad)) <= 0 ||
+      item.precioUnitario <= 0
     );
 
     if (invalidItems.length > 0) {
-      console.error('❌ Items inválidos:', invalidItems);
       return NextResponse.json(
         { error: "Algunos artículos tienen datos incompletos o inválidos" },
         { status: 400 }
@@ -203,8 +198,8 @@ export async function POST(request: Request) {
     }
 
     // Buscar el usuario por nombre o usar el ID proporcionado
-    let userId = applicant_id;
-    let userDepartmentId = null;
+    let userId: string = applicant_id || '';
+    let userDepartmentId: string | null = null;
     
     if (!userId) {
       const { data: userData, error: userError } = await supabaseAdmin
@@ -215,7 +210,6 @@ export async function POST(request: Request) {
         .single();
 
       if (userError || !userData) {
-        console.error('❌ Usuario no encontrado:', applicant_name, userError);
         return NextResponse.json(
           { 
             error: `No se encontró el usuario "${applicant_name}". Verifica que el nombre esté registrado en el sistema.`,
@@ -251,7 +245,6 @@ export async function POST(request: Request) {
         .single();
 
       if (storeError || !storeData) {
-        console.error('❌ Almacén no encontrado:', store_name, storeError);
         return NextResponse.json(
           { 
             error: `No se encontró el almacén u obra "${store_name}". Verifica que esté registrado en el sistema.`,
@@ -264,10 +257,10 @@ export async function POST(request: Request) {
     }
 
     // Agrupar items por proveedor
-    const itemsBySupplier: { [key: string]: any[] } = {};
+    const itemsBySupplier: { [key: string]: OrderItem[] } = {};
     
     for (const item of items) {
-      const supplierKey = item.supplier_name || item.proveedor;
+      const supplierKey = item.supplier_name || item.proveedor || 'unknown';
       if (!itemsBySupplier[supplierKey]) {
         itemsBySupplier[supplierKey] = [];
       }
@@ -300,25 +293,25 @@ export async function POST(request: Request) {
         }
 
         // Calcular totales para este proveedor
-        const subtotal = supplierItems.reduce((sum: number, item: any) => {
-          const cantidad = parseFloat(item.cantidad) || 0;
-          const precio = parseFloat(item.precioUnitario) || 0;
+        const subtotal = supplierItems.reduce((sum: number, item: OrderItem) => {
+          const cantidad = parseFloat(String(item.cantidad)) || 0;
+          const precio = item.precioUnitario || 0;
           return sum + (cantidad * precio);
         }, 0);
 
         const iva = subtotal * 0.16;
         const total = subtotal + iva;
-        const totalQuantity = supplierItems.reduce((sum: number, item: any) => 
-          sum + parseFloat(item.cantidad), 0
+        const totalQuantity = supplierItems.reduce((sum: number, item: OrderItem) => 
+          sum + parseFloat(String(item.cantidad)), 0
         );
 
         // Preparar los items con precio total calculado
-        const itemsWithTotal = supplierItems.map((item: any) => ({
+        const itemsWithTotal = supplierItems.map((item: OrderItem) => ({
           nombre: item.nombre,
-          cantidad: parseFloat(item.cantidad),
+          cantidad: parseFloat(String(item.cantidad)),
           unidad: item.unidad,
-          precioUnitario: parseFloat(item.precioUnitario),
-          precioTotal: parseFloat(item.cantidad) * parseFloat(item.precioUnitario),
+          precioUnitario: item.precioUnitario,
+          precioTotal: parseFloat(String(item.cantidad)) * item.precioUnitario,
           proveedor: supplierKey
         }));
 
@@ -349,32 +342,26 @@ export async function POST(request: Request) {
           .single();
 
         if (orderError) {
-          console.error(`❌ Error creating order for ${supplierKey}:`, orderError);
           errors.push(`Error al crear orden para ${supplierKey}: ${orderError.message}`);
         } else {
           
           // Subir archivos de evidencia si existen (solo para la primera orden)
           if (evidenceFiles.length > 0 && createdOrders.length === 0) {
             try {
-              const evidenceUrls = await uploadEvidenceFiles(evidenceFiles, orderCreated.id);
+              const evidenceUrls = await uploadEvidenceFiles(evidenceFiles, String(orderCreated.id));
               
               if (evidenceUrls.length > 0) {
                 // Actualizar la orden con las URLs de las evidencias
-                const { error: updateError } = await supabaseAdmin
+                await supabaseAdmin
                   .from('orders')
                   .update({ 
                     justification_prove: evidenceUrls.join(',') 
                   })
                   .eq('id', orderCreated.id);
                 
-                if (updateError) {
-                  console.error('Error actualizando justification_prove:', updateError);
-                } else {
-                  orderCreated.justification_prove = evidenceUrls.join(',');
-                }
+                orderCreated.justification_prove = evidenceUrls.join(',');
               }
-            } catch (uploadError) {
-              console.error('Error subiendo archivos de evidencia:', uploadError);
+            } catch {
               // No fallar la orden si falla la subida de archivos
             }
           }
@@ -384,17 +371,13 @@ export async function POST(request: Request) {
           // Crear el flujo de aprobaciones automáticamente
           if (userDepartmentId) {
             try {
-              await createOrderApprovalsServer(orderCreated.id, userDepartmentId, userId);
-            } catch (approvalError) {
-              console.error(`⚠️ Error creando aprobaciones para orden ${orderCreated.id}:`, approvalError);
+              await createOrderApprovalsServer(String(orderCreated.id), userDepartmentId, userId);
+            } catch {
               // No fallar la creación de la orden si falla la creación de aprobaciones
             }
-          } else {
-            console.warn(`⚠️ No se pudo crear flujo de aprobaciones: usuario sin departamento asignado`);
           }
         }
-      } catch (error) {
-        console.error(`Error procesando proveedor ${supplierKey}:`, error);
+      } catch {
         errors.push(`Error procesando ${supplierKey}`);
       }
     }
@@ -422,8 +405,7 @@ export async function POST(request: Request) {
       warnings: errors.length > 0 ? errors : undefined
     });
 
-  } catch (error) {
-    console.error("Error en crear orden:", error);
+  } catch (error: unknown) {
     return NextResponse.json(
       { 
         error: "Error al procesar la solicitud",

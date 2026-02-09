@@ -32,7 +32,6 @@ export async function GET(
       .order('approval_order');
 
     if (error) {
-      console.error('Error fetching approvals:', error);
       return NextResponse.json(
         { success: false, error: 'Error al obtener aprobaciones' },
         { status: 500 }
@@ -43,8 +42,7 @@ export async function GET(
       success: true,
       approvals: approvals || [],
     });
-  } catch (error) {
-    console.error('Error in approvals endpoint:', error);
+  } catch {
     return NextResponse.json(
       { success: false, error: 'Error interno del servidor' },
       { status: 500 }

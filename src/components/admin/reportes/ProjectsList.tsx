@@ -34,7 +34,7 @@ export default function ProjectsList({
         setProjects(data.projects);
       }
     } catch (error) {
-      console.error("Error al cargar proyectos:", error);
+      // Error silencioso - el usuario no verá proyectos cargados
     } finally {
       setLoading(false);
     }
@@ -61,7 +61,6 @@ export default function ProjectsList({
         alert('Error al eliminar: ' + data.error);
       }
     } catch (error) {
-      console.error('Error al eliminar:', error);
       alert('Error al eliminar el proyecto');
     } finally {
       setDeleting(null);

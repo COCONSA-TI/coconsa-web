@@ -11,7 +11,7 @@ export default function RecaptchaProvider({ children }: RecaptchaProviderProps) 
   const reCaptchaSiteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
 
   if (!reCaptchaSiteKey) {
-    console.error('NEXT_PUBLIC_RECAPTCHA_SITE_KEY no está configurada');
+    // Configuración faltante - renderizar sin reCAPTCHA
     return <>{children}</>;
   }
 

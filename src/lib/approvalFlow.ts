@@ -65,8 +65,7 @@ export async function canUserApprove(
       reason: data.reason,
       approval: data.approval
     };
-  } catch (error) {
-    console.error('Error checking approval permissions:', error);
+  } catch {
     return { canApprove: false, reason: 'Error al verificar permisos' };
   }
 }
@@ -77,13 +76,11 @@ export async function getOrderApprovals(orderId: string): Promise<OrderApproval[
     const data = await response.json();
 
     if (!data.success) {
-      console.error('Error fetching approvals:', data.error);
       return [];
     }
 
     return data.approvals || [];
-  } catch (error) {
-    console.error('Error fetching approvals:', error);
+  } catch {
     return [];
   }
 }

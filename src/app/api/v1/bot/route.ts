@@ -3,6 +3,12 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { ChatbotMessageSchema } from "@/lib/schemas";
 import { getSession } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import type { Store, Supplier, ApiError } from "@/types/database";
+
+interface UserData {
+  id: string;
+  full_name: string | null;
+}
 
 // Inicializa el cliente de Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
@@ -45,7 +51,6 @@ export async function POST(request: Request) {
       .single();
 
     if (userError || !userData) {
-      console.error('Error obteniendo usuario:', userError);
       return NextResponse.json(
         { 
           error: "No se pudieron obtener los datos de tu usuario",
@@ -86,7 +91,6 @@ export async function POST(request: Request) {
 
     // Verificar que la API key esté configurada
     if (!process.env.GEMINI_API_KEY) {
-      console.error("GEMINI_API_KEY no está configurada");
       return NextResponse.json(
         { error: "Configuración del servidor incompleta" },
         { status: 500 }
@@ -127,10 +131,9 @@ export async function POST(request: Request) {
       const result = await chat.sendMessage(message);
       const response = result.response;
       botMessage = response.text();
-      console.log('✅ Gemini response:', botMessage);
-    } catch (geminiError: any) {
-      console.error('❌ Error de Gemini:', geminiError);
-      throw new Error(`Error de Gemini API: ${geminiError?.message || 'Error desconocido'}`);
+    } catch (geminiError: unknown) {
+      const apiError = geminiError as ApiError;
+      throw new Error(`Error de Gemini API: ${apiError?.message || 'Error desconocido'}`);
     }
 
     // Extraer información estructurada usando IA (segunda pasada) para mayor precisión
@@ -138,10 +141,9 @@ export async function POST(request: Request) {
     const extractedData = await extractOrderDataWithAI(
       fullHistory,
       userData,
-      stores || [],
-      suppliers || []
+      (stores || []) as Store[],
+      (suppliers || []) as Supplier[]
     );
-    console.log('✅ Datos extraídos:', extractedData);
 
     return NextResponse.json({
       success: true,
@@ -156,13 +158,12 @@ export async function POST(request: Request) {
       ],
     });
 
-  } catch (error: any) {
-    console.error("Error en el chatbot:", error);
+  } catch (error: unknown) {
+    const apiError = error as ApiError;
     return NextResponse.json(
       { 
         error: "Error al procesar la solicitud",
-        details: error?.message || 'Error desconocido',
-        stack: process.env.NODE_ENV === 'development' ? error?.stack : undefined
+        details: apiError?.message || 'Error desconocido',
       },
       { status: 500 }
     );
@@ -175,9 +176,9 @@ export async function POST(request: Request) {
  */
 async function extractOrderDataWithAI(
   conversationHistory: Array<{ role: string; content: string }>,
-  userData: any,
-  stores: any[],
-  suppliers: any[]
+  userData: UserData,
+  stores: Store[],
+  suppliers: Supplier[]
 ) {
   try {
     const extractionModel = genAI.getGenerativeModel({ 
@@ -243,8 +244,7 @@ async function extractOrderDataWithAI(
     
     return JSON.parse(cleanedJson);
 
-  } catch (error) {
-    console.error("Error en extracción IA:", error);
+  } catch {
     // Fallback básico para no romper el flujo si falla la IA de extracción
     return {
       store_name: null,

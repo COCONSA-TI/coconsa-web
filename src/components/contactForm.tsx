@@ -50,8 +50,7 @@ export default function ContactForm() {
 
       // Envía el formulario con la acción del servidor
       formAction(formData);
-    } catch (err) {
-      console.error('Error al procesar el formulario:', err);
+    } catch {
       setError('Error al procesar el formulario. Por favor, intenta nuevamente.');
     }
   };

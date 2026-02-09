@@ -18,8 +18,8 @@ export default function AdminNavbar({ onMenuClick }: AdminNavbarProps) {
       await fetch('/api/v1/logout', { method: 'POST' });
       router.push('/login');
       router.refresh();
-    } catch (error) {
-      console.error('Error al cerrar sesión:', error);
+    } catch {
+      // Error silencioso - el usuario será redirigido al login
     }
   };
 

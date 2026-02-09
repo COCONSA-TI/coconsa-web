@@ -52,7 +52,6 @@ export default function OrdenesCompraHub() {
       
       setOrders(data.orders);
     } catch (error) {
-      console.error("Error al cargar órdenes:", error);
       // Mostrar mensaje de error al usuario
       alert('Error al cargar las órdenes. Por favor, recarga la página.');
     } finally {
@@ -95,7 +94,6 @@ export default function OrdenesCompraHub() {
       await fetchOrders();
       alert(data.message || `Orden ${action === 'approve' ? 'aprobada' : 'rechazada'} exitosamente`);
     } catch (error) {
-      console.error('Error al actualizar orden:', error);
       const errorMessage = error instanceof Error ? error.message : 'Error al actualizar la orden';
       alert(errorMessage);
     }

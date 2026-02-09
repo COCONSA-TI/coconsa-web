@@ -71,7 +71,6 @@ export default function OrdenDetallesPage() {
       const orderApprovals = await getOrderApprovals(orderId);
       setApprovals(orderApprovals);
     } catch (error) {
-      console.error("Error al cargar orden:", error);
       alert('Error al cargar los detalles de la orden.');
       router.push('/dashboard/ordenes-compra');
     } finally {
@@ -85,8 +84,8 @@ export default function OrdenDetallesPage() {
     try {
       const result = await canUserApprove(user.id, orderId);
       setCanApprove(result.canApprove);
-    } catch (error) {
-      console.error('Error checking approval permissions:', error);
+    } catch {
+      // Error silencioso - no se puede verificar permisos
     }
   };
 
@@ -124,7 +123,6 @@ export default function OrdenDetallesPage() {
       setComments('');
       await fetchOrderDetails(); // Recargar datos
     } catch (error) {
-      console.error('Error al aprobar:', error);
       const errorMessage = error instanceof Error ? error.message : 'Error al aprobar la orden';
       alert(errorMessage);
     }
@@ -154,7 +152,6 @@ export default function OrdenDetallesPage() {
       alert(data.message);
       await fetchOrderDetails(); // Recargar datos
     } catch (error) {
-      console.error('Error al rechazar:', error);
       const errorMessage = error instanceof Error ? error.message : 'Error al rechazar la orden';
       alert(errorMessage);
     }
@@ -183,7 +180,6 @@ export default function OrdenDetallesPage() {
       await fetchOrderDetails(); // Recargar los detalles
       setConfirmComplete(false);
     } catch (error) {
-      console.error('Error al completar orden:', error);
       alert('Error al completar la orden. Por favor, intenta nuevamente.');
     }
   };
@@ -212,7 +208,6 @@ export default function OrdenDetallesPage() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (error) {
-      console.error('Error descargando PDF:', error);
       alert('Error al descargar el PDF. Por favor, intenta nuevamente.');
     } finally {
       setDownloadingPdf(false);

@@ -15,8 +15,11 @@ interface AttachedFile {
 
 interface ChatbotProps {
   onFormDataExtracted?: (data: PurchaseOrderExtractedData) => void;
-  onOrderCreated?: (order: any) => void;
+  onOrderCreated?: (order: Order[]) => void;
 }
+
+// Importar tipo Order
+import { Order } from '@/types/database';
 
 interface AvailableOption {
   id: number;
@@ -147,7 +150,6 @@ export default function Chatbot({ onFormDataExtracted, onOrderCreated }: Chatbot
         setAvailableSuppliers(data.availableSuppliers);
       }
     } catch (error) {
-      console.error('Error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
       const errorMessages = [
         ...newMessages,
@@ -232,7 +234,6 @@ export default function Chatbot({ onFormDataExtracted, onOrderCreated }: Chatbot
 
       onOrderCreated?.(data.orders || [data.order]);
     } catch (error) {
-      console.error('Error creando orden:', error);
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
       const newMessages = [
         ...messages,

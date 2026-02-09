@@ -21,8 +21,6 @@ export async function PATCH(
     const { action } = body; // action: 'approve' | 'reject' | 'complete'
     // Note: 'reason' field available for rejection logging when needed
 
-    console.log(`Usuario ${session!.userId} intenta ${action} la orden ${id}`);
-
     if (!action || !['approve', 'reject', 'complete'].includes(action)) {
       return NextResponse.json(
         { error: "Acción inválida. Usa 'approve', 'reject' o 'complete'" },
@@ -88,7 +86,6 @@ export async function PATCH(
       .eq('id', id);
 
     if (updateError) {
-      console.error('Error actualizando orden:', updateError);
       return NextResponse.json(
         { error: "Error al actualizar la orden" },
         { status: 500 }
@@ -109,7 +106,6 @@ export async function PATCH(
     });
 
   } catch (error) {
-    console.error('Error en PATCH /orders/[id]/status:', error);
     return NextResponse.json(
       { error: "Error al procesar la solicitud" },
       { status: 500 }

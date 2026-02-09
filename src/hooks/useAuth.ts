@@ -53,7 +53,6 @@ export function useAuth(options?: { redirectTo?: string; requireAuth?: boolean }
       const data = await response.json();
       setUser(data.user);
     } catch (error) {
-      console.error('Error al cargar usuario:', error);
       setUser(null);
       if (options?.requireAuth !== false && options?.redirectTo) {
         router.push(options.redirectTo);
@@ -76,7 +75,7 @@ export function useAuth(options?: { redirectTo?: string; requireAuth?: boolean }
       setUser(null);
       router.push('/login');
     } catch (error) {
-      console.error('Error al cerrar sesión:', error);
+      // Error silencioso - el usuario será redirigido al login
     }
   };
 

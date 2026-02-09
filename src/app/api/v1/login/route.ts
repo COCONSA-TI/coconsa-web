@@ -4,6 +4,7 @@ import { LoginSchema } from "@/lib/schemas";
 import { createSession } from "@/lib/auth";
 import bcrypt from 'bcryptjs';
 import { verifyRecaptcha } from "@/lib/captcha";
+import { UserRoleRelation } from "@/types/database";
 
 export async function POST(request: Request) {
   try {
@@ -34,8 +35,6 @@ export async function POST(request: Request) {
           { status: 403 }
         );
       }
-    } else {
-      console.log('⚠️ Modo desarrollo: Saltando verificación de reCAPTCHA');
     }
 
     const { data: user, error: userError } = await supabaseAdmin
@@ -67,7 +66,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const roleName = (user.roles as any)?.name || 'user';
+    const userRoles = user.roles as UserRoleRelation | UserRoleRelation[] | null;
+    const roleName = Array.isArray(userRoles) ? userRoles[0]?.name : userRoles?.name || 'user';
 
     await createSession(user.id, user.email, roleName);
 
@@ -82,7 +82,6 @@ export async function POST(request: Request) {
     });
 
   } catch (error) {
-    console.error("Error en login:", error);
     return NextResponse.json(
       { error: "Error interno del servidor" },
       { status: 500 }

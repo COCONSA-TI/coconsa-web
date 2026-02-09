@@ -94,16 +94,12 @@ export default function ChatBotPage() {
 
         // Si la orden está completa, intentar crearla
         if (data.extractedData?.isComplete) {
-          console.log('Orden completa detectada, creando...', data.extractedData);
           await createOrder(data.extractedData);
-        } else {
-          console.log('Datos recopilados hasta ahora:', data.extractedData);
         }
       } else {
         throw new Error(data.error || 'Error al procesar el mensaje');
       }
     } catch (error) {
-      console.error('Error:', error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         content: 'Lo siento, hubo un error al procesar tu mensaje. Por favor intenta de nuevo.',
@@ -156,10 +152,9 @@ export default function ChatBotPage() {
         throw new Error(result.error || 'Error al crear la orden');
       }
     } catch (error) {
-      console.error('Error creating order:', error);
       const errorMessage: Message = {
         id: Date.now().toString(),
-        content: `❌ Hubo un problema al crear la orden: ${error instanceof Error ? error.message : 'Error desconocido'}. Por favor verifica los datos e intenta nuevamente.`,
+        content: `Hubo un problema al crear la orden: ${error instanceof Error ? error.message : 'Error desconocido'}. Por favor verifica los datos e intenta nuevamente.`,
         role: 'assistant',
         timestamp: new Date(),
       };

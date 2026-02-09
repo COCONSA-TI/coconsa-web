@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/api-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { Contact, Milestone, RecentUpdate } from "@/types/project";
+import { MilestoneSortable, UpdateSortable } from "@/types/database";
 
 // GET - Obtener todos los proyectos
 export async function GET() {
@@ -20,7 +21,6 @@ export async function GET() {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error obteniendo proyectos:', error);
       return NextResponse.json(
         { success: false, error: 'Error al obtener proyectos' },
         { status: 500 }
@@ -67,7 +67,7 @@ export async function GET() {
         email: c.email
       })) || [],
       milestones: project.project_milestones
-        ?.sort((a: any, b: any) => a.sort_order - b.sort_order)
+        ?.sort((a: MilestoneSortable, b: MilestoneSortable) => a.sort_order - b.sort_order)
         .map((m: Milestone) => ({
           name: m.name,
           status: m.status,
@@ -75,7 +75,7 @@ export async function GET() {
           date: m.date
         })) || [],
       recentUpdates: project.project_updates
-        ?.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        ?.sort((a: UpdateSortable, b: UpdateSortable) => new Date(b.date).getTime() - new Date(a.date).getTime())
         .map((u: RecentUpdate) => ({
           date: u.date,
           title: u.title,
@@ -91,7 +91,6 @@ export async function GET() {
     });
 
   } catch (error) {
-    console.error('Error en GET /api/v1/projects:', error);
     return NextResponse.json(
       { success: false, error: 'Error interno del servidor' },
       { status: 500 }
@@ -146,7 +145,6 @@ export async function POST(request: Request) {
       .single();
 
     if (projectError) {
-      console.error('Error creando proyecto:', projectError);
       return NextResponse.json(
         { success: false, error: 'Error al crear el proyecto: ' + projectError.message },
         { status: 500 }
@@ -224,7 +222,6 @@ export async function POST(request: Request) {
     });
 
   } catch (error) {
-    console.error('Error en POST /api/v1/projects:', error);
     return NextResponse.json(
       { success: false, error: 'Error interno del servidor' },
       { status: 500 }

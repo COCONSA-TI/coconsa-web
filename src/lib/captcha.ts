@@ -24,7 +24,6 @@ export async function verifyRecaptcha(
   const secretKey = process.env.RECAPTCHA_SECRET_KEY;
 
   if (!secretKey) {
-    console.error('RECAPTCHA_SECRET_KEY no está configurada');
     return { success: false, error: 'Configuración de reCAPTCHA faltante' };
   }
 
@@ -44,7 +43,6 @@ export async function verifyRecaptcha(
     const data: RecaptchaVerificationResponse = await response.json();
 
     if (!data.success) {
-      console.error('Verificación de reCAPTCHA fallida:', data['error-codes']);
       return {
         success: false,
         error: 'Verificación de reCAPTCHA fallida',
@@ -55,7 +53,6 @@ export async function verifyRecaptcha(
     // 1.0 es muy probablemente una interacción legítima
     // 0.0 es muy probablemente un bot
     if (data.score < minScore) {
-      console.warn(`Puntuación de reCAPTCHA baja: ${data.score}`);
       return {
         success: false,
         score: data.score,
@@ -68,7 +65,6 @@ export async function verifyRecaptcha(
       score: data.score,
     };
   } catch (error) {
-    console.error('Error al verificar reCAPTCHA:', error);
     return {
       success: false,
       error: 'Error al verificar reCAPTCHA',

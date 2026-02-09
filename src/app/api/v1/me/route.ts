@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { UserRoleRelation } from "@/types/database";
 
 export async function GET() {
   try {
@@ -34,7 +35,8 @@ export async function GET() {
       );
     }
 
-    const roleName = (userData.roles as any)?.name || 'user';
+    const userRoles = userData.roles as UserRoleRelation | UserRoleRelation[] | null;
+    const roleName = Array.isArray(userRoles) ? userRoles[0]?.name : userRoles?.name || 'user';
 
     return NextResponse.json({ 
       success: true,
@@ -46,7 +48,6 @@ export async function GET() {
       }
     });
   } catch (error) {
-    console.error("Error al obtener usuario:", error);
     return NextResponse.json(
       { error: "Error interno del servidor" },
       { status: 500 }

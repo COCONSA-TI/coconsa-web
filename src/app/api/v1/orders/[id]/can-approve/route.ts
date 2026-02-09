@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { getSession } from '@/lib/auth';
+import { OrderApprovalWithRelations } from '@/types/database';
 
 export async function GET(
   request: NextRequest,
@@ -83,7 +84,7 @@ export async function GET(
     }
 
     // 3. Encontrar la aprobación del usuario
-    const myApproval = approvals.find((a: any) => a.department_id === user.department_id);
+    const myApproval = approvals.find((a: OrderApprovalWithRelations) => a.department_id === user.department_id);
 
     if (!myApproval) {
       return NextResponse.json({
@@ -102,8 +103,8 @@ export async function GET(
     }
 
     // 4. Verificar que aprobaciones previas estén completadas
-    const previousApprovals = approvals.filter((a: any) => a.approval_order < myApproval.approval_order);
-    const allPreviousApproved = previousApprovals.every((a: any) => a.status === 'approved');
+    const previousApprovals = approvals.filter((a: OrderApprovalWithRelations) => (a.approval_order ?? 0) < (myApproval.approval_order ?? 0));
+    const allPreviousApproved = previousApprovals.every((a: OrderApprovalWithRelations) => a.status === 'approved');
 
     if (!allPreviousApproved) {
       return NextResponse.json({
@@ -120,7 +121,6 @@ export async function GET(
     });
 
   } catch (error) {
-    console.error('Error en can-approve:', error);
     return NextResponse.json(
       { success: false, error: 'Error interno del servidor' },
       { status: 500 }

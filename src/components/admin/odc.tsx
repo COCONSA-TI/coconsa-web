@@ -104,7 +104,6 @@ export default function OrdenDeCompra() {
       setSuppliers(suppliersData || []);
 
     } catch (error) {
-      console.error('Error loading catalogs:', error);
       alert('Error al cargar los catálogos');
     } finally {
       setIsLoading(false);
@@ -210,13 +209,11 @@ export default function OrdenDeCompra() {
       if (error) throw error;
 
       alert('Orden de compra creada exitosamente');
-      console.log('Order created:', data);
 
       // Resetear formulario
       resetForm();
 
     } catch (error) {
-      console.error('Error saving order:', error);
       alert('Error al guardar la orden de compra');
     } finally {
       setIsSaving(false);

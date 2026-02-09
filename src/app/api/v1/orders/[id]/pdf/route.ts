@@ -3,6 +3,14 @@ import { supabaseAdmin } from '@/lib/supabase/server';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
+import { OrderItem, OrderApprovalForPdf } from '@/types/database';
+
+// Extender jsPDF para incluir lastAutoTable
+interface JsPDFWithAutoTable extends jsPDF {
+  lastAutoTable: {
+    finalY: number;
+  };
+}
 
 export async function GET(
   request: Request,
@@ -117,12 +125,12 @@ export async function GET(
     yPos += 5;
 
     // Tabla de artículos
-    const items = JSON.parse(order.items || '[]');
-    const tableData = items.map((item: any) => [
+    const items: OrderItem[] = JSON.parse(order.items || '[]');
+    const tableData = items.map((item: OrderItem) => [
       item.nombre,
       `${item.cantidad} ${item.unidad}`,
       `$${Number(item.precioUnitario).toFixed(2)}`,
-      `$${Number(item.precioTotal).toFixed(2)}`,
+      `$${Number(item.precioTotal || 0).toFixed(2)}`,
     ]);
 
     autoTable(doc, {
@@ -140,7 +148,7 @@ export async function GET(
       },
     });
 
-    yPos = (doc as any).lastAutoTable.finalY + 10;
+    yPos = (doc as JsPDFWithAutoTable).lastAutoTable.finalY + 10;
 
     // Justificación
     if (order.justification) {
@@ -228,15 +236,15 @@ export async function GET(
     const approverQRs: { [key: number]: string } = {};
     for (const pos of signaturePositions) {
       if (pos.order > 0) { // No es el solicitante
-        const approval = approvals?.find((a: any) => a.approval_order === pos.order);
+        const approval = (approvals as OrderApprovalForPdf[] | null)?.find((a: OrderApprovalForPdf) => a.approval_order === pos.order);
         
-        if (approval?.status === 'approved' && approval.approver && approval.approval_order <= 3) {
+        if (approval?.status === 'approved' && approval.approver && (approval.approval_order ?? 0) <= 3) {
           const approverInfo = {
             nombre: approval.approver.full_name,
             email: approval.approver.email,
             departamento: approval.department?.name || 'N/A',
             orderId: order.id,
-            fecha: new Date(approval.approved_at).toLocaleDateString('es-MX'),
+            fecha: approval.approved_at ? new Date(approval.approved_at).toLocaleDateString('es-MX') : 'N/A',
             rol: approval.department?.code || 'N/A'
           };
           
@@ -251,8 +259,8 @@ export async function GET(
                 light: '#FFFFFF'
               }
             });
-          } catch (err) {
-            console.error('Error generando QR del aprobador:', err);
+          } catch {
+            // Error silencioso - QR no crítico
           }
         }
       }
@@ -300,7 +308,6 @@ export async function GET(
     });
 
   } catch (error) {
-    console.error('Error generando PDF:', error);
     return NextResponse.json(
       { error: 'Error al generar el PDF' },
       { status: 500 }

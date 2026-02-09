@@ -64,7 +64,6 @@ export default function ClientChatbot() {
         setConversationHistory(data.conversationHistory);
       }
     } catch (error) {
-      console.error("Error:", error);
       setError(
         error instanceof Error ? error.message : "Error desconocido"
       );

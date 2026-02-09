@@ -47,7 +47,6 @@ export async function GET(request: Request) {
     const { data: orders, error: ordersError } = await query;
 
     if (ordersError) {
-      console.error('Error obteniendo órdenes:', ordersError);
       return NextResponse.json(
         { 
           error: "Error al obtener las órdenes",
@@ -106,8 +105,7 @@ export async function GET(request: Request) {
         if (typeof order.items === 'string' && order.items.trim()) {
           itemsArray = JSON.parse(order.items) as OrderItem[];
         }
-      } catch (e) {
-        console.error('Error parseando items:', e);
+      } catch {
         itemsArray = [];
       }
       
@@ -132,7 +130,6 @@ export async function GET(request: Request) {
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
-    console.error("Error en GET /api/v1/orders:", error);
     return NextResponse.json(
       { 
         error: "Error al procesar la solicitud",

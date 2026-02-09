@@ -13,8 +13,8 @@ function VerifyApplicantContent() {
     if (dataParam) {
       applicantInfo = JSON.parse(decodeURIComponent(dataParam));
     }
-  } catch (error) {
-    console.error('Error parsing applicant data:', error);
+  } catch {
+    // Error al parsear datos - se mostrará mensaje de error
   }
 
   if (!applicantInfo) {

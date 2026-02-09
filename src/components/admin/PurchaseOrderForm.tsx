@@ -75,8 +75,8 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
             setAvailableSuppliers(botData.availableSuppliers.map((supplier: { commercial_name: string }) => supplier.commercial_name));
           }
         }
-      } catch (error) {
-        console.error('Error obteniendo datos:', error);
+      } catch {
+        // Error silencioso - se usarán listas vacías
       }
     };
     fetchData();
