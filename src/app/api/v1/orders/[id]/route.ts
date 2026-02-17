@@ -153,13 +153,20 @@ export async function GET(
       .eq('id', typedOrder.supplier_id)
       .single();
 
-    // Mapear status de español a inglés
+    // Mapear status de español a inglés (soporta ambos formatos)
     const statusMap: Record<string, string> = {
+      // Español
       'PENDIENTE': 'pending',
       'APROBADA': 'approved',
       'RECHAZADA': 'rejected',
       'EN_PROCESO': 'in_progress',
-      'COMPLETADA': 'completed'
+      'COMPLETADA': 'completed',
+      // Inglés (ya en formato correcto)
+      'pending': 'pending',
+      'approved': 'approved',
+      'rejected': 'rejected',
+      'in_progress': 'in_progress',
+      'completed': 'completed'
     };
 
     let itemsArray: OrderItem[] = [];

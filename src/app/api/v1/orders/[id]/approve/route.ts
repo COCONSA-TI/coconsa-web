@@ -114,14 +114,22 @@ export async function POST(
     // 6. Verificar si todas las aprobaciones están completas
     const { data: updatedApprovals, error: checkError } = await supabaseAdmin
       .from('order_approvals')
-      .select('status')
+      .select('id, status, department_id, approval_order')
       .eq('order_id', orderId);
 
     if (checkError) {
-      // Error silencioso - no crítico
+      console.error('Error verificando aprobaciones:', checkError);
     }
 
+    // Debug: Log de todas las aprobaciones
+    console.log('Aprobaciones actualizadas:', JSON.stringify(updatedApprovals, null, 2));
+
     const allApproved = updatedApprovals?.every((a: { status: ApprovalStatus | null }) => a.status === 'approved');
+    const totalApprovals = updatedApprovals?.length || 0;
+    const approvedCount = updatedApprovals?.filter((a: { status: ApprovalStatus | null }) => a.status === 'approved').length || 0;
+    const pendingCount = updatedApprovals?.filter((a: { status: ApprovalStatus | null }) => a.status === 'pending').length || 0;
+
+    console.log(`Orden ${orderId}: Total=${totalApprovals}, Aprobadas=${approvedCount}, Pendientes=${pendingCount}, AllApproved=${allApproved}`);
 
     // 7. Si todas están aprobadas, cambiar estado de la orden
     if (allApproved) {
@@ -134,7 +142,9 @@ export async function POST(
         .eq('id', orderId);
 
       if (orderUpdateError) {
-        // Error silencioso - no crítico para la respuesta
+        console.error('Error actualizando orden a approved:', orderUpdateError);
+      } else {
+        console.log(`Orden ${orderId} marcada como APPROVED`);
       }
     } else {
       // Si no están todas aprobadas, actualizar estado a 'in_progress'
@@ -147,14 +157,19 @@ export async function POST(
         .eq('id', orderId);
 
       if (orderUpdateError) {
-        // Error silencioso - no crítico para la respuesta
+        console.error('Error actualizando orden a in_progress:', orderUpdateError);
       }
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Orden aprobada exitosamente',
+      message: allApproved ? 'Orden completamente aprobada' : 'Aprobacion registrada exitosamente',
       allApproved,
+      debug: {
+        totalApprovals,
+        approvedCount,
+        pendingCount,
+      }
     });
   } catch (error) {
     return NextResponse.json(

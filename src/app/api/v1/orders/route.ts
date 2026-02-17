@@ -91,11 +91,18 @@ export async function GET(request: Request) {
     }
 
     const statusMap: Record<string, string> = {
+      // Español
       'PENDIENTE': 'pending',
       'APROBADA': 'approved',
       'RECHAZADA': 'rejected',
       'EN_PROCESO': 'in_progress',
-      'COMPLETADA': 'completed'
+      'COMPLETADA': 'completed',
+      // Inglés (ya en formato correcto)
+      'pending': 'pending',
+      'approved': 'approved',
+      'rejected': 'rejected',
+      'in_progress': 'in_progress',
+      'completed': 'completed'
     };
 
     // Formatear órdenes
