@@ -1,0 +1,140 @@
+import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase/server';
+import { getSession } from '@/lib/auth';
+import { OrderApprovalWithRelations } from '@/types/database';
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const resolvedParams = await params;
+    
+    // Obtener sesión usando el sistema JWT de la app
+    const session = await getSession();
+
+    if (!session) {
+      return NextResponse.json(
+        { success: false, error: 'No autorizado - Sesión no válida. Por favor, cierra sesión y vuelve a iniciar sesión.' },
+        { status: 401 }
+      );
+    }
+
+    const { comments } = await request.json();
+    const orderId = resolvedParams.id;
+
+    // 1. Obtener usuario con departamento (usar admin client para queries)
+    const { data: user, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('*, department:departments(*)')
+      .eq('id', session.userId)
+      .single();
+
+    if (userError || !user) {
+      return NextResponse.json(
+        { success: false, error: 'Usuario no encontrado en la base de datos' },
+        { status: 404 }
+      );
+    }
+
+    if (!user.is_department_head) {
+      return NextResponse.json(
+        { success: false, error: 'Solo los jefes de departamento pueden rechazar órdenes. Tu usuario no tiene el permiso is_department_head activado.' },
+        { status: 403 }
+      );
+    }
+
+    if (!user.department) {
+      return NextResponse.json(
+        { success: false, error: 'No tienes departamento asignado. Contacta al administrador para que te asigne a un departamento.' },
+        { status: 403 }
+      );
+    }
+
+    // 2. Obtener aprobaciones de esta orden
+    const { data: approvals, error: approvalsError } = await supabaseAdmin
+      .from('order_approvals')
+      .select('*, department:departments(*)')
+      .eq('order_id', orderId)
+      .order('approval_order');
+
+    if (approvalsError || !approvals || approvals.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Orden no encontrada o sin aprobaciones configuradas' },
+        { status: 404 }
+      );
+    }
+
+    // 3. Encontrar la aprobación del usuario
+    const myApproval = approvals.find((a: OrderApprovalWithRelations) => a.department_id === user.department_id);
+
+    if (!myApproval) {
+      return NextResponse.json(
+        { success: false, error: 'No tienes una aprobación pendiente para esta orden' },
+        { status: 403 }
+      );
+    }
+
+    if (myApproval.status !== 'pending') {
+      return NextResponse.json(
+        { success: false, error: `Esta aprobación ya fue ${myApproval.status === 'approved' ? 'aprobada' : 'rechazada'}` },
+        { status: 400 }
+      );
+    }
+
+    // 4. Verificar que aprobaciones previas estén completadas
+    const previousApprovals = approvals.filter((a: OrderApprovalWithRelations) => (a.approval_order ?? 0) < (myApproval.approval_order ?? 0));
+    const allPreviousApproved = previousApprovals.every((a: OrderApprovalWithRelations) => a.status === 'approved');
+
+    if (!allPreviousApproved) {
+      return NextResponse.json(
+        { success: false, error: 'Faltan aprobaciones previas en el flujo de autorización' },
+        { status: 400 }
+      );
+    }
+
+    // 5. Rechazar
+    const { error: updateError } = await supabaseAdmin
+      .from('order_approvals')
+      .update({
+        status: 'rejected',
+        approver_id: session.userId,
+        approved_at: new Date().toISOString(),
+        comments: comments || 'Orden rechazada',
+      })
+      .eq('id', myApproval.id);
+
+    if (updateError) {
+      return NextResponse.json(
+        { success: false, error: 'Error al rechazar la orden: ' + updateError.message },
+        { status: 500 }
+      );
+    }
+
+    // 6. Cambiar estado de la orden a 'RECHAZADA'
+    const { error: orderUpdateError } = await supabaseAdmin
+      .from('orders')
+      .update({ 
+        status: 'RECHAZADA',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', orderId);
+
+    if (orderUpdateError) {
+      return NextResponse.json(
+        { success: false, error: 'Error al actualizar estado de la orden' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Orden rechazada exitosamente',
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { success: false, error: 'Error interno del servidor' },
+      { status: 500 }
+    );
+  }
+}

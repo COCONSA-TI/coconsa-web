@@ -3,6 +3,8 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { LoginSchema } from "@/lib/schemas";
 import { createSession } from "@/lib/auth";
 import bcrypt from 'bcryptjs';
+import { verifyRecaptcha } from "@/lib/captcha";
+import { UserRoleRelation } from "@/types/database";
 
 export async function POST(request: Request) {
   try {
@@ -21,11 +23,30 @@ export async function POST(request: Request) {
       );
     }
 
-    const { email, password } = validatedFields.data;
+    const { email, password, recaptchaToken } = validatedFields.data;
+
+    // Solo verificar reCAPTCHA en producción
+    if (process.env.NODE_ENV === 'production') {
+      const recaptchaResult = await verifyRecaptcha(recaptchaToken);
+      
+      if (!recaptchaResult.success) {
+        return NextResponse.json(
+          { error: "Verificación de seguridad fallida. Por favor, intenta nuevamente." },
+          { status: 403 }
+        );
+      }
+    }
 
     const { data: user, error: userError } = await supabaseAdmin
       .from('users')
-      .select('id, email, password_hash, role')
+      .select(`
+        id, 
+        email, 
+        password_hash,
+        roles (
+          name
+        )
+      `)
       .eq('email', email)
       .single();
 
@@ -45,7 +66,10 @@ export async function POST(request: Request) {
       );
     }
 
-    await createSession(user.id, user.email, user.role);
+    const userRoles = user.roles as UserRoleRelation | UserRoleRelation[] | null;
+    const roleName = Array.isArray(userRoles) ? userRoles[0]?.name : userRoles?.name || 'user';
+
+    await createSession(user.id, user.email, roleName);
 
     return NextResponse.json({ 
       success: true,
@@ -53,12 +77,11 @@ export async function POST(request: Request) {
       user: {
         id: user.id,
         email: user.email,
-        role: user.role
+        role: roleName
       }
     });
 
   } catch (error) {
-    console.error("Error en login:", error);
     return NextResponse.json(
       { error: "Error interno del servidor" },
       { status: 500 }

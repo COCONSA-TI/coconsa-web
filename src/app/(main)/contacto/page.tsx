@@ -45,7 +45,6 @@ export default function ContactoPage() {
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setFormStatus('submitting');
-        console.log('Enviando formulario...', formData);
         setTimeout(() => {
             setFormStatus('success');
             setFormData({ name: '', email: '', phone: '', message: '' });

@@ -16,7 +16,8 @@ export async function POST(request: Request) {
             receivedData: body,
             timestamp: new Date().toISOString() 
         });
-    } catch (error) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    } catch (_error) {
         return NextResponse.json(
             { error: 'Failed to parse request body' },
             { status: 400 }

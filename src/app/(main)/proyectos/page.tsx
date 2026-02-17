@@ -1,14 +1,18 @@
+'use client';
+
 // src/app/proyectos/page.tsx
 import dynamic from 'next/dynamic';
-import { useMemo } from 'react';
+
+// Importación dinámica fuera del componente para evitar errores de SSR
+const InteractiveMap = dynamic(
+    () => import('@/components/interactiveMap'),
+    {
+        loading: () => <p className="flex items-center justify-center h-full text-gray-500">Cargando mapa...</p>,
+        ssr: false // Deshabilita el renderizado del servidor para este componente
+    }
+);
 
 export default function ProyectosPage() {
-    const InteractiveMap = useMemo(() => dynamic(
-        () => import('@/components/interactiveMap'),
-        {
-            loading: () => <p className="flex items-center justify-center h-full text-gray-500">Cargando mapa...</p>
-        }
-    ), []);
 
     return (
         <div className="bg-white">
