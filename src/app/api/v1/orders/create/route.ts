@@ -89,8 +89,11 @@ async function createOrderApprovalsServer(orderId: string, applicantDepartmentId
   }
 
   // 2. Aprobaciones para el resto del flujo (contraloría, dirección, contabilidad, pagos)
+  // Solo incluir departamentos con approval_order > 1 que NO sean otras gerencias
+  // El flujo es: Gerencia (1) -> Contraloría (2) -> Dirección (3) -> Contabilidad (4) -> Pagos (5)
+  // Evitamos duplicar el departamento del solicitante
   const subsequentDepartments = departments.filter(
-    (d: Department) => d.approval_order && d.approval_order > 1
+    (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== applicantDepartmentId
   );
 
   for (const dept of subsequentDepartments) {

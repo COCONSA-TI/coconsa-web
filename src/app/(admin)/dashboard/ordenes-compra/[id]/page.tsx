@@ -92,7 +92,12 @@ export default function OrdenDetallesPage() {
       setOrder(data.order);
       
       const orderApprovals = await getOrderApprovals(orderId);
-      setApprovals(orderApprovals);
+      // Filtrar solo aprobaciones del flujo principal (approval_order 1-5)
+      // y ordenarlas por approval_order
+      const filteredApprovals = orderApprovals
+        .filter(a => a.approval_order && a.approval_order >= 1 && a.approval_order <= 5)
+        .sort((a, b) => (a.approval_order || 0) - (b.approval_order || 0));
+      setApprovals(filteredApprovals);
     } catch {
       toast.error('Error', 'No se pudo cargar la orden');
       router.push('/dashboard/ordenes-compra');
@@ -255,7 +260,7 @@ export default function OrdenDetallesPage() {
 
   const getCurrentApprovalStep = () => {
     if (order.status === 'rejected') return -1;
-    if (order.status === 'completed') return approvals.length;
+    if (order.status === 'approved' || order.status === 'completed') return approvals.length;
     const firstPending = approvals.findIndex(a => a.status === 'pending');
     return firstPending === -1 ? approvals.length : firstPending;
   };
@@ -428,7 +433,7 @@ export default function OrdenDetallesPage() {
                 className="hidden sm:block absolute top-5 left-8 h-0.5 bg-red-500 transition-all duration-500"
                 style={{ 
                   width: approvals.length > 1
-                    ? `calc(${(Math.max(0, currentApprovalStep) / (approvals.length - 1)) * 100}% - 64px)`
+                    ? `calc(${(Math.min(currentApprovalStep, approvals.length - 1) / (approvals.length - 1)) * 100}% - 64px)`
                     : '0%'
                 }}
               ></div>
