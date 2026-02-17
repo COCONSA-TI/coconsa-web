@@ -11,7 +11,9 @@ interface AdminNavbarProps {
 
 export default function AdminNavbar({ onMenuClick }: AdminNavbarProps) {
   const router = useRouter();
-  const { isAdmin } = useAuth();
+  // TODO: Descomentar cuando las demás secciones estén listas
+  // const { isAdmin } = useAuth();
+  useAuth(); // Mantener hook para verificar autenticación
 
   const handleLogout = async () => {
     try {
@@ -57,6 +59,7 @@ export default function AdminNavbar({ onMenuClick }: AdminNavbarProps) {
           </div>
 
           {/* Navegación (oculta en móvil, visible en desktop) */}
+          {/* TEMPORAL: Solo Dashboard y Órdenes de Compra durante el desarrollo */}
           <nav className="hidden lg:flex items-center space-x-6">
             <Link 
               href="/dashboard" 
@@ -70,6 +73,7 @@ export default function AdminNavbar({ onMenuClick }: AdminNavbarProps) {
             >
               Órdenes de Compra
             </Link>
+            {/* TODO: Descomentar cuando las demás secciones estén listas
             {isAdmin && (
               <>
                 <Link 
@@ -86,6 +90,7 @@ export default function AdminNavbar({ onMenuClick }: AdminNavbarProps) {
                 </Link>
               </>
             )}
+            */}
           </nav>
 
           {/* Botón de logout */}

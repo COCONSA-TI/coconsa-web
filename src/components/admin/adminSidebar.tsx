@@ -79,20 +79,32 @@ const menuItems = [
 
 export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
-  const { user, isAdmin } = useAuth();
+  // TODO: Descomentar 'user' cuando las demás secciones estén listas
+  const { isAdmin } = useAuth();
 
   // Filtrar items según rol
+  // TEMPORAL: Solo mostrar Órdenes de compra y Configuración durante el desarrollo
   const allowedItems = menuItems.filter(item => {
-    // Dashboard y Órdenes de compra: todos pueden ver
-    if (item.href === '/dashboard' || item.href === '/dashboard/ordenes-compra') {
+    // Solo mostrar estas secciones por ahora (las demás están en desarrollo)
+    if (item.href === '/dashboard/ordenes-compra') {
       return true;
     }
-    // Reportes: admin y supervisor
-    if (item.href === '/dashboard/reportes') {
-      return isAdmin || user?.role === 'supervisor';
+    // Configuración: solo admin
+    if (item.href === '/dashboard/configuracion') {
+      return isAdmin;
     }
+    // TODO: Descomentar cuando las demás secciones estén listas
+    // Dashboard y Órdenes de compra: todos pueden ver
+    // if (item.href === '/dashboard' || item.href === '/dashboard/ordenes-compra') {
+    //   return true;
+    // }
+    // Reportes: admin y supervisor
+    // if (item.href === '/dashboard/reportes') {
+    //   return isAdmin || user?.role === 'supervisor';
+    // }
     // Todo lo demás: solo admin
-    return isAdmin;
+    // return isAdmin;
+    return false;
   });
 
   const handleLinkClick = () => {

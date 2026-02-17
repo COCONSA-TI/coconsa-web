@@ -65,6 +65,7 @@ export interface User {
   role: number;
   department_id: string | null;
   is_department_head: boolean;
+  is_active: boolean;
 }
 
 export interface UserWithRelations extends User {

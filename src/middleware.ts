@@ -8,6 +8,18 @@ const protectedRoutes = [
   { path: '/dashboard/chatbot', roles: ['admin'] },
   { path: '/dashboard/ordenes-compra', roles: ['admin', 'user', 'supervisor'] },
   { path: '/dashboard/reportes', roles: ['admin', 'supervisor'] },
+  { path: '/dashboard/configuracion/usuarios', roles: ['admin'] },
+  { path: '/dashboard/configuracion', roles: ['admin', 'user', 'supervisor'] },
+];
+
+// TEMPORAL: Rutas deshabilitadas durante el desarrollo
+// Los usuarios serán redirigidos a órdenes de compra si intentan acceder
+const disabledRoutes = [
+  '/dashboard/proyectos',
+  '/dashboard/clientes',
+  '/dashboard/mensajes',
+  '/dashboard/reportes',
+  '/dashboard/chatbot',
 ];
 
 export async function middleware(request: NextRequest) {
@@ -16,6 +28,13 @@ export async function middleware(request: NextRequest) {
   // Obtener el token de sesión
   const cookie = request.cookies.get('session')?.value;
   const session = cookie ? await decrypt(cookie) : null;
+
+  // TEMPORAL: Verificar si es una ruta deshabilitada
+  const isDisabledRoute = disabledRoutes.some(route => path.startsWith(route));
+  if (isDisabledRoute && session) {
+    // Redirigir a órdenes de compra con mensaje
+    return NextResponse.redirect(new URL('/dashboard/ordenes-compra?info=en-desarrollo', request.url));
+  }
 
   // Verificar si es una ruta protegida
   const protectedRoute = protectedRoutes.find(route => path.startsWith(route.path));
