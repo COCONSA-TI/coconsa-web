@@ -206,8 +206,8 @@ export async function GET(
     
     const signaturePositions = [
       { x: 20, label: 'SOLICITANTE', order: 0 },
-      { x: 65, label: 'REVISIÓN\nCONTROL DE OBRA', order: 2 }, // Contraloría
-      { x: 120, label: 'REVISIÓN\nGERENTE CONSTRUCCIÓN', order: 1 }, // Gerencia
+      { x: 65, label: 'REVISIÓN\nCONTRALORIA', order: 2 }, // Contraloría
+      { x: 120, label: 'REVISIÓN\nGERENTE', order: 1 }, // Gerencia
       { x: 165, label: 'AUTORIZACIÓN\nDIRECCIÓN', order: 3 }, // Dirección
     ];
 
@@ -224,8 +224,9 @@ export async function GET(
     
     // Generar código QR del solicitante
     const qrCodeDataUrl = await QRCode.toDataURL(verificationUrl, {
-      width: 80,
-      margin: 1,
+      width: 200,
+      margin: 2,
+      errorCorrectionLevel: 'L',
       color: {
         dark: '#000000',
         light: '#FFFFFF'
@@ -252,8 +253,9 @@ export async function GET(
           
           try {
             approverQRs[pos.order] = await QRCode.toDataURL(approverVerificationUrl, {
-              width: 80,
-              margin: 1,
+              width: 200,
+              margin: 2,
+              errorCorrectionLevel: 'L',
               color: {
                 dark: '#000000',
                 light: '#FFFFFF'

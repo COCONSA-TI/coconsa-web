@@ -220,19 +220,15 @@ export default function EditarOrdenPage() {
         }
 
         // Cargar almacenes y proveedores disponibles
-        const botResponse = await fetch("/api/v1/bot", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: "init" }),
-        });
+        const storesResponse = await fetch("/api/v1/stores-suppliers");
 
-        if (botResponse.ok) {
-          const botData = await botResponse.json();
-          if (botData.availableStores && Array.isArray(botData.availableStores)) {
-            setAvailableStores(botData.availableStores.map((store: { name: string }) => store.name));
+        if (storesResponse.ok) {
+          const data = await storesResponse.json();
+          if (data.stores && Array.isArray(data.stores)) {
+            setAvailableStores(data.stores.map((store: { name: string }) => store.name));
           }
-          if (botData.availableSuppliers && Array.isArray(botData.availableSuppliers)) {
-            setAvailableSuppliers(botData.availableSuppliers.map((supplier: { commercial_name: string }) => supplier.commercial_name));
+          if (data.suppliers && Array.isArray(data.suppliers)) {
+            setAvailableSuppliers(data.suppliers.map((supplier: { commercial_name: string }) => supplier.commercial_name));
           }
         }
 
