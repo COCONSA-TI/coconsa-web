@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 
 interface Item {
   id: string;
@@ -25,6 +25,129 @@ interface PurchaseOrderFormProps {
   onSubmit?: (data: OrderData) => void;
 }
 
+function SearchableSupplierSelect({
+  value,
+  suppliers,
+  onChange,
+  focusColor = "blue",
+}: {
+  value: string;
+  suppliers: string[];
+  onChange: (value: string) => void;
+  focusColor?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const filtered = suppliers.filter((s) =>
+    s.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleClickOutside = useCallback((e: MouseEvent) => {
+    if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      setIsOpen(false);
+      setSearch("");
+    }
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [handleClickOutside]);
+
+  const handleSelect = (supplier: string) => {
+    onChange(supplier);
+    setIsOpen(false);
+    setSearch("");
+  };
+
+  const handleClear = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onChange("");
+    setSearch("");
+    setIsOpen(false);
+  };
+
+  const ringColor = focusColor === "red" ? "focus:ring-red-500" : "focus:ring-blue-500";
+
+  return (
+    <div ref={containerRef} className="relative">
+      {!isOpen ? (
+        <button
+          type="button"
+          onClick={() => {
+            setIsOpen(true);
+            setTimeout(() => inputRef.current?.focus(), 0);
+          }}
+          className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-left flex items-center justify-between ${ringColor} focus:ring-2 focus:border-transparent ${
+            value ? "text-gray-900" : "text-gray-500"
+          }`}
+        >
+          <span className="truncate">{value || "Selecciona proveedor"}</span>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {value && (
+              <span
+                onClick={handleClear}
+                className="text-gray-400 hover:text-gray-600 p-0.5"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </span>
+            )}
+            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </button>
+      ) : (
+        <input
+          ref={inputRef}
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar proveedor..."
+          className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 ${ringColor} focus:ring-2 focus:border-transparent`}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setIsOpen(false);
+              setSearch("");
+            }
+            if (e.key === "Enter" && filtered.length === 1) {
+              e.preventDefault();
+              handleSelect(filtered[0]);
+            }
+          }}
+        />
+      )}
+      {isOpen && (
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-gray-500">
+              Sin resultados
+            </div>
+          ) : (
+            filtered.map((supplier) => (
+              <button
+                key={supplier}
+                type="button"
+                onClick={() => handleSelect(supplier)}
+                className={`w-full px-3 py-2 text-left text-sm hover:bg-blue-50 transition-colors ${
+                  supplier === value ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-900"
+                }`}
+              >
+                {supplier}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) {
   const [currentUser, setCurrentUser] = useState<{name: string, email: string} | null>(null);
   const [availableStores, setAvailableStores] = useState<string[]>([]);
@@ -32,7 +155,6 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
   const [formData, setFormData] = useState({
     applicant_name: "",
     store_name: "",
-    store_custom: "",
     justification: "",
     currency: "MXN",
     retention: "",
@@ -60,19 +182,15 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
         }
 
         // Obtener almacenes y proveedores disponibles
-        const botResponse = await fetch('/api/v1/bot', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: 'init' })
-        });
+        const storesResponse = await fetch('/api/v1/stores-suppliers');
 
-        if (botResponse.ok) {
-          const botData = await botResponse.json();
-          if (botData.availableStores && Array.isArray(botData.availableStores)) {
-            setAvailableStores(botData.availableStores.map((store: { name: string }) => store.name));
+        if (storesResponse.ok) {
+          const data = await storesResponse.json();
+          if (data.stores && Array.isArray(data.stores)) {
+            setAvailableStores(data.stores.map((store: { name: string }) => store.name));
           }
-          if (botData.availableSuppliers && Array.isArray(botData.availableSuppliers)) {
-            setAvailableSuppliers(botData.availableSuppliers.map((supplier: { commercial_name: string }) => supplier.commercial_name));
+          if (data.suppliers && Array.isArray(data.suppliers)) {
+            setAvailableSuppliers(data.suppliers.map((supplier: { commercial_name: string }) => supplier.commercial_name));
           }
         }
       } catch {
@@ -139,17 +257,14 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     setError(null);
     setSuccess(false);
 
-    // Determinar el nombre del almacén (si es custom o seleccionado)
-    const storeName = formData.store_name === "custom" ? formData.store_custom : formData.store_name;
-
     // Validación básica
-    if (!formData.applicant_name || !storeName) {
+    if (!formData.applicant_name || !formData.store_name) {
       setError("Por favor completa todos los campos requeridos");
       return;
     }
 
     const validItems = items.filter(
-      (item) => item.nombre && item.cantidad && item.unidad && item.precioUnitario && item.proveedor && item.proveedor !== "custom"
+      (item) => item.nombre && item.cantidad && item.unidad && item.precioUnitario && item.proveedor
     );
 
     if (validItems.length === 0) {
@@ -170,7 +285,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     // Preparar datos para el endpoint - cada item ya tiene su proveedor
     const orderData = {
       applicant_name: formData.applicant_name,
-      store_name: storeName,
+      store_name: formData.store_name,
       justification: formData.justification,
       currency: formData.currency,
       retention: formData.retention || '',
@@ -212,7 +327,6 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
       setFormData({
         applicant_name: currentUser?.name || "",
         store_name: "",
-        store_custom: "",
         justification: "",
         currency: "MXN",
         retention: "",
@@ -287,19 +401,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
               {availableStores.map((store) => (
                 <option key={store} value={store}>{store}</option>
               ))}
-              <option value="custom">✏️ Otro (personalizado)</option>
             </select>
-            {formData.store_name === "custom" && (
-              <input
-                type="text"
-                name="store_custom"
-                value={formData.store_custom || ""}
-                onChange={handleInputChange}
-                className="w-full mt-2 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-                placeholder="Escribe el nombre del almacén u obra"
-                required
-              />
-            )}
           </div>
         </div>
       </div>
@@ -353,25 +455,11 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                   <label className="block text-xs font-medium text-gray-600 mb-1">
                     Proveedor <span className="text-red-500">*</span>
                   </label>
-                  <select
+                  <SearchableSupplierSelect
                     value={item.proveedor}
-                    onChange={(e) => handleItemChange(item.id, "proveedor", e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900"
-                  >
-                    <option value="">Selecciona proveedor</option>
-                    {availableSuppliers.map((supplier) => (
-                      <option key={supplier} value={supplier}>{supplier}</option>
-                    ))}
-                    <option value="custom">✏️ Otro (personalizado)</option>
-                  </select>
-                  {item.proveedor === "custom" && (
-                    <input
-                      type="text"
-                      placeholder="Nombre del proveedor"
-                      onChange={(e) => handleItemChange(item.id, "proveedor", e.target.value || "custom")}
-                      className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900"
-                    />
-                  )}
+                    suppliers={availableSuppliers}
+                    onChange={(val) => handleItemChange(item.id, "proveedor", val)}
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -427,7 +515,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
               {item.cantidad && item.precioUnitario && (
                 <div className="mt-3 pt-3 border-t border-gray-300 flex justify-between items-center">
                   <span className="text-sm text-gray-600">
-                    {item.proveedor && item.proveedor !== "custom" && (
+                    {item.proveedor && (
                       <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded mr-2">
                         {item.proveedor}
                       </span>
@@ -572,7 +660,6 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
             setFormData({
               applicant_name: currentUser?.name || "",
               store_name: "",
-              store_custom: "",
               justification: "",
               currency: "MXN",
               retention: "",
