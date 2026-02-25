@@ -419,19 +419,7 @@ export default function Chatbot({ onFormDataExtracted, onOrderCreated }: Chatbot
         </div>
       )}
 
-      {/* Datos extraídos (solo para desarrollo - puedes ocultarlo) */}
-      {Object.values(extractedData).some(v => v) && (
-        <div className="border-t p-4 bg-gray-50">
-          <details className="text-xs">
-            <summary className="cursor-pointer font-semibold text-gray-700 mb-2">
-              Información extraída (Debug)
-            </summary>
-            <pre className="text-gray-600 overflow-auto">
-              {JSON.stringify(extractedData, null, 2)}
-            </pre>
-          </details>
-        </div>
-      )}
+
     </div>
   );
 }
