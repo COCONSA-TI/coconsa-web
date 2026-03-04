@@ -21,6 +21,8 @@ export async function GET() {
         id, 
         email, 
         full_name,
+        is_department_head,
+        department_id,
         roles (
           name
         )
@@ -44,7 +46,9 @@ export async function GET() {
         id: userData.id,
         email: userData.email,
         full_name: userData.full_name,
-        role: roleName
+        role: roleName,
+        is_department_head: userData.is_department_head || false,
+        department_id: userData.department_id || null,
       }
     });
   } catch (error) {

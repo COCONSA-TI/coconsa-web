@@ -11,7 +11,6 @@ interface Item {
   cantidad: string;
   unidad: string;
   precioUnitario: string;
-  proveedor: string;
 }
 
 interface OrderDetail {
@@ -27,6 +26,11 @@ interface OrderDetail {
   justification: string;
   justification_prove: string | null;
   retention: number | null;
+  payment_type: string | null;
+  tax_type: string | null;
+  iva_percentage: number | null;
+  iva: number | null;
+  subtotal: number | null;
   items: {
     id: string;
     name: string;
@@ -178,13 +182,17 @@ export default function EditarOrdenPage() {
 
   const [formData, setFormData] = useState({
     store_name: "",
+    supplier_name: "",
     justification: "",
     currency: "MXN",
     retention: "",
+    payment_type: "",
+    tax_type: "sin_iva",
+    iva_percentage: 16,
   });
 
   const [items, setItems] = useState<Item[]>([
-    { id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "", proveedor: "" },
+    { id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "" },
   ]);
 
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
@@ -235,9 +243,13 @@ export default function EditarOrdenPage() {
         // Pre-llenar el formulario con datos existentes
         setFormData({
           store_name: order.store_name || "",
+          supplier_name: order.supplier_name || "",
           justification: order.justification || "",
           currency: order.currency || "MXN",
           retention: order.retention?.toString() || "",
+          payment_type: order.payment_type || "",
+          tax_type: order.tax_type || "sin_iva",
+          iva_percentage: order.iva_percentage || 16,
         });
 
         // Pre-llenar items
@@ -248,7 +260,6 @@ export default function EditarOrdenPage() {
             cantidad: item.quantity.toString(),
             unidad: item.unit,
             precioUnitario: item.unit_price.toString(),
-            proveedor: item.supplier_name || order.supplier_name,
           }));
           setItems(mappedItems);
         }
@@ -278,7 +289,7 @@ export default function EditarOrdenPage() {
     const newId = (Math.max(...items.map((i) => parseInt(i.id))) + 1).toString();
     setItems((prev) => [
       ...prev,
-      { id: newId, nombre: "", cantidad: "", unidad: "pza", precioUnitario: "", proveedor: "" },
+      { id: newId, nombre: "", cantidad: "", unidad: "pza", precioUnitario: "" },
     ]);
   };
 
@@ -294,6 +305,16 @@ export default function EditarOrdenPage() {
       const precio = parseFloat(item.precioUnitario) || 0;
       return total + cantidad * precio;
     }, 0);
+  };
+
+  const calculateIva = () => {
+    if (formData.tax_type !== 'con_iva') return 0;
+    const subtotal = calculateTotal();
+    return subtotal * (formData.iva_percentage / 100);
+  };
+
+  const calculateGrandTotal = () => {
+    return calculateTotal() + calculateIva();
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -334,12 +355,21 @@ export default function EditarOrdenPage() {
         item.nombre &&
         item.cantidad &&
         item.unidad &&
-        item.precioUnitario &&
-        item.proveedor
+        item.precioUnitario
     );
 
     if (validItems.length === 0) {
-      setError("Debes agregar al menos un artículo válido con su proveedor");
+      setError("Debes agregar al menos un artículo válido");
+      return;
+    }
+
+    if (!formData.supplier_name) {
+      setError("Debes seleccionar un proveedor");
+      return;
+    }
+
+    if (!formData.payment_type) {
+      setError("Debes seleccionar un tipo de pago");
       return;
     }
 
@@ -357,15 +387,19 @@ export default function EditarOrdenPage() {
     // Preparar datos
     const orderData = {
       store_name: formData.store_name,
+      supplier_name: formData.supplier_name,
       justification: formData.justification,
       currency: formData.currency,
-      retention: formData.retention || "",
+      retention: formData.tax_type === 'retencion' ? formData.retention : '',
+      payment_type: formData.payment_type,
+      tax_type: formData.tax_type,
+      iva_percentage: formData.tax_type === 'con_iva' ? formData.iva_percentage : 0,
       items: validItems.map((item) => ({
         nombre: item.nombre,
         cantidad: parseFloat(item.cantidad),
         unidad: item.unidad,
         precioUnitario: parseFloat(item.precioUnitario),
-        proveedor: item.proveedor,
+        proveedor: formData.supplier_name,
         precioTotal: parseFloat(item.cantidad) * parseFloat(item.precioUnitario),
       })),
     };
@@ -494,10 +528,10 @@ export default function EditarOrdenPage() {
           </div>
         )}
 
-        {/* Información del Solicitante */}
+        {/* Información General */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Información del Solicitante</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Información General</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Solicitante</label>
               <input
@@ -526,6 +560,17 @@ export default function EditarOrdenPage() {
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Proveedor <span className="text-red-500">*</span>
+              </label>
+              <SearchableSupplierSelect
+                value={formData.supplier_name}
+                suppliers={availableSuppliers}
+                onChange={(val) => setFormData((prev) => ({ ...prev, supplier_name: val }))}
+                focusColor="red"
+              />
             </div>
           </div>
         </div>
@@ -558,7 +603,7 @@ export default function EditarOrdenPage() {
                     </button>
                   )}
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div className="md:col-span-2">
                     <label className="block text-xs font-medium text-gray-600 mb-1">
                       Nombre del Artículo
@@ -569,17 +614,6 @@ export default function EditarOrdenPage() {
                       onChange={(e) => handleItemChange(item.id, "nombre", e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm text-gray-900"
                       placeholder="Ej: Cemento gris 50kg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Proveedor <span className="text-red-500">*</span>
-                    </label>
-                    <SearchableSupplierSelect
-                      value={item.proveedor}
-                      suppliers={availableSuppliers}
-                      onChange={(val) => handleItemChange(item.id, "proveedor", val)}
-                      focusColor="red"
                     />
                   </div>
                   <div>
@@ -628,14 +662,7 @@ export default function EditarOrdenPage() {
                   </div>
                 </div>
                 {item.cantidad && item.precioUnitario && (
-                  <div className="mt-3 pt-3 border-t border-gray-300 flex justify-between items-center">
-                    <span className="text-sm text-gray-600">
-                      {item.proveedor && (
-                        <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded mr-2">
-                          {item.proveedor}
-                        </span>
-                      )}
-                    </span>
+                  <div className="mt-3 pt-3 border-t border-gray-300 flex justify-end items-center">
                     <div className="text-sm text-gray-600">
                       <span className="font-semibold">Subtotal: </span>
                       {formData.currency} $
@@ -647,13 +674,29 @@ export default function EditarOrdenPage() {
             ))}
           </div>
 
-          {/* Total */}
+          {/* Totales */}
           <div className="mt-4 pt-4 border-t border-gray-300">
-            <div className="flex justify-between items-center">
-              <span className="text-lg font-bold text-gray-900">Total General:</span>
-              <span className="text-2xl font-bold text-red-600">
-                {formData.currency} ${calculateTotal().toFixed(2)}
-              </span>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Subtotal:</span>
+                <span className="text-sm font-medium text-gray-900">
+                  {formData.currency} ${calculateTotal().toFixed(2)}
+                </span>
+              </div>
+              {formData.tax_type === 'con_iva' && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-600">IVA ({formData.iva_percentage}%):</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    {formData.currency} ${calculateIva().toFixed(2)}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                <span className="text-lg font-bold text-gray-900">Total General:</span>
+                <span className="text-2xl font-bold text-red-600">
+                  {formData.currency} ${calculateGrandTotal().toFixed(2)}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -832,17 +875,69 @@ export default function EditarOrdenPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Impuestos/Retenciones
+                  Tipo de Pago <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="text"
-                  name="retention"
-                  value={formData.retention}
+                <select
+                  name="payment_type"
+                  value={formData.payment_type}
                   onChange={handleInputChange}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
-                  placeholder="Ej: IVA 16%"
-                />
+                  required
+                >
+                  <option value="">Selecciona tipo de pago</option>
+                  <option value="credito">Credito</option>
+                  <option value="de_contado">De Contado</option>
+                </select>
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Impuestos / Retenciones
+                </label>
+                <select
+                  name="tax_type"
+                  value={formData.tax_type}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
+                >
+                  <option value="sin_iva">Sin IVA</option>
+                  <option value="con_iva">Con IVA</option>
+                  <option value="retencion">Retencion</option>
+                </select>
+              </div>
+              {formData.tax_type === 'con_iva' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Porcentaje de IVA
+                  </label>
+                  <select
+                    name="iva_percentage"
+                    value={formData.iva_percentage}
+                    onChange={(e) => setFormData(prev => ({ ...prev, iva_percentage: parseInt(e.target.value) }))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
+                  >
+                    <option value={16}>16%</option>
+                    <option value={8}>8%</option>
+                  </select>
+                </div>
+              )}
+              {formData.tax_type === 'retencion' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Especificar Retencion
+                  </label>
+                  <input
+                    type="text"
+                    name="retention"
+                    value={formData.retention}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
+                    placeholder="Ej: 4% ISR, 6% IVA retenido"
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>

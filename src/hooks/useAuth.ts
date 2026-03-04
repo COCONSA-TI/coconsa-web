@@ -9,6 +9,8 @@ interface User {
   email: string;
   full_name?: string;
   role?: string;
+  is_department_head?: boolean;
+  department_id?: string | null;
 }
 
 interface UseAuthReturn {
@@ -16,6 +18,7 @@ interface UseAuthReturn {
   loading: boolean;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  isDepartmentHead: boolean;
   hasPermission: (resource: keyof typeof PERMISSIONS, action: string) => boolean;
   logout: () => Promise<void>;
   refetch: () => Promise<void>;
@@ -88,6 +91,7 @@ export function useAuth(options?: { redirectTo?: string; requireAuth?: boolean }
     loading,
     isAuthenticated: !!user,
     isAdmin: isAdmin(user?.role),
+    isDepartmentHead: user?.is_department_head || false,
     hasPermission: checkPermission,
     logout,
     refetch: fetchUser,

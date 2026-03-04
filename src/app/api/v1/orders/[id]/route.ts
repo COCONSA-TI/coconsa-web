@@ -25,11 +25,18 @@ type DBOrderDetail = {
   justification: string;
   justification_prove: string | null;
   retention: number | null;
+  payment_type: string | null;
+  tax_type: string | null;
+  iva_percentage: number | null;
+  iva: number | null;
+  subtotal: number | null;
   items: string;
+  is_urgent: boolean;
+  urgency_justification: string | null;
 };
 
 // Función para recrear aprobaciones
-async function recreateOrderApprovals(orderId: string, applicantId: string) {
+async function recreateOrderApprovals(orderId: string, applicantId: string, isUrgent: boolean = false) {
   // Eliminar aprobaciones existentes
   await supabaseAdmin
     .from('order_approvals')
@@ -64,32 +71,49 @@ async function recreateOrderApprovals(orderId: string, applicantId: string) {
   // Crear aprobaciones para cada departamento
   const approvalsToCreate = [];
 
-  // 1. Aprobación del departamento del solicitante
-  const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
-  if (applicantDept) {
-    approvalsToCreate.push({
-      order_id: orderId,
-      department_id: applicantDept.id,
-      status: isApplicantDeptHead ? 'approved' : 'pending',
-      approval_order: applicantDept.approval_order,
-      approver_id: isApplicantDeptHead ? applicantId : null,
-      approved_at: isApplicantDeptHead ? new Date().toISOString() : null,
-      comments: isApplicantDeptHead ? 'Auto-aprobado (solicitante es jefe de departamento)' : null,
-    });
-  }
+  if (isUrgent && isApplicantDeptHead) {
+    // ORDEN URGENTE: Solo crear aprobaciones para Dirección (3), Contabilidad (4) y Pagos (5)
+    const urgentDepartments = departments.filter(
+      (d: Department) => d.approval_order && d.approval_order >= 3
+    );
 
-  // 2. Aprobaciones para el resto del flujo
-  const subsequentDepartments = departments.filter(
-    (d: Department) => d.approval_order && d.approval_order > 1
-  );
+    for (const dept of urgentDepartments) {
+      approvalsToCreate.push({
+        order_id: orderId,
+        department_id: dept.id,
+        status: 'pending',
+        approval_order: dept.approval_order,
+      });
+    }
+  } else {
+    // ORDEN NORMAL: Flujo completo
+    // 1. Aprobación del departamento del solicitante
+    const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
+    if (applicantDept) {
+      approvalsToCreate.push({
+        order_id: orderId,
+        department_id: applicantDept.id,
+        status: isApplicantDeptHead ? 'approved' : 'pending',
+        approval_order: applicantDept.approval_order,
+        approver_id: isApplicantDeptHead ? applicantId : null,
+        approved_at: isApplicantDeptHead ? new Date().toISOString() : null,
+        comments: isApplicantDeptHead ? 'Auto-aprobado (solicitante es jefe de departamento)' : null,
+      });
+    }
 
-  for (const dept of subsequentDepartments) {
-    approvalsToCreate.push({
-      order_id: orderId,
-      department_id: dept.id,
-      status: 'pending',
-      approval_order: dept.approval_order,
-    });
+    // 2. Aprobaciones para el resto del flujo
+    const subsequentDepartments = departments.filter(
+      (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== applicantDepartmentId
+    );
+
+    for (const dept of subsequentDepartments) {
+      approvalsToCreate.push({
+        order_id: orderId,
+        department_id: dept.id,
+        status: 'pending',
+        approval_order: dept.approval_order,
+      });
+    }
   }
 
   const { error: insertError } = await supabaseAdmin
@@ -100,7 +124,7 @@ async function recreateOrderApprovals(orderId: string, applicantId: string) {
     throw new Error('Error al crear aprobaciones: ' + insertError.message);
   }
 
-  return isApplicantDeptHead;
+  return isApplicantDeptHead || isUrgent;
 }
 
 export async function GET(
@@ -118,7 +142,7 @@ export async function GET(
     // Obtener detalles de la orden
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
-      .select('id, created_at, store_id, supplier_id, total, currency, status, applicant_id, justification, justification_prove, retention, items')
+      .select('id, created_at, store_id, supplier_id, total, currency, status, applicant_id, justification, justification_prove, retention, payment_type, tax_type, iva_percentage, iva, subtotal, items, is_urgent, urgency_justification')
       .eq('id', orderId)
       .single();
 
@@ -195,6 +219,13 @@ export async function GET(
       justification: typedOrder.justification,
       justification_prove: typedOrder.justification_prove,
       retention: typedOrder.retention,
+      payment_type: typedOrder.payment_type,
+      tax_type: typedOrder.tax_type,
+      iva_percentage: typedOrder.iva_percentage,
+      iva: typedOrder.iva,
+      subtotal: typedOrder.subtotal,
+      is_urgent: typedOrder.is_urgent || false,
+      urgency_justification: typedOrder.urgency_justification,
       items: itemsArray.map((item, index: number) => ({
         id: `${typedOrder.id}-${index}`,
         name: item.nombre || 'N/A',
@@ -238,7 +269,7 @@ export async function PUT(
     // Obtener la orden actual
     const { data: existingOrder, error: orderError } = await supabaseAdmin
       .from('orders')
-      .select('id, status, applicant_id')
+      .select('id, status, applicant_id, is_urgent')
       .eq('id', orderId)
       .single();
 
@@ -274,6 +305,9 @@ export async function PUT(
       store_name?: string;
       currency?: string;
       retention?: string;
+      payment_type?: string;
+      tax_type?: string;
+      iva_percentage?: number;
     };
     let evidenceFiles: File[] = [];
 
@@ -296,7 +330,7 @@ export async function PUT(
       body = await request.json();
     }
 
-    const { items, justification, store_name, currency = 'MXN', retention } = body;
+    const { items, justification, store_name, currency = 'MXN', retention, payment_type, tax_type, iva_percentage } = body;
 
     // Validaciones
     if (!items || items.length === 0) {
@@ -363,7 +397,9 @@ export async function PUT(
       return sum + (cantidad * precio);
     }, 0);
 
-    const iva = subtotal * 0.16;
+    // Calcular IVA solo si tax_type es 'con_iva'
+    const effectiveIvaPercentage = tax_type === 'con_iva' ? (iva_percentage || 16) : 0;
+    const iva = tax_type === 'con_iva' ? subtotal * (effectiveIvaPercentage / 100) : 0;
     const total = subtotal + iva;
     const totalQuantity = items.reduce((sum: number, item: OrderItem) => 
       sum + parseFloat(String(item.cantidad)), 0
@@ -389,6 +425,9 @@ export async function PUT(
       iva: iva,
       total: total,
       currency: currency,
+      payment_type: payment_type || '',
+      tax_type: tax_type || 'sin_iva',
+      iva_percentage: effectiveIvaPercentage || null,
       status: 'PENDIENTE', // Cambiar estado a pendiente
       updated_at: new Date().toISOString(),
     };
@@ -462,7 +501,7 @@ export async function PUT(
 
     // Recrear el flujo de aprobaciones
     try {
-      const isAutoApproved = await recreateOrderApprovals(orderId, existingOrder.applicant_id);
+      const isAutoApproved = await recreateOrderApprovals(orderId, existingOrder.applicant_id, existingOrder.is_urgent || false);
       
       // Si se auto-aprobó el primer nivel, actualizar estado
       if (isAutoApproved) {

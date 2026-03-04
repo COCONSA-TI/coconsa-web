@@ -46,6 +46,9 @@ export default function OrdenDeCompra() {
     justification: '',
     currency: 'MXN',
     retention: '',
+      payment_type: '' as '' | 'credito' | 'de_contado',
+    tax_type: 'sin_iva' as 'sin_iva' | 'con_iva' | 'retencion',
+    iva_percentage: 16 as 8 | 16,
     status: 'PENDIENTE',
   });
 
@@ -110,14 +113,17 @@ export default function OrdenDeCompra() {
     }
   };
 
-  // Calcular totales cuando cambien los items
+  // Calcular totales cuando cambien los items o el tipo de impuesto
   useEffect(() => {
     const subtotal = items.reduce((acc, item) => acc + (item.precioTotal || 0), 0);
-    const iva = subtotal * 0.16;
+    let iva = 0;
+    if (formData.tax_type === 'con_iva') {
+      iva = subtotal * (formData.iva_percentage / 100);
+    }
     const total = subtotal + iva;
     
     setTotales({ subtotal, iva, total });
-  }, [items]);
+  }, [items, formData.tax_type, formData.iva_percentage]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -173,6 +179,10 @@ export default function OrdenDeCompra() {
       alert('Por favor selecciona un proveedor');
       return;
     }
+    if (!formData.payment_type) {
+      alert('Por favor selecciona un tipo de pago');
+      return;
+    }
     if (items.some(item => !item.nombre || !item.cantidad || !item.unidad)) {
       alert('Por favor completa todos los campos de los artículos');
       return;
@@ -197,7 +207,10 @@ export default function OrdenDeCompra() {
         total: totales.total,
         currency: formData.currency,
         justification: formData.justification,
-        retention: formData.retention,
+        retention: formData.tax_type === 'retencion' ? formData.retention : '',
+        payment_type: formData.payment_type,
+        tax_type: formData.tax_type,
+        iva_percentage: formData.tax_type === 'con_iva' ? formData.iva_percentage : null,
         status: formData.status,
       };
 
@@ -229,6 +242,9 @@ export default function OrdenDeCompra() {
       justification: '',
       currency: 'MXN',
       retention: '',
+    payment_type: '' as '' | 'credito' | 'de_contado',
+      tax_type: 'sin_iva' as 'sin_iva' | 'con_iva' | 'retencion',
+      iva_percentage: 16 as 8 | 16,
       status: 'PENDIENTE',
     });
     setItems([{ nombre: '', cantidad: '', unidad: '', precioUnitario: 0, precioTotal: 0 }]);
@@ -488,17 +504,81 @@ export default function OrdenDeCompra() {
                 />
                 
                 <label htmlFor="retention" className="font-bold mb-1 text-sm mt-3">
-                  Retencion / Impuestos
+                  Tipo de Pago *
                 </label>
-                <input
-                  type="text"
-                  id="retention"
-                  name="retention"
-                  value={formData.retention}
+                <select
+                  id="payment_type"
+                  name="payment_type"
+                  value={formData.payment_type}
+                  onChange={handleInputChange}
+                  required
+                  className="p-2 border border-gray-300 rounded w-full"
+                >
+                  <option value="">Seleccionar...</option>
+                  <option value="credito">Crédito</option>
+                  <option value="de_contado">De Contado</option>
+                </select>
+
+                <label className="font-bold mb-1 text-sm mt-3">
+                  Impuestos *
+                </label>
+                <select
+                  name="tax_type"
+                  value={formData.tax_type}
                   onChange={handleInputChange}
                   className="p-2 border border-gray-300 rounded w-full"
-                  placeholder="Ej: 4% ISR"
-                />
+                >
+                  <option value="sin_iva">Sin IVA</option>
+                  <option value="con_iva">Con IVA</option>
+                  <option value="retencion">Retención</option>
+                </select>
+
+                {formData.tax_type === 'con_iva' && (
+                  <div className="mt-2">
+                    <label className="font-bold mb-1 text-sm">Porcentaje IVA</label>
+                    <div className="flex gap-4 mt-1">
+                      <label className="inline-flex items-center">
+                        <input
+                          type="radio"
+                          name="iva_percentage"
+                          value="8"
+                          checked={formData.iva_percentage === 8}
+                          onChange={() => setFormData(prev => ({ ...prev, iva_percentage: 8 }))}
+                          className="mr-2"
+                        />
+                        8%
+                      </label>
+                      <label className="inline-flex items-center">
+                        <input
+                          type="radio"
+                          name="iva_percentage"
+                          value="16"
+                          checked={formData.iva_percentage === 16}
+                          onChange={() => setFormData(prev => ({ ...prev, iva_percentage: 16 }))}
+                          className="mr-2"
+                        />
+                        16%
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {formData.tax_type === 'retencion' && (
+                  <div className="mt-2">
+                    <label htmlFor="retention" className="font-bold mb-1 text-sm">
+                      Detalle de Retención
+                    </label>
+                    <input
+                      type="text"
+                      id="retention"
+                      name="retention"
+                      value={formData.retention}
+                      onChange={handleInputChange}
+                      className="p-2 border border-gray-300 rounded w-full"
+                      placeholder="Ej: 4% ISR"
+                    />
+                  </div>
+                )}
               </div>
 
               <div>
@@ -539,7 +619,9 @@ export default function OrdenDeCompra() {
                     </span>
                   </div>
                   <div className="flex justify-between items-center mb-2">
-                    <label className="font-bold text-sm">16% IVA:</label>
+                    <label className="font-bold text-sm">
+                      {formData.tax_type === 'con_iva' ? `${formData.iva_percentage}% IVA:` : 'IVA:'}
+                    </label>
                     <span className="text-lg font-semibold">
                       ${totales.iva.toFixed(2)} {formData.currency}
                     </span>

@@ -8,15 +8,18 @@ interface Item {
   cantidad: string;
   unidad: string;
   precioUnitario: string;
-  proveedor: string;
 }
 
 interface OrderData {
   applicant_name: string;
   store_name: string;
+  supplier_name: string;
   justification: string;
   currency: string;
   retention: string;
+  payment_type: string;
+  tax_type: string;
+  iva_percentage: number;
   items: Item[];
   total: number;
 }
@@ -149,19 +152,25 @@ function SearchableSupplierSelect({
 }
 
 export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) {
-  const [currentUser, setCurrentUser] = useState<{name: string, email: string} | null>(null);
+  const [currentUser, setCurrentUser] = useState<{name: string, email: string, isDepartmentHead: boolean} | null>(null);
   const [availableStores, setAvailableStores] = useState<string[]>([]);
   const [availableSuppliers, setAvailableSuppliers] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     applicant_name: "",
     store_name: "",
+    supplier_name: "",
     justification: "",
     currency: "MXN",
     retention: "",
+    payment_type: "",
+    tax_type: "sin_iva",
+    iva_percentage: 16,
+    is_urgent: false,
+    urgency_justification: "",
   });
 
   const [items, setItems] = useState<Item[]>([
-    { id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "", proveedor: "" },
+    { id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "" },
   ]);
 
   const [loading, setLoading] = useState(false);
@@ -177,7 +186,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
         const userResponse = await fetch('/api/v1/me');
         if (userResponse.ok) {
           const userData = await userResponse.json();
-          setCurrentUser({ name: userData.user.full_name, email: userData.user.email });
+          setCurrentUser({ name: userData.user.full_name, email: userData.user.email, isDepartmentHead: userData.user.is_department_head || false });
           setFormData(prev => ({ ...prev, applicant_name: userData.user.full_name }));
         }
 
@@ -215,7 +224,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     const newId = (Math.max(...items.map((i) => parseInt(i.id))) + 1).toString();
     setItems((prev) => [
       ...prev,
-      { id: newId, nombre: "", cantidad: "", unidad: "pza", precioUnitario: "", proveedor: "" },
+      { id: newId, nombre: "", cantidad: "", unidad: "pza", precioUnitario: "" },
     ]);
   };
 
@@ -226,11 +235,22 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
   };
 
   const calculateTotal = () => {
-    return items.reduce((total, item) => {
+    const subtotal = items.reduce((total, item) => {
       const cantidad = parseFloat(item.cantidad) || 0;
       const precio = parseFloat(item.precioUnitario) || 0;
       return total + cantidad * precio;
     }, 0);
+    return subtotal;
+  };
+
+  const calculateIva = () => {
+    if (formData.tax_type !== 'con_iva') return 0;
+    const subtotal = calculateTotal();
+    return subtotal * (formData.iva_percentage / 100);
+  };
+
+  const calculateGrandTotal = () => {
+    return calculateTotal() + calculateIva();
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -264,16 +284,31 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     }
 
     const validItems = items.filter(
-      (item) => item.nombre && item.cantidad && item.unidad && item.precioUnitario && item.proveedor
+      (item) => item.nombre && item.cantidad && item.unidad && item.precioUnitario
     );
 
     if (validItems.length === 0) {
-      setError("Debes agregar al menos un artículo válido con su proveedor");
+      setError("Debes agregar al menos un artículo válido");
+      return;
+    }
+
+    if (!formData.supplier_name) {
+      setError("Debes seleccionar un proveedor");
+      return;
+    }
+
+    if (!formData.payment_type) {
+      setError("Debes seleccionar un tipo de pago");
       return;
     }
 
     if (!formData.justification || formData.justification.length < 10) {
       setError("La justificación debe tener al menos 10 caracteres");
+      return;
+    }
+
+    if (formData.is_urgent && (!formData.urgency_justification || formData.urgency_justification.trim().length < 10)) {
+      setError("La justificación de urgencia debe tener al menos 10 caracteres");
       return;
     }
 
@@ -286,15 +321,21 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     const orderData = {
       applicant_name: formData.applicant_name,
       store_name: formData.store_name,
+      supplier_name: formData.supplier_name,
       justification: formData.justification,
       currency: formData.currency,
-      retention: formData.retention || '',
+      retention: formData.tax_type === 'retencion' ? formData.retention : '',
+      payment_type: formData.payment_type,
+      tax_type: formData.tax_type,
+      iva_percentage: formData.tax_type === 'con_iva' ? formData.iva_percentage : 0,
+      is_urgent: formData.is_urgent,
+      urgency_justification: formData.is_urgent ? formData.urgency_justification : '',
       items: validItems.map((item) => ({
         nombre: item.nombre,
         cantidad: parseFloat(item.cantidad),
         unidad: item.unidad,
         precioUnitario: parseFloat(item.precioUnitario),
-        proveedor: item.proveedor,
+        proveedor: formData.supplier_name,
         precioTotal: parseFloat(item.cantidad) * parseFloat(item.precioUnitario),
       })),
     };
@@ -327,11 +368,17 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
       setFormData({
         applicant_name: currentUser?.name || "",
         store_name: "",
+        supplier_name: "",
         justification: "",
         currency: "MXN",
         retention: "",
+        payment_type: "",
+        tax_type: "sin_iva",
+        iva_percentage: 16,
+        is_urgent: false,
+        urgency_justification: "",
       });
-      setItems([{ id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "", proveedor: "" }]);
+      setItems([{ id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "" }]);
       setEvidenceFiles([]);
 
       if (onSubmit) {
@@ -364,12 +411,12 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
         </div>
       )}
 
-      {/* Información del Solicitante */}
+      {/* Información General */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Información del Solicitante
+          Información General
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Nombre del Solicitante <span className="text-red-500">*</span>
@@ -403,8 +450,70 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
               ))}
             </select>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Proveedor <span className="text-red-500">*</span>
+            </label>
+            <SearchableSupplierSelect
+              value={formData.supplier_name}
+              suppliers={availableSuppliers}
+              onChange={(val) => setFormData((prev) => ({ ...prev, supplier_name: val }))}
+            />
+          </div>
         </div>
       </div>
+
+      {/* Orden Urgente - Solo visible para jefes de departamento */}
+      {currentUser?.isDepartmentHead && (
+        <div className={`p-6 rounded-lg shadow-sm border ${formData.is_urgent ? 'bg-orange-50 border-orange-300' : 'bg-white border-gray-200'} transition-colors`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${formData.is_urgent ? 'bg-orange-500' : 'bg-gray-200'} transition-colors`}>
+                <svg className={`w-5 h-5 ${formData.is_urgent ? 'text-white' : 'text-gray-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Orden Urgente</h3>
+                <p className="text-sm text-gray-500">
+                  Salta las aprobaciones de Gerencia y Contraloria (va directo a Direccion)
+                </p>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.is_urgent}
+                onChange={(e) => setFormData(prev => ({ ...prev, is_urgent: e.target.checked }))}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500"></div>
+            </label>
+          </div>
+
+          {formData.is_urgent && (
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-orange-800 mb-2">
+                Justificacion de Urgencia <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                name="urgency_justification"
+                value={formData.urgency_justification}
+                onChange={handleInputChange}
+                rows={2}
+                className="w-full px-4 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-gray-900 bg-white"
+                placeholder="Explica por que esta orden requiere tratamiento urgente (min. 10 caracteres)..."
+                required
+              />
+              {formData.urgency_justification.length > 0 && formData.urgency_justification.length < 10 && (
+                <p className="text-xs text-orange-600 mt-1">
+                  Minimo 10 caracteres ({formData.urgency_justification.length}/10)
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Artículos */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
@@ -438,7 +547,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                   </button>
                 )}
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-2">
                   <label className="block text-xs font-medium text-gray-600 mb-1">
                     Nombre del Artículo
@@ -449,16 +558,6 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                     onChange={(e) => handleItemChange(item.id, "nombre", e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900"
                     placeholder="Ej: Cemento gris 50kg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Proveedor <span className="text-red-500">*</span>
-                  </label>
-                  <SearchableSupplierSelect
-                    value={item.proveedor}
-                    suppliers={availableSuppliers}
-                    onChange={(val) => handleItemChange(item.id, "proveedor", val)}
                   />
                 </div>
                 <div>
@@ -513,14 +612,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                 </div>
               </div>
               {item.cantidad && item.precioUnitario && (
-                <div className="mt-3 pt-3 border-t border-gray-300 flex justify-between items-center">
-                  <span className="text-sm text-gray-600">
-                    {item.proveedor && (
-                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded mr-2">
-                        {item.proveedor}
-                      </span>
-                    )}
-                  </span>
+                <div className="mt-3 pt-3 border-t border-gray-300 flex justify-end items-center">
                   <div className="text-sm text-gray-600">
                     <span className="font-semibold">Subtotal: </span>
                     {formData.currency} ${(parseFloat(item.cantidad) * parseFloat(item.precioUnitario)).toFixed(2)}
@@ -531,13 +623,29 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
           ))}
         </div>
 
-        {/* Total */}
+        {/* Totales */}
         <div className="mt-4 pt-4 border-t border-gray-300">
-          <div className="flex justify-between items-center">
-            <span className="text-lg font-bold text-gray-900">Total General:</span>
-            <span className="text-2xl font-bold text-blue-600">
-              {formData.currency} ${calculateTotal().toFixed(2)}
-            </span>
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-600">Subtotal:</span>
+              <span className="text-sm font-medium text-gray-900">
+                {formData.currency} ${calculateTotal().toFixed(2)}
+              </span>
+            </div>
+            {formData.tax_type === 'con_iva' && (
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">IVA ({formData.iva_percentage}%):</span>
+                <span className="text-sm font-medium text-gray-900">
+                  {formData.currency} ${calculateIva().toFixed(2)}
+                </span>
+              </div>
+            )}
+            <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+              <span className="text-lg font-bold text-gray-900">Total General:</span>
+              <span className="text-2xl font-bold text-blue-600">
+                {formData.currency} ${calculateGrandTotal().toFixed(2)}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -632,22 +740,74 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
               >
                 <option value="MXN">MXN - Pesos Mexicanos</option>
-                <option value="USD">USD - Dólares</option>
+                <option value="USD">USD - Dolares</option>
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Impuestos / Retenciones
+                Tipo de Pago <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
-                name="retention"
-                value={formData.retention}
+              <select
+                name="payment_type"
+                value={formData.payment_type}
                 onChange={handleInputChange}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-                placeholder="Ej: IVA 16%"
-              />
+                required
+              >
+                <option value="">Selecciona tipo de pago</option>
+                <option value="credito">Credito</option>
+                <option value="de_contado">De Contado</option>
+              </select>
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Impuestos / Retenciones
+              </label>
+              <select
+                name="tax_type"
+                value={formData.tax_type}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+              >
+                <option value="sin_iva">Sin IVA</option>
+                <option value="con_iva">Con IVA</option>
+                <option value="retencion">Retencion</option>
+              </select>
+            </div>
+            {formData.tax_type === 'con_iva' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Porcentaje de IVA
+                </label>
+                <select
+                  name="iva_percentage"
+                  value={formData.iva_percentage}
+                  onChange={(e) => setFormData(prev => ({ ...prev, iva_percentage: parseInt(e.target.value) }))}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                >
+                  <option value={16}>16%</option>
+                  <option value={8}>8%</option>
+                </select>
+              </div>
+            )}
+            {formData.tax_type === 'retencion' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Especificar Retencion
+                </label>
+                <input
+                  type="text"
+                  name="retention"
+                  value={formData.retention}
+                  onChange={handleInputChange}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                  placeholder="Ej: 4% ISR, 6% IVA retenido"
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -660,11 +820,17 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
             setFormData({
               applicant_name: currentUser?.name || "",
               store_name: "",
+              supplier_name: "",
               justification: "",
               currency: "MXN",
               retention: "",
+              payment_type: "",
+              tax_type: "sin_iva",
+              iva_percentage: 16,
+              is_urgent: false,
+              urgency_justification: "",
             });
-            setItems([{ id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "", proveedor: "" }]);
+            setItems([{ id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "" }]);
             setEvidenceFiles([]);
           }}
           className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
@@ -674,9 +840,18 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
         <button
           type="submit"
           disabled={loading}
-          className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-semibold"
+          className={`px-8 py-3 text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-semibold ${
+            formData.is_urgent
+              ? 'bg-orange-600 hover:bg-orange-700'
+              : 'bg-blue-600 hover:bg-blue-700'
+          }`}
         >
-          {loading ? (uploadingFiles ? "Subiendo archivos..." : "Creando...") : "Crear Orden de Compra"}
+          {loading 
+            ? (uploadingFiles ? "Subiendo archivos..." : "Creando...") 
+            : formData.is_urgent 
+              ? "Crear Orden Urgente"
+              : "Crear Orden de Compra"
+          }
         </button>
       </div>
     </form>

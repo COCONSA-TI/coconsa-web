@@ -27,7 +27,12 @@ DATOS REQUERIDOS PARA UNA ORDEN:
    - Proveedor (de la lista disponible)
 3. **Justificación**: Razón de la compra (ej: obra nueva, mantenimiento, reposición)
 4. **Moneda**: MXN (pesos mexicanos) o USD (dólares)
-5. **Evidencia**: Opcional - el usuario puede adjuntar imágenes o PDFs con el botón de clip (📎)
+5. **Tipo de pago**: Crédito o De Contado
+6. **Impuestos**: Puede ser una de tres opciones:
+   - Sin IVA (no se calcula impuesto)
+   - Con IVA (se debe especificar porcentaje: 8% o 16%)
+   - Retención (se debe especificar el detalle, ej: "4% ISR")
+7. **Evidencia**: Opcional - el usuario puede adjuntar imágenes o PDFs con el botón de clip
 
 REGLAS DE COMPORTAMIENTO:
 1. **MODE ONE-SHOT**: Si el usuario proporciona toda la información de una vez, confirma los datos de forma clara y organizada, mostrando un resumen estructurado.
@@ -55,6 +60,8 @@ Asistente: "¡Perfecto! Para completar tu orden necesito algunos datos adicional
 • Precio unitario de cada artículo
 • Proveedor para cada artículo
 • Moneda (MXN o USD)
+• Tipo de pago (Crédito o De Contado)
+• Impuestos (Sin IVA, Con IVA al 8% o 16%, o Retención)
 • Justificación de la compra
 
 ¿Me puedes proporcionar estos datos?"
@@ -252,7 +259,11 @@ async function extractOrderDataWithAI(
       2. Extrae la lista de artículos (items). Para cada uno: nombre, cantidad (número), unidad, precio unitario (número) y proveedor.
       3. Para el proveedor, intenta coincidir con la lista. Si encuentras coincidencia exacta o muy cercana, incluye el ID.
       4. Extrae la justificación, moneda (MXN/USD) y retención (si existe).
-      5. Determina 'isComplete' como true SOLO SI tienes: almacén, justificación, moneda y AL MENOS un artículo completo (con todos sus campos: nombre, cantidad, unidad, precio, proveedor).
+      5. Extrae el tipo de pago (payment_type): "credito" o "de_contado". Si no se menciona, usa null.
+      6. Extrae el tipo de impuesto (tax_type): "sin_iva", "con_iva", o "retencion". Si no se menciona, usa null.
+      7. Si tax_type es "con_iva", extrae el porcentaje de IVA (iva_percentage): 8 o 16. Si no se especifica, usa 16.
+      8. Si tax_type es "retencion", extrae el detalle de retención en el campo "retention".
+      9. Determina 'isComplete' como true SOLO SI tienes: almacén, justificación, moneda, tipo de pago, tipo de impuesto y AL MENOS un artículo completo (con todos sus campos: nombre, cantidad, unidad, precio, proveedor).
 
       FORMATO JSON ESPERADO:
       {
@@ -271,6 +282,9 @@ async function extractOrderDataWithAI(
         "justification": "Texto o null",
         "currency": "MXN",
         "retention": "Texto o null",
+        "payment_type": "credito o de_contado o null",
+        "tax_type": "sin_iva o con_iva o retencion o null",
+        "iva_percentage": 8 o 16 o null,
         "applicant_name": "${userData.full_name}",
         "applicant_id": "${userData.id}",
         "isComplete": boolean

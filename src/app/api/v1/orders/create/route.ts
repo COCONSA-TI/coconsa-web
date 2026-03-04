@@ -45,7 +45,7 @@ async function uploadEvidenceFiles(files: File[], orderId: string): Promise<stri
 }
 
 // Función para crear aprobaciones en el servidor
-async function createOrderApprovalsServer(orderId: string, applicantDepartmentId: string, applicantId: string) {
+async function createOrderApprovalsServer(orderId: string, applicantDepartmentId: string, applicantId: string, isUrgent: boolean = false) {
   // Obtener información del solicitante
   const { data: applicant, error: applicantError } = await supabaseAdmin
     .from('users')
@@ -73,36 +73,54 @@ async function createOrderApprovalsServer(orderId: string, applicantDepartmentId
   // Crear aprobaciones para cada departamento en el flujo
   const approvalsToCreate = [];
 
-  // 1. Aprobación del departamento del solicitante (gerencia)
-  const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
-  if (applicantDept) {
-    // Si el solicitante ES el jefe de su departamento, auto-aprobar su nivel
-    approvalsToCreate.push({
-      order_id: orderId,
-      department_id: applicantDept.id,
-      status: isApplicantDeptHead ? 'approved' : 'pending',
-      approval_order: applicantDept.approval_order,
-      approver_id: isApplicantDeptHead ? applicantId : null,
-      approved_at: isApplicantDeptHead ? new Date().toISOString() : null,
-      comments: isApplicantDeptHead ? 'Auto-aprobado (solicitante es jefe de departamento)' : null,
-    });
-  }
+  if (isUrgent && isApplicantDeptHead) {
+    // ORDEN URGENTE: Solo crear aprobaciones para Dirección (3), Contabilidad (4) y Pagos (5)
+    // Se saltan: Gerencia del solicitante (1) y Contraloría (2)
+    const urgentDepartments = departments.filter(
+      (d: Department) => d.approval_order && d.approval_order >= 3
+    );
 
-  // 2. Aprobaciones para el resto del flujo (contraloría, dirección, contabilidad, pagos)
-  // Solo incluir departamentos con approval_order > 1 que NO sean otras gerencias
-  // El flujo es: Gerencia (1) -> Contraloría (2) -> Dirección (3) -> Contabilidad (4) -> Pagos (5)
-  // Evitamos duplicar el departamento del solicitante
-  const subsequentDepartments = departments.filter(
-    (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== applicantDepartmentId
-  );
+    for (const dept of urgentDepartments) {
+      approvalsToCreate.push({
+        order_id: orderId,
+        department_id: dept.id,
+        status: 'pending',
+        approval_order: dept.approval_order,
+      });
+    }
+  } else {
+    // ORDEN NORMAL: Flujo completo
+    // 1. Aprobación del departamento del solicitante (gerencia)
+    const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
+    if (applicantDept) {
+      // Si el solicitante ES el jefe de su departamento, auto-aprobar su nivel
+      approvalsToCreate.push({
+        order_id: orderId,
+        department_id: applicantDept.id,
+        status: isApplicantDeptHead ? 'approved' : 'pending',
+        approval_order: applicantDept.approval_order,
+        approver_id: isApplicantDeptHead ? applicantId : null,
+        approved_at: isApplicantDeptHead ? new Date().toISOString() : null,
+        comments: isApplicantDeptHead ? 'Auto-aprobado (solicitante es jefe de departamento)' : null,
+      });
+    }
 
-  for (const dept of subsequentDepartments) {
-    approvalsToCreate.push({
-      order_id: orderId,
-      department_id: dept.id,
-      status: 'pending',
-      approval_order: dept.approval_order,
-    });
+    // 2. Aprobaciones para el resto del flujo (contraloría, dirección, contabilidad, pagos)
+    // Solo incluir departamentos con approval_order > 1 que NO sean otras gerencias
+    // El flujo es: Gerencia (1) -> Contraloría (2) -> Dirección (3) -> Contabilidad (4) -> Pagos (5)
+    // Evitamos duplicar el departamento del solicitante
+    const subsequentDepartments = departments.filter(
+      (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== applicantDepartmentId
+    );
+
+    for (const dept of subsequentDepartments) {
+      approvalsToCreate.push({
+        order_id: orderId,
+        department_id: dept.id,
+        status: 'pending',
+        approval_order: dept.approval_order,
+      });
+    }
   }
 
   const { error: insertError } = await supabaseAdmin
@@ -113,8 +131,9 @@ async function createOrderApprovalsServer(orderId: string, applicantDepartmentId
     throw new Error('Error al crear aprobaciones: ' + insertError.message);
   }
 
-  // Si se auto-aprobó el primer nivel, actualizar estado de la orden a in_progress
-  if (isApplicantDeptHead) {
+  // Si se auto-aprobó el primer nivel (orden normal con dept head), actualizar estado de la orden a in_progress
+  // Si es orden urgente, también ponerla en in_progress ya que se saltó gerencia y contraloría
+  if (isApplicantDeptHead || isUrgent) {
     await supabaseAdmin
       .from('orders')
       .update({ status: 'in_progress' })
@@ -167,6 +186,11 @@ export async function POST(request: Request) {
       justification,
       currency = 'MXN',
       retention,
+      payment_type,
+      tax_type,
+      iva_percentage,
+      is_urgent = false,
+      urgency_justification,
     } = body;
 
     // Validaciones básicas
@@ -178,6 +202,14 @@ export async function POST(request: Request) {
       
       return NextResponse.json(
         { error: `Faltan datos requeridos: ${missing.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    // Validar que si es urgente, tenga justificación de urgencia
+    if (is_urgent && (!urgency_justification || urgency_justification.trim().length < 10)) {
+      return NextResponse.json(
+        { error: 'Las órdenes urgentes requieren una justificación de urgencia de al menos 10 caracteres' },
         { status: 400 }
       );
     }
@@ -203,11 +235,12 @@ export async function POST(request: Request) {
     // Buscar el usuario por nombre o usar el ID proporcionado
     let userId: string = applicant_id || '';
     let userDepartmentId: string | null = null;
+    let userIsDeptHead: boolean = false;
     
     if (!userId) {
       const { data: userData, error: userError } = await supabaseAdmin
         .from('users')
-        .select('id, department_id')
+        .select('id, department_id, is_department_head')
         .ilike('full_name', `%${applicant_name}%`)
         .limit(1)
         .single();
@@ -223,17 +256,27 @@ export async function POST(request: Request) {
       }
       userId = userData.id;
       userDepartmentId = userData.department_id;
+      userIsDeptHead = userData.is_department_head || false;
     } else {
       // Si tenemos el ID, obtener el departamento
       const { data: userData } = await supabaseAdmin
         .from('users')
-        .select('department_id')
+        .select('department_id, is_department_head')
         .eq('id', userId)
         .single();
       
       if (userData) {
         userDepartmentId = userData.department_id;
+        userIsDeptHead = userData.is_department_head || false;
       }
+    }
+
+    // Validar que solo jefes de departamento pueden crear órdenes urgentes
+    if (is_urgent && !userIsDeptHead) {
+      return NextResponse.json(
+        { error: 'Solo los jefes de departamento pueden crear órdenes de urgencia' },
+        { status: 403 }
+      );
     }
 
     // Buscar el almacén por nombre o usar el ID proporcionado
@@ -302,7 +345,9 @@ export async function POST(request: Request) {
           return sum + (cantidad * precio);
         }, 0);
 
-        const iva = subtotal * 0.16;
+        // Calcular IVA solo si tax_type es 'con_iva'
+        const effectiveIvaPercentage = tax_type === 'con_iva' ? (iva_percentage || 16) : 0;
+        const iva = tax_type === 'con_iva' ? subtotal * (effectiveIvaPercentage / 100) : 0;
         const total = subtotal + iva;
         const totalQuantity = supplierItems.reduce((sum: number, item: OrderItem) => 
           sum + parseFloat(String(item.cantidad)), 0
@@ -335,7 +380,12 @@ export async function POST(request: Request) {
           currency: currency,
           justification: justification || '',
           retention: retention || '',
+          payment_type: payment_type || '',
+          tax_type: tax_type || 'sin_iva',
+          iva_percentage: effectiveIvaPercentage || null,
           status: 'pending',
+          is_urgent: is_urgent || false,
+          urgency_justification: is_urgent ? urgency_justification : null,
         };
 
         const { data: orderCreated, error: orderError } = await supabaseAdmin
@@ -374,7 +424,7 @@ export async function POST(request: Request) {
           // Crear el flujo de aprobaciones automáticamente
           if (userDepartmentId) {
             try {
-              await createOrderApprovalsServer(String(orderCreated.id), userDepartmentId, userId);
+              await createOrderApprovalsServer(String(orderCreated.id), userDepartmentId, userId, is_urgent);
             } catch {
               // No fallar la creación de la orden si falla la creación de aprobaciones
             }
