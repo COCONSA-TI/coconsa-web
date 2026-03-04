@@ -22,6 +22,9 @@ interface ExtractedData {
   justification: string | null;
   currency: string | null;
   retention: string | null;
+  payment_type: 'credito' | 'de_contado' | null;
+  tax_type: 'sin_iva' | 'con_iva' | 'retencion' | null;
+  iva_percentage: 8 | 16 | null;
   isComplete: boolean;
 }
 
@@ -130,7 +133,7 @@ export default function ChatBotPage() {
         const order = result.order;
         const successMessage: Message = {
           id: Date.now().toString(),
-          content: `✅ ¡Excelente! Tu orden de compra #${order.id} ha sido creada exitosamente.\n\n📋 Resumen:\n- Solicitante: ${data.applicant_name}\n- Almacén: ${data.store_name}\n- Proveedor: ${data.supplier_name}\n- Total de artículos: ${data.items.length}\n- Subtotal: $${Number(order.subtotal).toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${order.currency}\n- IVA (16%): $${Number(order.iva).toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${order.currency}\n- Total: $${Number(order.total).toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${order.currency}\n- Estado: ${order.status}\n\n📄 La orden ha sido guardada en el sistema.`,
+          content: `✅ ¡Excelente! Tu orden de compra #${order.id} ha sido creada exitosamente.\n\n📋 Resumen:\n- Solicitante: ${data.applicant_name}\n- Almacén: ${data.store_name}\n- Proveedor: ${data.supplier_name}\n- Total de artículos: ${data.items.length}\n- Tipo de pago: ${data.payment_type === 'credito' ? 'Crédito' : data.payment_type === 'de_contado' ? 'De Contado' : 'N/A'}\n- Subtotal: $${Number(order.subtotal).toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${order.currency}${data.tax_type === 'con_iva' ? `\n- IVA (${data.iva_percentage || 16}%): $${Number(order.iva).toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${order.currency}` : ''}${data.tax_type === 'retencion' ? `\n- Retención: ${data.retention || 'N/A'}` : ''}\n- Total: $${Number(order.total).toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${order.currency}\n- Estado: ${order.status}\n\n📄 La orden ha sido guardada en el sistema.`,
           role: 'assistant',
           timestamp: new Date(),
         };

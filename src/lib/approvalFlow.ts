@@ -13,6 +13,13 @@ export const APPROVAL_FLOW = [
   { code: 'pagos', name: 'Pagos', order: 5 },
 ];
 
+// Flujo reducido para órdenes urgentes (salta Gerencia y Contraloría)
+export const URGENT_APPROVAL_FLOW = [
+  { code: 'direccion', name: 'Dirección', order: 3 },
+  { code: 'contabilidad', name: 'Contabilidad', order: 4 },
+  { code: 'pagos', name: 'Pagos', order: 5 },
+];
+
 export interface Department {
   id: string;
   name: string;

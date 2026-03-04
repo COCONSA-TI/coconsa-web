@@ -10,6 +10,7 @@ import { Order } from "@/types/database";
 interface OrderFormData {
   applicant_name: string;
   store_name: string;
+  supplier_name: string;
   justification: string;
   currency: string;
   retention: string;
@@ -19,7 +20,6 @@ interface OrderFormData {
     cantidad: string;
     unidad: string;
     precioUnitario: string;
-    proveedor: string;
   }[];
   total: number;
 }

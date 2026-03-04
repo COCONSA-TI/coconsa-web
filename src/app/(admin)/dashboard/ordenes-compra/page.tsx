@@ -16,6 +16,7 @@ interface Order {
   status: OrderStatus;
   applicant_name: string;
   items_count: number;
+  is_urgent: boolean;
   my_department_status?: 'pending' | 'approved' | 'rejected' | null;
 }
 
@@ -579,6 +580,14 @@ function OrdenesCompraContent() {
                         <div className={`w-2 h-2 rounded-full ${status.iconBg}`}></div>
                         <div>
                           <span className="font-semibold text-gray-900">#{order.id}</span>
+                          {order.is_urgent && (
+                            <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-medium">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                              </svg>
+                              Urgente
+                            </span>
+                          )}
                           <span className="text-gray-400 mx-2">·</span>
                           <span className="text-sm text-gray-500">{dateInfo.relative}</span>
                         </div>
@@ -662,6 +671,14 @@ function OrdenesCompraContent() {
                           <div className="flex items-center gap-2">
                             <div className={`w-2 h-2 rounded-full ${status.iconBg}`}></div>
                             <span className="font-semibold text-gray-900">#{order.id}</span>
+                            {order.is_urgent && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-medium">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                                Urgente
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="px-6 py-4">

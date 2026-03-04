@@ -33,7 +33,14 @@ interface OrderDetail {
   justification: string;
   justification_prove: string | null;
   retention: number | null;
+  payment_type: string | null;
+  tax_type: string | null;
+  iva_percentage: number | null;
+  iva: number | null;
+  subtotal: number | null;
   items: OrderItem[];
+  is_urgent: boolean;
+  urgency_justification: string | null;
 }
 
 const statusConfig: Record<OrderStatus, { label: string; className: string; iconBg: string }> = {
@@ -256,7 +263,18 @@ export default function OrdenDetallesPage() {
   const statusInfo = statusConfig[order.status] || statusConfig.pending;
   const dateInfo = formatDate(order.created_at);
   const subtotalItems = order.items.reduce((sum, item) => sum + item.subtotal, 0);
-  const retentionAmount = order.retention ? (subtotalItems * order.retention / 100) : 0;
+
+  const paymentTypeLabel = (type: string | null) => {
+    if (type === 'credito') return 'Credito';
+    if (type === 'de_contado') return 'De Contado';
+    return 'No especificado';
+  };
+
+  const taxTypeLabel = (type: string | null) => {
+    if (type === 'con_iva') return `Con IVA (${order.iva_percentage || 16}%)`;
+    if (type === 'retencion') return 'Retencion';
+    return 'Sin IVA';
+  };
 
   const getCurrentApprovalStep = () => {
     if (order.status === 'rejected') return -1;
@@ -357,6 +375,14 @@ export default function OrdenDetallesPage() {
             <div>
               <div className="flex items-center gap-3">
                 <h1 className="text-2xl font-bold">Orden #{order.id}</h1>
+                {order.is_urgent && (
+                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-orange-500 text-white flex items-center gap-1">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Urgente
+                  </span>
+                )}
                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusInfo.className}`}>
                   {statusInfo.label}
                 </span>
@@ -387,6 +413,31 @@ export default function OrdenDetallesPage() {
             </button>
           </div>
         </div>
+
+        {/* Banner de orden urgente */}
+        {order.is_urgent && (
+          <div className="bg-orange-50 border border-orange-200 rounded-xl p-5">
+            <div className="flex items-start gap-4">
+              <div className="bg-orange-100 rounded-full p-2">
+                <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-orange-900 font-semibold">Orden Urgente</h3>
+                <p className="text-orange-700 text-sm mt-1">
+                  Esta orden salta las aprobaciones de Gerencia y Contraloria, iniciando directamente en Direccion.
+                </p>
+                {order.urgency_justification && (
+                  <div className="mt-2 p-3 bg-white rounded-lg border border-orange-200">
+                    <p className="text-xs font-medium text-orange-800 uppercase tracking-wide mb-1">Justificacion de urgencia</p>
+                    <p className="text-sm text-gray-900">{order.urgency_justification}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Mensaje de orden rechazada */}
         {order.status === 'rejected' && (
@@ -705,16 +756,35 @@ export default function OrdenDetallesPage() {
                 
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Subtotal</span>
-                    <span className="text-gray-900">{formatCurrency(subtotalItems, order.currency)}</span>
+                    <span className="text-gray-500">Tipo de Pago</span>
+                    <span className="text-gray-900 font-medium">{paymentTypeLabel(order.payment_type)}</span>
                   </div>
-                  
-                  {order.retention && order.retention > 0 && (
+
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Impuestos</span>
+                    <span className="text-gray-900 font-medium">{taxTypeLabel(order.tax_type)}</span>
+                  </div>
+
+                  {order.tax_type === 'retencion' && order.retention && (
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Retencion ({order.retention}%)</span>
-                      <span className="text-red-600">-{formatCurrency(retentionAmount, order.currency)}</span>
+                      <span className="text-gray-500">Retencion</span>
+                      <span className="text-gray-900">{order.retention}</span>
                     </div>
                   )}
+
+                  <div className="pt-2 border-t border-gray-200 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-500">Subtotal</span>
+                      <span className="text-gray-900">{formatCurrency(subtotalItems, order.currency)}</span>
+                    </div>
+                    
+                    {order.tax_type === 'con_iva' && order.iva != null && order.iva > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">IVA ({order.iva_percentage || 16}%)</span>
+                        <span className="text-gray-900">{formatCurrency(order.iva, order.currency)}</span>
+                      </div>
+                    )}
+                  </div>
                   
                   <div className="pt-3 border-t border-gray-200">
                     <div className="flex justify-between">

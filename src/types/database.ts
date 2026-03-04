@@ -196,10 +196,15 @@ export interface Order {
   currency: string | null;
   justification: string | null;
   retention: string | null;
+  payment_type: string | null; // 'credito' | 'de_contado'
+  tax_type: string | null; // 'con_iva' | 'sin_iva' | 'retencion'
+  iva_percentage: number | null; // 8 or 16
   status: string | null;
   created_at: string;
   updated_at: string | null;
   justification_prove: string | null;
+  is_urgent: boolean;
+  urgency_justification: string | null;
 }
 
 export interface OrderApproval {
@@ -314,6 +319,11 @@ export interface CreateOrderRequest {
   justification?: string;
   currency?: string;
   retention?: string;
+  payment_type?: string;
+  tax_type?: string;
+  iva_percentage?: number;
+  is_urgent?: boolean;
+  urgency_justification?: string;
 }
 
 export interface ApiError {

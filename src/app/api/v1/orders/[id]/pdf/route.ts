@@ -163,14 +163,26 @@ export async function GET(
       yPos += (splitJustification.length * 5) + 5;
     }
 
-    // Retención
-    if (order.retention) {
+    // Retención (solo si tax_type es 'retencion')
+    if (order.tax_type === 'retencion' && order.retention) {
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
       doc.text('RETENCIÓN:', 15, yPos);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       doc.text(order.retention, 50, yPos);
+      yPos += 8;
+    }
+
+    // Tipo de pago
+    if (order.payment_type) {
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text('TIPO DE PAGO:', 15, yPos);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      const paymentLabel = order.payment_type === 'credito' ? 'Crédito' : order.payment_type === 'de_contado' ? 'De Contado' : order.payment_type;
+      doc.text(paymentLabel, 55, yPos);
       yPos += 8;
     }
 
@@ -189,11 +201,14 @@ export async function GET(
     doc.setFont('helvetica', 'normal');
     doc.text(`$${Number(order.subtotal).toFixed(2)}`, totalsX + 10, yPos);
     
-    yPos += 6;
-    doc.setFont('helvetica', 'bold');
-    doc.text('IVA (16%):', totalsX - 20, yPos);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`$${Number(order.iva).toFixed(2)}`, totalsX + 10, yPos);
+    if (order.tax_type === 'con_iva' && order.iva > 0) {
+      yPos += 6;
+      const ivaLabel = `IVA (${order.iva_percentage || 16}%):`;
+      doc.setFont('helvetica', 'bold');
+      doc.text(ivaLabel, totalsX - 20, yPos);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`$${Number(order.iva).toFixed(2)}`, totalsX + 10, yPos);
+    }
     
     yPos += 6;
     doc.setFont('helvetica', 'bold');
