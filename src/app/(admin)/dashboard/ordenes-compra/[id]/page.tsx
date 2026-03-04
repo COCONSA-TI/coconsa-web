@@ -711,7 +711,7 @@ export default function OrdenDetallesPage() {
                   
                   {order.retention && order.retention > 0 && (
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Retencion ({order.retention}%)</span>
+                      <span className="text-gray-500">Impuestos / Retenciones ({order.retention}%)</span>
                       <span className="text-red-600">-{formatCurrency(retentionAmount, order.currency)}</span>
                     </div>
                   )}

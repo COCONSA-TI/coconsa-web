@@ -488,7 +488,7 @@ export default function OrdenDeCompra() {
                 />
                 
                 <label htmlFor="retention" className="font-bold mb-1 text-sm mt-3">
-                  RETENCIÓN (Opcional)
+                  Retencion / Impuestos
                 </label>
                 <input
                   type="text"

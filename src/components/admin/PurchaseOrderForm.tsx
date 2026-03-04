@@ -637,7 +637,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Retención (Opcional)
+                Impuestos / Retenciones
               </label>
               <input
                 type="text"
