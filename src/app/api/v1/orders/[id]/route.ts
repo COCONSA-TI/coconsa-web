@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/api-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import type { OrderItem, Department } from "@/types/database";
+import { calculateRetentions } from "@/types/database";
 
 interface OrderItemDisplay {
   nombre: string;
@@ -24,7 +25,7 @@ type DBOrderDetail = {
   applicant_id: string;
   justification: string;
   justification_prove: string | null;
-  retention: number | null;
+  retention: string | null;
   payment_type: string | null;
   tax_type: string | null;
   iva_percentage: number | null;
@@ -437,10 +438,28 @@ export async function PUT(
       return sum + (cantidad * precio);
     }, 0);
 
-    // Calcular IVA solo si tax_type es 'con_iva'
-    const effectiveIvaPercentage = tax_type === 'con_iva' ? (iva_percentage || 16) : 0;
-    const iva = tax_type === 'con_iva' ? subtotal * (effectiveIvaPercentage / 100) : 0;
-    const total = subtotal + iva;
+    // Handle legacy 'retencion' tax_type -> treat as 'con_iva'
+    const effectiveTaxType = tax_type === 'retencion' ? 'con_iva' : tax_type;
+
+    // Calcular IVA solo si tax_type es 'con_iva' (or legacy 'retencion')
+    const effectiveIvaPercentage = effectiveTaxType === 'con_iva' ? (iva_percentage || 16) : 0;
+    const iva = effectiveTaxType === 'con_iva' ? subtotal * (effectiveIvaPercentage / 100) : 0;
+    
+    // Calcular retenciones
+    let retentionTotal = 0;
+    if (retention && effectiveTaxType === 'con_iva') {
+      try {
+        const retentionKeys = JSON.parse(retention);
+        if (Array.isArray(retentionKeys) && retentionKeys.length > 0) {
+          const retResult = calculateRetentions(retentionKeys, subtotal, iva);
+          retentionTotal = retResult.totalRetention;
+        }
+      } catch {
+        // Legacy free-text retention - no calculation
+      }
+    }
+    
+    const total = subtotal + iva - retentionTotal;
     const totalQuantity = items.reduce((sum: number, item: OrderItem) => 
       sum + parseFloat(String(item.cantidad)), 0
     );
@@ -466,7 +485,7 @@ export async function PUT(
       total: total,
       currency: currency,
       payment_type: payment_type || '',
-      tax_type: tax_type || 'sin_iva',
+      tax_type: effectiveTaxType || 'sin_iva',
       iva_percentage: effectiveIvaPercentage || null,
       status: 'PENDIENTE', // Cambiar estado a pendiente
       updated_at: new Date().toISOString(),

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { RETENTION_OPTIONS, calculateRetentions } from '@/types/database';
 
 interface Message {
   id: string;
@@ -21,10 +22,10 @@ interface ExtractedData {
   }>;
   justification: string | null;
   currency: string | null;
-  retention: string | null;
+  retention: string[] | null;
   payment_type: 'credito' | 'de_contado' | null;
-  tax_type: 'sin_iva' | 'con_iva' | 'retencion' | null;
-  iva_percentage: 8 | 16 | null;
+  tax_type: 'sin_iva' | 'con_iva' | null;
+  iva_percentage: 0 | 8 | 16 | null;
   isComplete: boolean;
 }
 
@@ -131,9 +132,22 @@ export default function ChatBotPage() {
 
       if (result.success) {
         const order = result.order;
+
+        // Build retention breakdown text if applicable
+        let retentionText = '';
+        if (data.retention && data.retention.length > 0 && data.tax_type === 'con_iva') {
+          const subtotal = Number(order.subtotal);
+          const ivaPercentage = data.iva_percentage || 16;
+          const ivaAmount = subtotal * (ivaPercentage / 100);
+          const { breakdown } = calculateRetentions(data.retention, subtotal, ivaAmount);
+          retentionText = breakdown
+            .map(item => `\n- ${item.label}: -$${item.amount.toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${order.currency}`)
+            .join('');
+        }
+
         const successMessage: Message = {
           id: Date.now().toString(),
-          content: `Tu orden de compra #${order.id} ha sido creada.\n\nResumen:\n- Solicitante: ${data.applicant_name}\n- Almacen: ${data.store_name}\n- Proveedor: ${data.supplier_name}\n- Total de articulos: ${data.items.length}\n- Tipo de pago: ${data.payment_type === 'credito' ? 'Credito' : data.payment_type === 'de_contado' ? 'De Contado' : 'N/A'}\n- Subtotal: $${Number(order.subtotal).toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${order.currency}${data.tax_type === 'con_iva' ? `\n- IVA (${data.iva_percentage || 16}%): $${Number(order.iva).toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${order.currency}` : ''}${data.tax_type === 'retencion' ? `\n- Retencion: ${data.retention || 'N/A'}` : ''}\n- Total: $${Number(order.total).toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${order.currency}\n- Estado: ${order.status}\n\nLa orden ha sido guardada en el sistema.`,
+          content: `Tu orden de compra #${order.id} ha sido creada.\n\nResumen:\n- Solicitante: ${data.applicant_name}\n- Almacen: ${data.store_name}\n- Proveedor: ${data.supplier_name}\n- Total de articulos: ${data.items.length}\n- Tipo de pago: ${data.payment_type === 'credito' ? 'Credito' : data.payment_type === 'de_contado' ? 'De Contado' : 'N/A'}\n- Subtotal: $${Number(order.subtotal).toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${order.currency}${data.tax_type === 'con_iva' ? `\n- IVA (${data.iva_percentage || 16}%): $${Number(order.iva).toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${order.currency}` : ''}${retentionText}\n- Total: $${Number(order.total).toLocaleString('es-MX', { minimumFractionDigits: 2 })} ${order.currency}\n- Estado: ${order.status}\n\nLa orden ha sido guardada en el sistema.`,
           role: 'assistant',
           timestamp: new Date(),
         };
@@ -312,14 +326,20 @@ export default function ChatBotPage() {
           <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs">
             <p className="font-semibold text-blue-900 mb-1">📊 Datos recopilados:</p>
             <div className="text-blue-800">
-              {extractedData.applicant_name && <p>👤 Solicitante: {extractedData.applicant_name}</p>}
-              {extractedData.store_name && <p>🏢 Almacén: {extractedData.store_name}</p>}
-              {extractedData.supplier_name && <p>🏭 Proveedor: {extractedData.supplier_name}</p>}
+              {extractedData.applicant_name && <p>Solicitante: {extractedData.applicant_name}</p>}
+              {extractedData.store_name && <p>Almacen: {extractedData.store_name}</p>}
+              {extractedData.supplier_name && <p>Proveedor: {extractedData.supplier_name}</p>}
               {extractedData.items.length > 0 && (
-                <p>📦 Artículos: {extractedData.items.length}</p>
+                <p>Articulos: {extractedData.items.length}</p>
+              )}
+              {extractedData.retention && extractedData.retention.length > 0 && (
+                <p>Retenciones: {extractedData.retention.map(key => {
+                  const opt = RETENTION_OPTIONS.find(o => o.key === key);
+                  return opt ? opt.label : key;
+                }).join(', ')}</p>
               )}
               {extractedData.isComplete && (
-                <p className="text-green-600 font-semibold mt-1">✅ Información completa - Creando orden...</p>
+                <p className="text-green-600 font-semibold mt-1">Informacion completa - Creando orden...</p>
               )}
             </div>
           </div>

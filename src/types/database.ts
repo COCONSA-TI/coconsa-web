@@ -12,6 +12,64 @@ export type Currency = 'MXN' | 'USD';
 export type AccessLevel = 'viewer' | 'editor' | 'admin';
 
 // ============================================
+// RETENTION OPTIONS
+// ============================================
+
+export interface RetentionOption {
+  key: string;
+  label: string;
+  percentage: number;
+  type: 'iva' | 'isr';
+  /** 'subtotal' = se calcula sobre el subtotal, 'iva' = se calcula sobre el monto de IVA */
+  appliesOn: 'subtotal' | 'iva';
+}
+
+export const RETENTION_OPTIONS: RetentionOption[] = [
+  // Retenciones de IVA (se calculan sobre el monto de IVA trasladado, NO sobre el subtotal)
+  { key: 'ret_iva_10.6667', label: 'Ret. IVA 10.6667% (2/3 del IVA)', percentage: 10.6667, type: 'iva', appliesOn: 'subtotal' },
+  { key: 'ret_iva_4', label: 'Ret. IVA 4% (Transportistas)', percentage: 4, type: 'iva', appliesOn: 'subtotal' },
+  { key: 'ret_iva_6', label: 'Ret. IVA 6% (Servicios Especializados)', percentage: 6, type: 'iva', appliesOn: 'subtotal' },
+  { key: 'ret_iva_100', label: 'Ret. IVA 100%', percentage: 100, type: 'iva', appliesOn: 'iva' },
+  { key: 'ret_iva_8_frontera', label: 'Ret. IVA 8% (Frontera Norte/Sur)', percentage: 8, type: 'iva', appliesOn: 'subtotal' },
+  // Retenciones de ISR (se calculan sobre el subtotal)
+  { key: 'ret_isr_10', label: 'Ret. ISR 10% (Honorarios / Arrendamiento)', percentage: 10, type: 'isr', appliesOn: 'subtotal' },
+  { key: 'ret_isr_1.25', label: 'Ret. ISR 1.25% (RESICO / Fletes)', percentage: 1.25, type: 'isr', appliesOn: 'subtotal' },
+];
+
+/**
+ * Calcula el monto total de retenciones a partir de las claves seleccionadas.
+ * Retorna el monto total a restar y el desglose por retencion.
+ */
+export function calculateRetentions(
+  selectedKeys: string[],
+  subtotal: number,
+  ivaAmount: number
+): { totalRetention: number; breakdown: Array<{ label: string; amount: number }> } {
+  const breakdown: Array<{ label: string; amount: number }> = [];
+  let totalRetention = 0;
+
+  for (const key of selectedKeys) {
+    const option = RETENTION_OPTIONS.find(o => o.key === key);
+    if (!option) continue;
+
+    let amount: number;
+    if (option.appliesOn === 'iva') {
+      // Se calcula sobre el monto de IVA
+      amount = ivaAmount * (option.percentage / 100);
+    } else {
+      // Se calcula sobre el subtotal
+      amount = subtotal * (option.percentage / 100);
+    }
+
+    amount = Math.round(amount * 100) / 100;
+    breakdown.push({ label: option.label, amount });
+    totalRetention += amount;
+  }
+
+  return { totalRetention: Math.round(totalRetention * 100) / 100, breakdown };
+}
+
+// ============================================
 // BASE TABLES
 // ============================================
 

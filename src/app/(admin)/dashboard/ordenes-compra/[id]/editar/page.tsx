@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
+import { RETENTION_OPTIONS, calculateRetentions } from "@/types/database";
 
 interface Item {
   id: string;
@@ -25,7 +26,7 @@ interface OrderDetail {
   applicant_email: string;
   justification: string;
   justification_prove: string | null;
-  retention: number | null;
+  retention: string | null;
   payment_type: string | null;
   tax_type: string | null;
   iva_percentage: number | null;
@@ -186,11 +187,12 @@ export default function EditarOrdenPage() {
     supplier_name: "",
     justification: "",
     currency: "MXN",
-    retention: "",
     payment_type: "",
     tax_type: "sin_iva",
     iva_percentage: 16,
   });
+
+  const [selectedRetentions, setSelectedRetentions] = useState<string[]>([]);
 
   const [items, setItems] = useState<Item[]>([
     { id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "" },
@@ -248,16 +250,31 @@ export default function EditarOrdenPage() {
         }
 
         // Pre-llenar el formulario con datos existentes
+        // Handle legacy 'retencion' tax_type -> treat as 'con_iva'
+        const effectiveTaxType = order.tax_type === 'retencion' ? 'con_iva' : (order.tax_type || 'sin_iva');
+        
         setFormData({
           store_name: order.store_name || "",
           supplier_name: order.supplier_name || "",
           justification: order.justification || "",
           currency: order.currency || "MXN",
-          retention: order.retention?.toString() || "",
           payment_type: order.payment_type || "",
-          tax_type: order.tax_type || "sin_iva",
+          tax_type: effectiveTaxType,
           iva_percentage: order.iva_percentage || 16,
         });
+
+        // Parse retention: could be JSON array of keys or legacy free text
+        if (order.retention) {
+          try {
+            const parsed = JSON.parse(order.retention);
+            if (Array.isArray(parsed)) {
+              setSelectedRetentions(parsed);
+            }
+          } catch {
+            // Legacy free-text retention - ignore, user will re-select
+            setSelectedRetentions([]);
+          }
+        }
 
         // Pre-llenar items
         if (order.items && order.items.length > 0) {
@@ -321,7 +338,29 @@ export default function EditarOrdenPage() {
   };
 
   const calculateGrandTotal = () => {
-    return calculateTotal() + calculateIva();
+    const subtotal = calculateTotal();
+    const iva = calculateIva();
+    const retentionResult = formData.tax_type === 'con_iva' && selectedRetentions.length > 0
+      ? calculateRetentions(selectedRetentions, subtotal, iva)
+      : { totalRetention: 0, breakdown: [] };
+    return subtotal + iva - retentionResult.totalRetention;
+  };
+
+  const getRetentionBreakdown = () => {
+    const subtotal = calculateTotal();
+    const iva = calculateIva();
+    if (formData.tax_type !== 'con_iva' || selectedRetentions.length === 0) {
+      return { totalRetention: 0, breakdown: [] };
+    }
+    return calculateRetentions(selectedRetentions, subtotal, iva);
+  };
+
+  const handleRetentionToggle = (key: string) => {
+    setSelectedRetentions(prev =>
+      prev.includes(key)
+        ? prev.filter(k => k !== key)
+        : [...prev, key]
+    );
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -397,7 +436,9 @@ export default function EditarOrdenPage() {
       supplier_name: formData.supplier_name,
       justification: formData.justification,
       currency: formData.currency,
-      retention: formData.tax_type === 'retencion' ? formData.retention : '',
+      retention: formData.tax_type === 'con_iva' && selectedRetentions.length > 0
+        ? JSON.stringify(selectedRetentions)
+        : '',
       payment_type: formData.payment_type,
       tax_type: formData.tax_type,
       iva_percentage: formData.tax_type === 'con_iva' ? formData.iva_percentage : 0,
@@ -698,6 +739,19 @@ export default function EditarOrdenPage() {
                   </span>
                 </div>
               )}
+              {/* Retention breakdown */}
+              {formData.tax_type === 'con_iva' && selectedRetentions.length > 0 && (
+                <>
+                  {getRetentionBreakdown().breakdown.map((ret, idx) => (
+                    <div key={idx} className="flex justify-between items-center">
+                      <span className="text-sm text-red-600">{ret.label}:</span>
+                      <span className="text-sm font-medium text-red-600">
+                        -{formData.currency} ${ret.amount.toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                </>
+              )}
               <div className="flex justify-between items-center pt-2 border-t border-gray-200">
                 <span className="text-lg font-bold text-gray-900">Total General:</span>
                 <span className="text-2xl font-bold text-red-600">
@@ -901,17 +955,22 @@ export default function EditarOrdenPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Impuestos / Retenciones
+                  Impuestos
                 </label>
                 <select
                   name="tax_type"
                   value={formData.tax_type}
-                  onChange={handleInputChange}
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, tax_type: e.target.value }));
+                    // Clear retentions if switching away from con_iva
+                    if (e.target.value !== 'con_iva') {
+                      setSelectedRetentions([]);
+                    }
+                  }}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
                 >
                   <option value="sin_iva">Sin IVA</option>
                   <option value="con_iva">Con IVA</option>
-                  <option value="retencion">Retencion</option>
                 </select>
               </div>
               {formData.tax_type === 'con_iva' && (
@@ -927,25 +986,55 @@ export default function EditarOrdenPage() {
                   >
                     <option value={16}>16%</option>
                     <option value={8}>8%</option>
+                    <option value={0}>0% (Solo retenciones)</option>
                   </select>
                 </div>
               )}
-              {formData.tax_type === 'retencion' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Especificar Retencion
-                  </label>
-                  <input
-                    type="text"
-                    name="retention"
-                    value={formData.retention}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
-                    placeholder="Ej: 4% ISR, 6% IVA retenido"
-                  />
-                </div>
-              )}
             </div>
+
+            {/* Retenciones - solo visibles con IVA */}
+            {formData.tax_type === 'con_iva' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Retenciones (opcional)
+                </label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Las retenciones se restan del total. Puedes seleccionar una o varias.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Retenciones de IVA */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Retenciones de IVA</p>
+                    {RETENTION_OPTIONS.filter(o => o.type === 'iva').map(option => (
+                      <label key={option.key} className="flex items-start gap-2 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={selectedRetentions.includes(option.key)}
+                          onChange={() => handleRetentionToggle(option.key)}
+                          className="mt-0.5 w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                        />
+                        <span className="text-sm text-gray-700 group-hover:text-gray-900">{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {/* Retenciones de ISR */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Retenciones de ISR</p>
+                    {RETENTION_OPTIONS.filter(o => o.type === 'isr').map(option => (
+                      <label key={option.key} className="flex items-start gap-2 cursor-pointer group">
+                        <input
+                          type="checkbox"
+                          checked={selectedRetentions.includes(option.key)}
+                          onChange={() => handleRetentionToggle(option.key)}
+                          className="mt-0.5 w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                        />
+                        <span className="text-sm text-gray-700 group-hover:text-gray-900">{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

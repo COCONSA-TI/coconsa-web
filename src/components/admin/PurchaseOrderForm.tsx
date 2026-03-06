@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { RETENTION_OPTIONS, calculateRetentions } from "@/types/database";
 
 interface Item {
   id: string;
@@ -161,7 +162,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     supplier_name: "",
     justification: "",
     currency: "MXN",
-    retention: "",
+    selectedRetentions: [] as string[],
     payment_type: "",
     tax_type: "sin_iva",
     iva_percentage: 16,
@@ -249,8 +250,16 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     return subtotal * (formData.iva_percentage / 100);
   };
 
+  const calculateRetentionTotal = () => {
+    if (formData.selectedRetentions.length === 0) return { totalRetention: 0, breakdown: [] };
+    const subtotal = calculateTotal();
+    const ivaAmount = calculateIva();
+    return calculateRetentions(formData.selectedRetentions, subtotal, ivaAmount);
+  };
+
   const calculateGrandTotal = () => {
-    return calculateTotal() + calculateIva();
+    const { totalRetention } = calculateRetentionTotal();
+    return calculateTotal() + calculateIva() - totalRetention;
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -317,14 +326,14 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
       return;
     }
 
-    // Preparar datos para el endpoint - cada item ya tiene su proveedor
+    // Preparar datos para el endpoint
     const orderData = {
       applicant_name: formData.applicant_name,
       store_name: formData.store_name,
       supplier_name: formData.supplier_name,
       justification: formData.justification,
       currency: formData.currency,
-      retention: formData.tax_type === 'retencion' ? formData.retention : '',
+      retention: formData.selectedRetentions.length > 0 ? JSON.stringify(formData.selectedRetentions) : '',
       payment_type: formData.payment_type,
       tax_type: formData.tax_type,
       iva_percentage: formData.tax_type === 'con_iva' ? formData.iva_percentage : 0,
@@ -371,7 +380,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
         supplier_name: "",
         justification: "",
         currency: "MXN",
-        retention: "",
+        selectedRetentions: [],
         payment_type: "",
         tax_type: "sin_iva",
         iva_percentage: 16,
@@ -640,6 +649,18 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                 </span>
               </div>
             )}
+            {formData.selectedRetentions.length > 0 && (
+              <>
+                {calculateRetentionTotal().breakdown.map((ret, idx) => (
+                  <div key={idx} className="flex justify-between items-center">
+                    <span className="text-sm text-red-600">{ret.label}:</span>
+                    <span className="text-sm font-medium text-red-600">
+                      - {formData.currency} ${ret.amount.toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </>
+            )}
             <div className="flex justify-between items-center pt-2 border-t border-gray-200">
               <span className="text-lg font-bold text-gray-900">Total General:</span>
               <span className="text-2xl font-bold text-blue-600">
@@ -764,17 +785,24 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Impuestos / Retenciones
+                Impuestos
               </label>
               <select
                 name="tax_type"
                 value={formData.tax_type}
-                onChange={handleInputChange}
+                onChange={(e) => {
+                  const newTaxType = e.target.value;
+                  setFormData(prev => ({
+                    ...prev,
+                    tax_type: newTaxType,
+                    // Limpiar retenciones si cambia a sin_iva
+                    selectedRetentions: newTaxType === 'sin_iva' ? [] : prev.selectedRetentions,
+                  }));
+                }}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
               >
                 <option value="sin_iva">Sin IVA</option>
                 <option value="con_iva">Con IVA</option>
-                <option value="retencion">Retencion</option>
               </select>
             </div>
             {formData.tax_type === 'con_iva' && (
@@ -790,25 +818,71 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                 >
                   <option value={16}>16%</option>
                   <option value={8}>8%</option>
+                  <option value={0}>0% (Solo retenciones)</option>
                 </select>
               </div>
             )}
-            {formData.tax_type === 'retencion' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Especificar Retencion
-                </label>
-                <input
-                  type="text"
-                  name="retention"
-                  value={formData.retention}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-                  placeholder="Ej: 4% ISR, 6% IVA retenido"
-                />
-              </div>
-            )}
           </div>
+
+          {/* Retenciones (solo cuando hay IVA) */}
+          {formData.tax_type === 'con_iva' && (
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Retenciones (opcional)
+              </label>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-1">
+                <p className="text-xs text-gray-500 mb-3">Selecciona las retenciones que aplican a esta orden. Se restaran del total.</p>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Retenciones de IVA</p>
+                    <div className="space-y-2">
+                      {RETENTION_OPTIONS.filter(o => o.type === 'iva').map(option => (
+                        <label key={option.key} className="flex items-start gap-2 cursor-pointer group">
+                          <input
+                            type="checkbox"
+                            checked={formData.selectedRetentions.includes(option.key)}
+                            onChange={(e) => {
+                              setFormData(prev => ({
+                                ...prev,
+                                selectedRetentions: e.target.checked
+                                  ? [...prev.selectedRetentions, option.key]
+                                  : prev.selectedRetentions.filter(k => k !== option.key),
+                              }));
+                            }}
+                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-gray-700 group-hover:text-gray-900">{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="border-t border-gray-200 pt-3">
+                    <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Retenciones de ISR</p>
+                    <div className="space-y-2">
+                      {RETENTION_OPTIONS.filter(o => o.type === 'isr').map(option => (
+                        <label key={option.key} className="flex items-start gap-2 cursor-pointer group">
+                          <input
+                            type="checkbox"
+                            checked={formData.selectedRetentions.includes(option.key)}
+                            onChange={(e) => {
+                              setFormData(prev => ({
+                                ...prev,
+                                selectedRetentions: e.target.checked
+                                  ? [...prev.selectedRetentions, option.key]
+                                  : prev.selectedRetentions.filter(k => k !== option.key),
+                              }));
+                            }}
+                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-gray-700 group-hover:text-gray-900">{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -823,7 +897,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
               supplier_name: "",
               justification: "",
               currency: "MXN",
-              retention: "",
+              selectedRetentions: [],
               payment_type: "",
               tax_type: "sin_iva",
               iva_percentage: 16,
