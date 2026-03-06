@@ -7,6 +7,7 @@ import Link from "next/link";
 import { getOrderApprovals, canUserApprove, getApprovalIconType, type OrderApproval, type ApprovalIconType } from "@/lib/approvalFlow";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmModal, InputModal, Modal } from "@/components/ui/Modal";
+import { RETENTION_OPTIONS, calculateRetentions } from "@/types/database";
 
 type OrderStatus = "pending" | "approved" | "rejected" | "in_progress" | "completed";
 
@@ -32,7 +33,7 @@ interface OrderDetail {
   applicant_email: string;
   justification: string;
   justification_prove: string | null;
-  retention: number | null;
+  retention: string | null;
   payment_type: string | null;
   tax_type: string | null;
   iva_percentage: number | null;
@@ -274,10 +275,30 @@ export default function OrdenDetallesPage() {
   };
 
   const taxTypeLabel = (type: string | null) => {
-    if (type === 'con_iva') return `Con IVA (${order.iva_percentage || 16}%)`;
-    if (type === 'retencion') return 'Retencion';
+    if (type === 'con_iva' || type === 'retencion') return `Con IVA (${order.iva_percentage || 16}%)`;
     return 'Sin IVA';
   };
+
+  // Parse retention from DB: could be JSON array or legacy free text
+  const parseRetentionKeys = (retention: string | null): string[] => {
+    if (!retention) return [];
+    try {
+      const parsed = JSON.parse(retention);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // Legacy free text - not parseable as array
+    }
+    return [];
+  };
+
+  const retentionKeys = parseRetentionKeys(order.retention);
+  const hasRetentions = retentionKeys.length > 0;
+  const retentionBreakdown = hasRetentions && order.subtotal != null && order.iva != null
+    ? calculateRetentions(retentionKeys, order.subtotal, order.iva)
+    : null;
+
+  // Check if retention is legacy free text (not JSON array)
+  const isLegacyRetention = order.retention != null && retentionKeys.length === 0 && order.retention.trim() !== '';
 
   const getCurrentApprovalStep = () => {
     if (order.status === 'rejected') return -1;
@@ -860,9 +881,9 @@ export default function OrdenDetallesPage() {
                     <span className="text-gray-900 font-medium">{taxTypeLabel(order.tax_type)}</span>
                   </div>
 
-                  {order.tax_type === 'retencion' && order.retention && (
+                  {order.tax_type === 'retencion' && isLegacyRetention && (
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Retencion</span>
+                      <span className="text-gray-500">Retencion (legacy)</span>
                       <span className="text-gray-900">{order.retention}</span>
                     </div>
                   )}
@@ -873,11 +894,23 @@ export default function OrdenDetallesPage() {
                       <span className="text-gray-900">{formatCurrency(subtotalItems, order.currency)}</span>
                     </div>
                     
-                    {order.tax_type === 'con_iva' && order.iva != null && order.iva > 0 && (
+                    {(order.tax_type === 'con_iva' || order.tax_type === 'retencion') && order.iva != null && order.iva > 0 && (
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-500">IVA ({order.iva_percentage || 16}%)</span>
                         <span className="text-gray-900">{formatCurrency(order.iva, order.currency)}</span>
                       </div>
+                    )}
+
+                    {/* Retention breakdown */}
+                    {retentionBreakdown && retentionBreakdown.breakdown.length > 0 && (
+                      <>
+                        {retentionBreakdown.breakdown.map((ret, idx) => (
+                          <div key={idx} className="flex justify-between text-sm">
+                            <span className="text-red-600">{ret.label}</span>
+                            <span className="text-red-600">-{formatCurrency(ret.amount, order.currency)}</span>
+                          </div>
+                        ))}
+                      </>
                     )}
                   </div>
                   

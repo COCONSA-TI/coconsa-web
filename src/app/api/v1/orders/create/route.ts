@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/api-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import type { Department, OrderItem, CreateOrderRequest } from "@/types/database";
+import { calculateRetentions, RETENTION_OPTIONS } from "@/types/database";
 
 const BUCKET_NAME = "Coconsa";
 
@@ -370,9 +371,33 @@ export async function POST(request: Request) {
       return sum + (cantidad * precio);
     }, 0);
 
-    const effectiveIvaPercentage = tax_type === 'con_iva' ? (iva_percentage || 16) : 0;
-    const iva = tax_type === 'con_iva' ? subtotal * (effectiveIvaPercentage / 100) : 0;
-    const total = subtotal + iva;
+    // Manejar IVA - también aplica cuando hay retenciones (tax_type puede ser 'con_iva' o legado 'retencion')
+    const effectiveTaxType = tax_type === 'retencion' ? 'con_iva' : (tax_type || 'sin_iva');
+    const effectiveIvaPercentage = effectiveTaxType === 'con_iva' ? (iva_percentage || 16) : 0;
+    const iva = effectiveTaxType === 'con_iva' ? subtotal * (effectiveIvaPercentage / 100) : 0;
+
+    // Calcular retenciones
+    let retentionKeys: string[] = [];
+    let retentionTotal = 0;
+    if (retention) {
+      // Intentar parsear como JSON array (formato nuevo)
+      try {
+        const parsed = JSON.parse(retention);
+        if (Array.isArray(parsed)) {
+          // Validar que todos los keys existan
+          retentionKeys = parsed.filter((k: string) => RETENTION_OPTIONS.some(o => o.key === k));
+        }
+      } catch {
+        // Formato legado (texto libre) - se guarda tal cual sin calcular
+      }
+
+      if (retentionKeys.length > 0) {
+        const retCalc = calculateRetentions(retentionKeys, subtotal, iva);
+        retentionTotal = retCalc.totalRetention;
+      }
+    }
+
+    const total = subtotal + iva - retentionTotal;
     const totalQuantity = items.reduce((sum: number, item: OrderItem) => 
       sum + parseFloat(String(item.cantidad)), 0
     );
@@ -397,7 +422,7 @@ export async function POST(request: Request) {
       quantity: totalQuantity,
       unity: items[0]?.unidad || 'pza',
       price_excluding_iva: subtotal,
-      price_with_iva: total,
+      price_with_iva: subtotal + iva,
       subtotal: subtotal,
       iva: iva,
       total: total,
@@ -405,7 +430,7 @@ export async function POST(request: Request) {
       justification: justification || '',
       retention: retention || '',
       payment_type: payment_type || '',
-      tax_type: tax_type || 'sin_iva',
+      tax_type: effectiveTaxType,
       iva_percentage: effectiveIvaPercentage || null,
       status: 'pending',
       is_urgent: is_urgent || false,

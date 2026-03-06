@@ -27,7 +27,7 @@ REGLAS DE FORMATO ESTRICTAS (MUY IMPORTANTE):
 - Responde como una persona real del área de compras, no como una inteligencia artificial.
 
 DATOS REQUERIDOS PARA UNA ORDEN:
-1. Almacén/Obra: El destino de los materiales (debe ser de la lista disponible)
+1. Almacen/Obra: El destino de los materiales (debe ser de la lista disponible)
 2. Proveedor: UN SOLO proveedor por orden (de la lista disponible). Todos los articulos de la orden van con el mismo proveedor.
 3. Articulos: Para cada articulo necesitas:
    - Nombre/descripcion del producto
@@ -37,11 +37,23 @@ DATOS REQUERIDOS PARA UNA ORDEN:
 4. Justificacion: Razon de la compra (ej: obra nueva, mantenimiento, reposicion). SIEMPRE debes pedirla, nunca la omitas.
 5. Moneda: MXN (pesos mexicanos) o USD (dolares)
 6. Tipo de pago: Credito o De Contado
-7. Impuestos: Puede ser una de tres opciones:
+7. Impuestos: Solo dos opciones:
    - Sin IVA (no se calcula impuesto)
    - Con IVA (se debe especificar porcentaje: 8% o 16%)
-   - Retencion (se debe especificar el detalle, ej: "4% ISR")
-8. Evidencia: Opcional - el usuario puede adjuntar imagenes o PDFs con el boton de clip
+8. Retenciones (OPCIONALES, solo aplican si se eligio Con IVA):
+   Las retenciones son montos que la empresa retiene para enterarlos al SAT. Se restan del total.
+   El usuario puede elegir una o varias de las siguientes:
+   RETENCIONES DE IVA:
+   - Ret. IVA 10.6667% (2/3 del IVA) - clave: ret_iva_10.6667
+   - Ret. IVA 4% (Transportistas) - clave: ret_iva_4
+   - Ret. IVA 6% (Servicios Especializados) - clave: ret_iva_6
+   - Ret. IVA 100% - clave: ret_iva_100
+   - Ret. IVA 8% (Frontera Norte/Sur) - clave: ret_iva_8_frontera
+   RETENCIONES DE ISR:
+   - Ret. ISR 10% (Honorarios / Arrendamiento) - clave: ret_isr_10
+   - Ret. ISR 1.25% (RESICO / Fletes) - clave: ret_isr_1.25
+   Si el usuario no necesita retenciones, no las incluyas.
+9. Evidencia: Opcional - el usuario puede adjuntar imagenes o PDFs con el boton de clip
 
 REGLAS DE COMPORTAMIENTO:
 1. Si el usuario proporciona toda la informacion de una vez, confirma los datos mostrando un resumen en texto plano.
@@ -63,7 +75,8 @@ Me falta lo siguiente:
 - Proveedor (uno solo para toda la orden)
 - Moneda (MXN o USD)
 - Tipo de pago (Credito o De Contado)
-- Impuestos (Sin IVA, Con IVA al 8% o 16%, o Retencion)
+- Impuestos (Sin IVA o Con IVA al 8% o 16%)
+- Retenciones si aplican (solo con IVA)
 - Justificacion de la compra"
 
 EJEMPLO DE CONFIRMACION:
@@ -74,6 +87,7 @@ Proveedor: Ferreteria MX
 Moneda: MXN
 Tipo de pago: Credito
 Impuestos: Con IVA al 16%
+Retenciones: Ret. ISR 10% (Honorarios / Arrendamiento)
 
 Articulos:
 - Martillo: 100 pza a $50.00 c/u = $5,000.00
@@ -83,7 +97,8 @@ Justificacion: Obra nueva
 
 Subtotal: $6,500.00
 IVA (16%): $1,040.00
-Total: $7,540.00 MXN
+Ret. ISR 10%: -$650.00
+Total: $6,890.00 MXN
 
 Si quieres adjuntar evidencia usa el boton de clip, o si todo esta bien se procede a crear la orden."`;
 
@@ -307,11 +322,14 @@ async function extractOrderDataWithAI(
       2. Extrae UN SOLO proveedor para toda la orden (NO uno por artículo). La orden completa va con un solo proveedor. Intenta coincidir con la lista. Si encuentras coincidencia exacta o muy cercana, incluye el ID.
       3. Extrae la lista de artículos (items). Para cada uno: nombre, cantidad (número), unidad y precio unitario (número). NO incluyas proveedor por artículo.
       4. Extrae la justificación de la compra. Este campo es OBLIGATORIO. Si el usuario no la ha proporcionado explícitamente, justification DEBE ser null.
-      5. Extrae la moneda (MXN/USD) y retención (si existe).
+      5. Extrae la moneda (MXN/USD).
       6. Extrae el tipo de pago (payment_type): "credito" o "de_contado". Si no se menciona, usa null.
-      7. Extrae el tipo de impuesto (tax_type): "sin_iva", "con_iva", o "retencion". Si no se menciona, usa null.
-      8. Si tax_type es "con_iva", extrae el porcentaje de IVA (iva_percentage): 8 o 16. Si no se especifica, usa 16.
-      9. Si tax_type es "retencion", extrae el detalle de retención en el campo "retention".
+      7. Extrae el tipo de impuesto (tax_type): "sin_iva" o "con_iva". IMPORTANTE: ya NO existe la opción "retencion" como tax_type. Las retenciones son un campo separado.
+      8. Si tax_type es "con_iva", extrae el porcentaje de IVA (iva_percentage): 0, 8 o 16. Si no se especifica, usa 16. Usa 0 cuando el usuario quiere aplicar retenciones sin IVA.
+      9. Extrae las retenciones seleccionadas como un array de claves (retention). Las retenciones solo aplican cuando tax_type es "con_iva".
+         Claves válidas: "ret_iva_10.6667", "ret_iva_4", "ret_iva_6", "ret_iva_100", "ret_iva_8_frontera", "ret_isr_10", "ret_isr_1.25"
+         Si el usuario no mencionó retenciones, usa un array vacío [].
+         Si el usuario mencionó retenciones específicas, mapea a las claves correspondientes.
       10. REGLA CRITICA para isComplete: Determina 'isComplete' como true SOLO SI TODOS estos campos tienen valor (no null):
           - store_name (almacén)
           - supplier_name (proveedor, UNO para toda la orden)
@@ -338,14 +356,20 @@ async function extractOrderDataWithAI(
         ],
         "justification": "Texto proporcionado explícitamente por el usuario o null",
         "currency": "MXN",
-        "retention": "Texto o null",
+        "retention": ["ret_iva_10.6667", "ret_isr_10"],
         "payment_type": "credito o de_contado o null",
-        "tax_type": "sin_iva o con_iva o retencion o null",
-        "iva_percentage": 8 o 16 o null,
+        "tax_type": "sin_iva o con_iva o null",
+        "iva_percentage": 0, 8 o 16 o null,
         "applicant_name": "${userData.full_name}",
         "applicant_id": "${userData.id}",
         "isComplete": boolean
       }
+
+      NOTAS SOBRE RETENTION:
+      - retention es SIEMPRE un array (puede ser vacío []).
+      - Solo incluir claves válidas: ret_iva_10.6667, ret_iva_4, ret_iva_6, ret_iva_100, ret_iva_8_frontera, ret_isr_10, ret_isr_1.25
+      - Si el usuario no mencionó retenciones o tax_type no es "con_iva", usa [].
+      - Si encuentras texto legacy de retención (ej: "4% ISR"), intenta mapear a la clave más cercana.
 
       CONVERSACIÓN:
       ${conversationText}

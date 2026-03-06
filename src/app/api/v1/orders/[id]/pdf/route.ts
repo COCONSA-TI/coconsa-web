@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase/server';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
-import { OrderItem, OrderApprovalForPdf } from '@/types/database';
+import { OrderItem, OrderApprovalForPdf, RETENTION_OPTIONS, calculateRetentions } from '@/types/database';
 
 // Extender jsPDF para incluir lastAutoTable
 interface JsPDFWithAutoTable extends jsPDF {
@@ -186,15 +186,50 @@ export async function GET(
       yPos += (splitJustification.length * 5) + 5;
     }
 
-    // Retención (solo si tax_type es 'retencion')
-    if (order.tax_type === 'retencion' && order.retention) {
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'bold');
-      doc.text('RETENCIÓN:', 15, yPos);
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      doc.text(order.retention, 50, yPos);
-      yPos += 8;
+    // Retención - parse JSON array of keys or show legacy text
+    let retentionBreakdown: Array<{ label: string; amount: number }> = [];
+    let totalRetention = 0;
+    if (order.retention) {
+      let retentionKeys: string[] = [];
+      try {
+        const parsed = JSON.parse(order.retention);
+        if (Array.isArray(parsed)) {
+          retentionKeys = parsed;
+        }
+      } catch {
+        // Legacy free-text retention - show as-is
+      }
+
+      if (retentionKeys.length > 0) {
+        const effectiveTaxType = order.tax_type === 'retencion' ? 'con_iva' : order.tax_type;
+        const ivaPercentage = order.iva_percentage || 16;
+        const subtotal = Number(order.subtotal);
+        const ivaAmount = effectiveTaxType === 'con_iva' ? subtotal * (ivaPercentage / 100) : 0;
+        const result = calculateRetentions(retentionKeys, subtotal, ivaAmount);
+        retentionBreakdown = result.breakdown;
+        totalRetention = result.totalRetention;
+
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text('RETENCIONES:', 15, yPos);
+        yPos += 6;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        retentionBreakdown.forEach(item => {
+          doc.text(`${item.label}: -${formatMoney(item.amount)}`, 15, yPos);
+          yPos += 5;
+        });
+        yPos += 3;
+      } else {
+        // Legacy free-text retention display
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text('RETENCIÓN:', 15, yPos);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.text(order.retention, 50, yPos);
+        yPos += 8;
+      }
     }
 
     // Tipo de pago
@@ -224,13 +259,24 @@ export async function GET(
     doc.setFont('helvetica', 'normal');
     doc.text(formatMoney(Number(order.subtotal)), totalsX + 10, yPos);
     
-    if (order.tax_type === 'con_iva' && order.iva > 0) {
+    if ((order.tax_type === 'con_iva' || order.tax_type === 'retencion') && order.iva > 0) {
       yPos += 6;
       const ivaLabel = `IVA (${order.iva_percentage || 16}%):`;
       doc.setFont('helvetica', 'bold');
       doc.text(ivaLabel, totalsX - 20, yPos);
       doc.setFont('helvetica', 'normal');
       doc.text(formatMoney(Number(order.iva)), totalsX + 10, yPos);
+    }
+
+    // Show retention totals in the totals section
+    if (retentionBreakdown.length > 0) {
+      retentionBreakdown.forEach(item => {
+        yPos += 6;
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${item.label}:`, totalsX - 60, yPos);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`-${formatMoney(item.amount)}`, totalsX + 10, yPos);
+      });
     }
     
     yPos += 6;
