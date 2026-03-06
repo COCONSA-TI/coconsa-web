@@ -81,6 +81,29 @@ export async function GET(
     doc.setLineWidth(0.5);
     doc.line(15, 43, pageWidth - 15, 43);
 
+    // Mapeo de estados a etiquetas en español
+    const statusLabels: Record<string, string> = {
+      'pending': 'Pendiente',
+      'PENDIENTE': 'Pendiente',
+      'approved': 'Aprobada',
+      'APROBADA': 'Aprobada',
+      'rejected': 'Rechazada',
+      'RECHAZADA': 'Rechazada',
+      'in_progress': 'En Proceso',
+      'EN_PROCESO': 'En Proceso',
+      'completed': 'Completada',
+      'COMPLETADA': 'Completada',
+    };
+
+    // Formateador de moneda
+    const currency = order.currency || 'MXN';
+    const formatMoney = (amount: number) => {
+      return new Intl.NumberFormat('es-MX', {
+        style: 'currency',
+        currency: currency,
+      }).format(amount);
+    };
+
     let yPos = 50;
 
     // Información general
@@ -94,7 +117,7 @@ export async function GET(
     yPos += 6;
     doc.text(`Almacén/Obra: ${order.store?.name || 'N/A'}`, 15, yPos);
     yPos += 6;
-    doc.text(`Estado: ${order.status}`, 15, yPos);
+    doc.text(`Estado: ${statusLabels[order.status] || order.status}`, 15, yPos);
     
     yPos += 10;
 
@@ -129,8 +152,8 @@ export async function GET(
     const tableData = items.map((item: OrderItem) => [
       item.nombre,
       `${item.cantidad} ${item.unidad}`,
-      `$${Number(item.precioUnitario).toFixed(2)}`,
-      `$${Number(item.precioTotal || 0).toFixed(2)}`,
+      formatMoney(Number(item.precioUnitario)),
+      formatMoney(Number(item.precioTotal || 0)),
     ]);
 
     autoTable(doc, {
@@ -199,7 +222,7 @@ export async function GET(
     doc.setFont('helvetica', 'bold');
     doc.text('SUBTOTAL:', totalsX - 20, yPos);
     doc.setFont('helvetica', 'normal');
-    doc.text(`$${Number(order.subtotal).toFixed(2)}`, totalsX + 10, yPos);
+    doc.text(formatMoney(Number(order.subtotal)), totalsX + 10, yPos);
     
     if (order.tax_type === 'con_iva' && order.iva > 0) {
       yPos += 6;
@@ -207,13 +230,13 @@ export async function GET(
       doc.setFont('helvetica', 'bold');
       doc.text(ivaLabel, totalsX - 20, yPos);
       doc.setFont('helvetica', 'normal');
-      doc.text(`$${Number(order.iva).toFixed(2)}`, totalsX + 10, yPos);
+      doc.text(formatMoney(Number(order.iva)), totalsX + 10, yPos);
     }
     
     yPos += 6;
     doc.setFont('helvetica', 'bold');
     doc.text('TOTAL:', totalsX - 20, yPos);
-    doc.text(`$${Number(order.total).toFixed(2)}`, totalsX + 10, yPos);
+    doc.text(formatMoney(Number(order.total)), totalsX + 10, yPos);
 
     // Firmas (al final de la página)
     const signatureY = doc.internal.pageSize.height - 40;
@@ -290,14 +313,14 @@ export async function GET(
         doc.addImage(qrCodeDataUrl, 'PNG', pos.x + 5, signatureY - 35, 25, 25);
         doc.setFontSize(6);
         doc.setFont('helvetica', 'italic');
-        doc.text('Escanea para verificar', pos.x + 17.5, signatureY - 37, { align: 'center' });
+        doc.text('Firmado Digitalmente', pos.x + 17.5, signatureY - 37, { align: 'center' });
       } else {
         // Para los demás (Gerencia, Contraloría, Dirección), verificar si tiene QR generado
         if (approverQRs[pos.order]) {
           doc.addImage(approverQRs[pos.order], 'PNG', pos.x + 5, signatureY - 35, 25, 25);
           doc.setFontSize(6);
           doc.setFont('helvetica', 'italic');
-          doc.text('Firmado digitalmente', pos.x + 17.5, signatureY - 37, { align: 'center' });
+          doc.text('Firmado Digitalmente', pos.x + 17.5, signatureY - 37, { align: 'center' });
         }
       }
       
