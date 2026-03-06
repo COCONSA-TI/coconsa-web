@@ -17,6 +17,7 @@ interface Order {
   applicant_name: string;
   items_count: number;
   is_urgent: boolean;
+  is_definitive_rejection: boolean;
   my_department_status?: 'pending' | 'approved' | 'rejected' | null;
 }
 
@@ -592,9 +593,16 @@ function OrdenesCompraContent() {
                           <span className="text-sm text-gray-500">{dateInfo.relative}</span>
                         </div>
                       </div>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${status.className}`}>
-                        {status.label}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${status.className}`}>
+                          {status.label}
+                        </span>
+                        {order.status === 'rejected' && order.is_definitive_rejection && (
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-700 text-white">
+                            Definitiva
+                          </span>
+                        )}
+                      </div>
                     </div>
                     
                     <div className="ml-5 space-y-1.5">
@@ -699,9 +707,16 @@ function OrdenesCompraContent() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1">
-                            <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${status.className} w-fit`}>
-                              {status.label}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${status.className} w-fit`}>
+                                {status.label}
+                              </span>
+                              {order.status === 'rejected' && order.is_definitive_rejection && (
+                                <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-700 text-white w-fit">
+                                  Definitiva
+                                </span>
+                              )}
+                            </div>
                             {order.my_department_status === 'pending' && order.status === 'pending' && (
                               <span className="inline-flex items-center gap-1 text-xs text-orange-600 font-medium">
                                 <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse"></span>

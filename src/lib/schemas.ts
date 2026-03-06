@@ -52,6 +52,7 @@ export const PurchaseOrderExtractedDataSchema = z.object({
     store_name: z.string().nullable().optional(),
     store_id: z.number().nullable().optional(),
     supplier_name: z.string().nullable().optional(),
+    supplier_id: z.union([z.string(), z.number()]).nullable().optional(),
     items: z.array(z.object({
         nombre: z.string(),
         cantidad: z.union([z.string(), z.number()]),

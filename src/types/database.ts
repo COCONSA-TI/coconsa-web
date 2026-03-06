@@ -205,6 +205,7 @@ export interface Order {
   justification_prove: string | null;
   is_urgent: boolean;
   urgency_justification: string | null;
+  is_definitive_rejection: boolean;
 }
 
 export interface OrderApproval {
@@ -315,6 +316,8 @@ export interface CreateOrderRequest {
   applicant_id?: string;
   store_name: string;
   store_id?: number;
+  supplier_name?: string;
+  supplier_id?: string | number;
   items: OrderItem[];
   justification?: string;
   currency?: string;

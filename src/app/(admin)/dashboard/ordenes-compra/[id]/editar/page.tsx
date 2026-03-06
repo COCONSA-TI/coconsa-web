@@ -31,6 +31,7 @@ interface OrderDetail {
   iva_percentage: number | null;
   iva: number | null;
   subtotal: number | null;
+  is_definitive_rejection?: boolean;
   items: {
     id: string;
     name: string;
@@ -219,6 +220,12 @@ export default function EditarOrdenPage() {
         // Verificar que la orden esté rechazada
         if (order.status !== "rejected") {
           setError("Solo se pueden editar órdenes rechazadas");
+          return;
+        }
+
+        // Verificar que no sea un rechazo definitivo
+        if (order.is_definitive_rejection) {
+          setError("Esta orden fue rechazada de forma definitiva y no puede ser editada ni reenviada");
           return;
         }
 

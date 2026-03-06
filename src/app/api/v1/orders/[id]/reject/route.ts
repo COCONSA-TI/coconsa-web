@@ -20,7 +20,7 @@ export async function POST(
       );
     }
 
-    const { comments } = await request.json();
+    const { comments, is_definitive } = await request.json();
     const orderId = resolvedParams.id;
 
     // 1. Obtener usuario con departamento (usar admin client para queries)
@@ -111,11 +111,12 @@ export async function POST(
       );
     }
 
-    // 6. Cambiar estado de la orden a 'RECHAZADA'
+    // 6. Cambiar estado de la orden a 'RECHAZADA' y marcar si es definitiva
     const { error: orderUpdateError } = await supabaseAdmin
       .from('orders')
       .update({ 
         status: 'RECHAZADA',
+        is_definitive_rejection: is_definitive === true,
         updated_at: new Date().toISOString()
       })
       .eq('id', orderId);

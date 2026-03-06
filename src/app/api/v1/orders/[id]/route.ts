@@ -33,6 +33,7 @@ type DBOrderDetail = {
   items: string;
   is_urgent: boolean;
   urgency_justification: string | null;
+  is_definitive_rejection: boolean;
 };
 
 // Función para recrear aprobaciones
@@ -86,33 +87,57 @@ async function recreateOrderApprovals(orderId: string, applicantId: string, isUr
       });
     }
   } else {
-    // ORDEN NORMAL: Flujo completo
-    // 1. Aprobación del departamento del solicitante
+    // ORDEN NORMAL: Determinar flujo según el departamento del solicitante
     const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
-    if (applicantDept) {
-      approvalsToCreate.push({
-        order_id: orderId,
-        department_id: applicantDept.id,
-        status: isApplicantDeptHead ? 'approved' : 'pending',
-        approval_order: applicantDept.approval_order,
-        approver_id: isApplicantDeptHead ? applicantId : null,
-        approved_at: isApplicantDeptHead ? new Date().toISOString() : null,
-        comments: isApplicantDeptHead ? 'Auto-aprobado (solicitante es jefe de departamento)' : null,
-      });
-    }
+    const applicantApprovalOrder = applicantDept?.approval_order ?? 0;
 
-    // 2. Aprobaciones para el resto del flujo
-    const subsequentDepartments = departments.filter(
-      (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== applicantDepartmentId
-    );
+    if (applicantApprovalOrder >= 2) {
+      // El solicitante pertenece a un departamento del flujo de aprobación (Contraloría, Dirección, Contabilidad, Pagos).
+      // NO se incluye Gerencia (step 1) porque no tienen gerente que les apruebe.
+      // NO se auto-aprueba su propio paso para evitar conflictos de interés.
+      // Flujo: Contraloría (2) → Dirección (3) → Contabilidad (4) → Pagos (5)
+      const flowDepartments = departments.filter(
+        (d: Department) => d.approval_order && d.approval_order >= 2
+      );
 
-    for (const dept of subsequentDepartments) {
-      approvalsToCreate.push({
-        order_id: orderId,
-        department_id: dept.id,
-        status: 'pending',
-        approval_order: dept.approval_order,
-      });
+      for (const dept of flowDepartments) {
+        approvalsToCreate.push({
+          order_id: orderId,
+          department_id: dept.id,
+          status: 'pending',
+          approval_order: dept.approval_order,
+        });
+      }
+    } else {
+      // El solicitante es de una Gerencia (approval_order = 1) o no tiene departamento en el flujo.
+      // Flujo completo: Gerencia (1) → Contraloría (2) → Dirección (3) → Contabilidad (4) → Pagos (5)
+
+      // 1. Aprobación del departamento del solicitante
+      if (applicantDept) {
+        approvalsToCreate.push({
+          order_id: orderId,
+          department_id: applicantDept.id,
+          status: isApplicantDeptHead ? 'approved' : 'pending',
+          approval_order: applicantDept.approval_order,
+          approver_id: isApplicantDeptHead ? applicantId : null,
+          approved_at: isApplicantDeptHead ? new Date().toISOString() : null,
+          comments: isApplicantDeptHead ? 'Auto-aprobado (solicitante es jefe de departamento)' : null,
+        });
+      }
+
+      // 2. Aprobaciones para el resto del flujo
+      const subsequentDepartments = departments.filter(
+        (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== applicantDepartmentId
+      );
+
+      for (const dept of subsequentDepartments) {
+        approvalsToCreate.push({
+          order_id: orderId,
+          department_id: dept.id,
+          status: 'pending',
+          approval_order: dept.approval_order,
+        });
+      }
     }
   }
 
@@ -124,7 +149,13 @@ async function recreateOrderApprovals(orderId: string, applicantId: string, isUr
     throw new Error('Error al crear aprobaciones: ' + insertError.message);
   }
 
-  return isApplicantDeptHead || isUrgent;
+  // Determinar si la orden debe empezar en 'in_progress':
+  // - Orden urgente (sin gerencia ni contraloría)
+  // - Dept head de gerencia (auto-aprobó step 1)
+  // - Solicitante de depto con approval_order >= 2 (sin gerencia en el flujo)
+  const applicantDeptForStatus = departments.find((d: Department) => d.id === applicantDepartmentId);
+  const applicantApprovalOrder = applicantDeptForStatus?.approval_order ?? 0;
+  return isUrgent || (isApplicantDeptHead && applicantApprovalOrder === 1) || applicantApprovalOrder >= 2;
 }
 
 export async function GET(
@@ -142,7 +173,7 @@ export async function GET(
     // Obtener detalles de la orden
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
-      .select('id, created_at, store_id, supplier_id, total, currency, status, applicant_id, justification, justification_prove, retention, payment_type, tax_type, iva_percentage, iva, subtotal, items, is_urgent, urgency_justification')
+      .select('id, created_at, store_id, supplier_id, total, currency, status, applicant_id, justification, justification_prove, retention, payment_type, tax_type, iva_percentage, iva, subtotal, items, is_urgent, urgency_justification, is_definitive_rejection')
       .eq('id', orderId)
       .single();
 
@@ -226,6 +257,7 @@ export async function GET(
       subtotal: typedOrder.subtotal,
       is_urgent: typedOrder.is_urgent || false,
       urgency_justification: typedOrder.urgency_justification,
+      is_definitive_rejection: typedOrder.is_definitive_rejection || false,
       items: itemsArray.map((item, index: number) => ({
         id: `${typedOrder.id}-${index}`,
         name: item.nombre || 'N/A',
@@ -269,7 +301,7 @@ export async function PUT(
     // Obtener la orden actual
     const { data: existingOrder, error: orderError } = await supabaseAdmin
       .from('orders')
-      .select('id, status, applicant_id, is_urgent')
+      .select('id, status, applicant_id, is_urgent, is_definitive_rejection')
       .eq('id', orderId)
       .single();
 
@@ -285,6 +317,14 @@ export async function PUT(
     if (!isRejected) {
       return NextResponse.json(
         { error: "Solo se pueden editar órdenes rechazadas" },
+        { status: 400 }
+      );
+    }
+
+    // Verificar que no sea un rechazo definitivo
+    if (existingOrder.is_definitive_rejection) {
+      return NextResponse.json(
+        { error: "Esta orden fue rechazada de forma definitiva y no puede ser editada ni reenviada" },
         { status: 400 }
       );
     }

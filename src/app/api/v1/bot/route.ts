@@ -17,71 +17,107 @@ const SYSTEM_PROMPT = `Eres el asistente de compras de COCONSA, una empresa de c
 
 TU OBJETIVO: Ayudar a los usuarios a crear Órdenes de Compra recopilando toda la información necesaria.
 
+REGLAS DE FORMATO ESTRICTAS (MUY IMPORTANTE):
+- NUNCA uses asteriscos (*), negritas (**texto**), cursivas, ni ningún formato markdown.
+- NUNCA uses emojis ni caracteres especiales decorativos.
+- NUNCA uses encabezados con # ni tablas con |.
+- Escribe en texto plano y natural, como si fuera un mensaje de texto normal entre colegas de trabajo.
+- Se breve y directo. No uses frases de relleno ni lenguaje exageradamente entusiasta.
+- No empieces mensajes con "Perfecto!", "Excelente!", "Genial!" ni expresiones similares.
+- Responde como una persona real del área de compras, no como una inteligencia artificial.
+
 DATOS REQUERIDOS PARA UNA ORDEN:
-1. **Almacén/Obra**: El destino de los materiales (debe ser de la lista disponible)
-2. **Artículos**: Para cada artículo necesitas:
-   - Nombre/descripción del producto
-   - Cantidad (número)
+1. Almacén/Obra: El destino de los materiales (debe ser de la lista disponible)
+2. Proveedor: UN SOLO proveedor por orden (de la lista disponible). Todos los articulos de la orden van con el mismo proveedor.
+3. Articulos: Para cada articulo necesitas:
+   - Nombre/descripcion del producto
+   - Cantidad (numero)
    - Unidad de medida (pza, kg, m, litro, etc.)
-   - Precio unitario (número)
-   - Proveedor (de la lista disponible)
-3. **Justificación**: Razón de la compra (ej: obra nueva, mantenimiento, reposición)
-4. **Moneda**: MXN (pesos mexicanos) o USD (dólares)
-5. **Tipo de pago**: Crédito o De Contado
-6. **Impuestos**: Puede ser una de tres opciones:
+   - Precio unitario (numero)
+4. Justificacion: Razon de la compra (ej: obra nueva, mantenimiento, reposicion). SIEMPRE debes pedirla, nunca la omitas.
+5. Moneda: MXN (pesos mexicanos) o USD (dolares)
+6. Tipo de pago: Credito o De Contado
+7. Impuestos: Puede ser una de tres opciones:
    - Sin IVA (no se calcula impuesto)
    - Con IVA (se debe especificar porcentaje: 8% o 16%)
-   - Retención (se debe especificar el detalle, ej: "4% ISR")
-7. **Evidencia**: Opcional - el usuario puede adjuntar imágenes o PDFs con el botón de clip
+   - Retencion (se debe especificar el detalle, ej: "4% ISR")
+8. Evidencia: Opcional - el usuario puede adjuntar imagenes o PDFs con el boton de clip
 
 REGLAS DE COMPORTAMIENTO:
-1. **MODE ONE-SHOT**: Si el usuario proporciona toda la información de una vez, confirma los datos de forma clara y organizada, mostrando un resumen estructurado.
-2. **DATOS FALTANTES**: Si falta información, pregunta de forma clara qué datos necesitas. Puedes hacer varias preguntas a la vez.
-3. **MÚLTIPLES ARTÍCULOS**: Detecta y maneja correctamente cuando el usuario menciona varios artículos en un solo mensaje.
-4. **CLARIFICACIÓN**: Si algo no está claro (ej: unidad de medida ambigua), pregunta para confirmar.
-5. **EVIDENCIA**: Si el usuario menciona que adjuntará archivos, confirma que puede usar el botón de clip (📎).
+1. Si el usuario proporciona toda la informacion de una vez, confirma los datos mostrando un resumen en texto plano.
+2. Si falta informacion, pregunta de forma clara que datos necesitas. Puedes hacer varias preguntas a la vez.
+3. Detecta y maneja correctamente cuando el usuario menciona varios articulos en un solo mensaje.
+4. Si algo no esta claro (ej: unidad de medida ambigua), pregunta para confirmar.
+5. IMPORTANTE: La orden es para UN SOLO proveedor. Si el usuario menciona varios proveedores, aclara que debe ser uno solo y pregunta cual prefiere.
+6. CRITICO: Siempre pide la justificacion de la compra. No marques la orden como completa sin tenerla. Si el usuario no la ha dado, preguntala explicitamente.
 
-FORMATO DE RESPUESTA:
-- Sé amable y profesional
-- Usa formato estructurado con viñetas o listas cuando sea útil
-- Cuando confirmes datos, muestra un resumen claro y organizado
-- Si la información está completa, indica que puede proceder a crear la orden
-
-EJEMPLO DE FLUJO COMPLETO:
+EJEMPLO DE FLUJO:
 Usuario: "Necesito 100 martillos y 50 desarmadores para la obra Residencial Norte"
-Asistente: "¡Perfecto! Para completar tu orden necesito algunos datos adicionales:
+Asistente: "Va, detecte estos articulos para la obra Residencial Norte:
+- 100 martillos
+- 50 desarmadores
 
-**Artículos detectados:**
-• 100 martillos
-• 50 desarmadores
+Me falta lo siguiente:
+- Unidad de medida para cada articulo (piezas?)
+- Precio unitario de cada uno
+- Proveedor (uno solo para toda la orden)
+- Moneda (MXN o USD)
+- Tipo de pago (Credito o De Contado)
+- Impuestos (Sin IVA, Con IVA al 8% o 16%, o Retencion)
+- Justificacion de la compra"
 
-**Información faltante:**
-• Unidad de medida para cada artículo (¿piezas?)
-• Precio unitario de cada artículo
-• Proveedor para cada artículo
-• Moneda (MXN o USD)
-• Tipo de pago (Crédito o De Contado)
-• Impuestos (Sin IVA, Con IVA al 8% o 16%, o Retención)
-• Justificación de la compra
+EJEMPLO DE CONFIRMACION:
+"Listo, este es el resumen de tu orden:
 
-¿Me puedes proporcionar estos datos?"
+Almacen: Obra Residencial Norte
+Proveedor: Ferreteria MX
+Moneda: MXN
+Tipo de pago: Credito
+Impuestos: Con IVA al 16%
 
-EJEMPLO DE CONFIRMACIÓN:
-"✅ **Resumen de tu orden:**
+Articulos:
+- Martillo: 100 pza a $50.00 c/u = $5,000.00
+- Desarmador: 50 pza a $30.00 c/u = $1,500.00
 
-📍 **Almacén:** Obra Residencial Norte
-💰 **Moneda:** MXN
+Justificacion: Obra nueva
 
-**Artículos:**
-| Producto | Cantidad | Unidad | Precio | Proveedor |
-|----------|----------|--------|--------|-----------|
-| Martillo | 100 | pza | $50.00 | Ferretería MX |
+Subtotal: $6,500.00
+IVA (16%): $1,040.00
+Total: $7,540.00 MXN
 
-📝 **Justificación:** Obra nueva
+Si quieres adjuntar evidencia usa el boton de clip, o si todo esta bien se procede a crear la orden."`;
 
-**Total estimado:** $5,000.00 MXN
 
-¿Deseas adjuntar evidencia o procedo a crear la orden?"`;
+/**
+ * Limpia la respuesta del bot eliminando markdown, emojis y formato AI.
+ */
+function sanitizeBotResponse(text: string): string {
+  let clean = text;
+  
+  // Eliminar negritas markdown: **texto** -> texto
+  clean = clean.replace(/\*\*([^*]+)\*\*/g, '$1');
+  // Eliminar cursivas markdown: *texto* -> texto
+  clean = clean.replace(/\*([^*]+)\*/g, '$1');
+  // Eliminar encabezados markdown: ## texto -> texto
+  clean = clean.replace(/^#{1,6}\s+/gm, '');
+  // Eliminar bullet points markdown: • o * al inicio de línea -> -
+  clean = clean.replace(/^[•*]\s+/gm, '- ');
+  // Eliminar tablas markdown (líneas con |)
+  clean = clean.replace(/\|[^\n]+\|/g, '');
+  // Eliminar líneas separadoras de tablas
+  clean = clean.replace(/^[-|:\s]+$/gm, '');
+  // Eliminar emojis comunes
+  clean = clean.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{2700}-\u{27BF}]|[\u{FE00}-\u{FE0F}]|[\u{1F900}-\u{1F9FF}]|[\u{200D}]|[\u{20E3}]|[\u{E0020}-\u{E007F}]|[✅❌📋📍💰📝📦📄📊👤🏢🏭🔄✨💡🎉🚀⭐️📎🔹🔸▶️]/gu, '');
+  // Eliminar backticks de código
+  clean = clean.replace(/```[a-z]*\n?/g, '');
+  clean = clean.replace(/`([^`]+)`/g, '$1');
+  // Limpiar líneas vacías múltiples (máximo 2 seguidas)
+  clean = clean.replace(/\n{3,}/g, '\n\n');
+  // Limpiar espacios al inicio/final
+  clean = clean.trim();
+  
+  return clean;
+}
 
 export async function POST(request: Request) {
   try {
@@ -181,7 +217,7 @@ export async function POST(request: Request) {
     try {
       const result = await chat.sendMessage(message);
       const response = result.response;
-      botMessage = response.text();
+      botMessage = sanitizeBotResponse(response.text());
     } catch (geminiError: unknown) {
       const apiError = geminiError as ApiError;
       throw new Error(`Error de Gemini API: ${apiError?.message || 'Error desconocido'}`);
@@ -195,6 +231,18 @@ export async function POST(request: Request) {
       (stores || []) as Store[],
       (suppliers || []) as Supplier[]
     );
+
+    // Guardia server-side: forzar isComplete a false si falta justificación o proveedor
+    if (extractedData && extractedData.isComplete) {
+      const justification = extractedData.justification;
+      const supplierName = extractedData.supplier_name;
+      if (!justification || (typeof justification === 'string' && justification.trim().length === 0)) {
+        extractedData.isComplete = false;
+      }
+      if (!supplierName || (typeof supplierName === 'string' && supplierName.trim().length === 0)) {
+        extractedData.isComplete = false;
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -256,30 +304,39 @@ async function extractOrderDataWithAI(
 
       INSTRUCCIONES:
       1. Extrae el nombre del almacén/obra. Intenta coincidir con la lista de disponibles. Si encuentras coincidencia, incluye el ID.
-      2. Extrae la lista de artículos (items). Para cada uno: nombre, cantidad (número), unidad, precio unitario (número) y proveedor.
-      3. Para el proveedor, intenta coincidir con la lista. Si encuentras coincidencia exacta o muy cercana, incluye el ID.
-      4. Extrae la justificación, moneda (MXN/USD) y retención (si existe).
-      5. Extrae el tipo de pago (payment_type): "credito" o "de_contado". Si no se menciona, usa null.
-      6. Extrae el tipo de impuesto (tax_type): "sin_iva", "con_iva", o "retencion". Si no se menciona, usa null.
-      7. Si tax_type es "con_iva", extrae el porcentaje de IVA (iva_percentage): 8 o 16. Si no se especifica, usa 16.
-      8. Si tax_type es "retencion", extrae el detalle de retención en el campo "retention".
-      9. Determina 'isComplete' como true SOLO SI tienes: almacén, justificación, moneda, tipo de pago, tipo de impuesto y AL MENOS un artículo completo (con todos sus campos: nombre, cantidad, unidad, precio, proveedor).
+      2. Extrae UN SOLO proveedor para toda la orden (NO uno por artículo). La orden completa va con un solo proveedor. Intenta coincidir con la lista. Si encuentras coincidencia exacta o muy cercana, incluye el ID.
+      3. Extrae la lista de artículos (items). Para cada uno: nombre, cantidad (número), unidad y precio unitario (número). NO incluyas proveedor por artículo.
+      4. Extrae la justificación de la compra. Este campo es OBLIGATORIO. Si el usuario no la ha proporcionado explícitamente, justification DEBE ser null.
+      5. Extrae la moneda (MXN/USD) y retención (si existe).
+      6. Extrae el tipo de pago (payment_type): "credito" o "de_contado". Si no se menciona, usa null.
+      7. Extrae el tipo de impuesto (tax_type): "sin_iva", "con_iva", o "retencion". Si no se menciona, usa null.
+      8. Si tax_type es "con_iva", extrae el porcentaje de IVA (iva_percentage): 8 o 16. Si no se especifica, usa 16.
+      9. Si tax_type es "retencion", extrae el detalle de retención en el campo "retention".
+      10. REGLA CRITICA para isComplete: Determina 'isComplete' como true SOLO SI TODOS estos campos tienen valor (no null):
+          - store_name (almacén)
+          - supplier_name (proveedor, UNO para toda la orden)
+          - justification (DEBE ser una cadena no vacía que el usuario haya proporcionado explícitamente)
+          - currency (moneda)
+          - payment_type (tipo de pago)
+          - tax_type (tipo de impuesto)
+          - AL MENOS un artículo completo (con nombre, cantidad, unidad Y precio)
+          Si CUALQUIERA de estos falta, isComplete DEBE ser false. En especial, si justification es null o vacía, isComplete DEBE ser false.
 
       FORMATO JSON ESPERADO:
       {
         "store_name": "Nombre extraído o null",
         "store_id": "UUID coincidente o null",
+        "supplier_name": "Nombre del proveedor unico o null",
+        "supplier_id": "UUID coincidente o null",
         "items": [
           {
             "nombre": "Nombre del artículo",
             "cantidad": 10,
             "unidad": "pza",
-            "precioUnitario": 100.50,
-            "proveedor": "Nombre proveedor",
-            "proveedor_id": "UUID coincidente o null"
+            "precioUnitario": 100.50
           }
         ],
-        "justification": "Texto o null",
+        "justification": "Texto proporcionado explícitamente por el usuario o null",
         "currency": "MXN",
         "retention": "Texto o null",
         "payment_type": "credito o de_contado o null",
