@@ -170,7 +170,7 @@ export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarPr
         </nav>
 
         {/* Sección de ayuda */}
-        <div className="p-4 border-t border-gray-200">
+        {/* <div className="p-4 border-t border-gray-200">
           <div className="p-4 bg-gray-50 rounded-lg">
             <h3 className="text-sm font-semibold text-gray-900 mb-2">¿Necesitas ayuda?</h3>
             <p className="text-xs text-gray-600 mb-3">
@@ -180,7 +180,7 @@ export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarPr
               Soporte
             </button>
           </div>
-        </div>
+        </div> */}
       </aside>
     </>
   );
