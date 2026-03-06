@@ -155,7 +155,7 @@ export default function Chatbot({ onFormDataExtracted, onOrderCreated }: Chatbot
         ...newMessages,
         {
           role: 'assistant' as const,
-          content: `❌ ${errorMessage}\n\nSi el problema persiste, por favor contacta al administrador.`,
+          content: `Error: ${errorMessage}\n\nSi el problema persiste, por favor contacta al administrador.`,
         },
       ];
       setMessages(errorMessages);
@@ -218,16 +218,13 @@ export default function Chatbot({ onFormDataExtracted, onOrderCreated }: Chatbot
       });
       setAttachedFiles([]);
       
-      const ordersCount = data.orders?.length || 1;
-      const ordersInfo = ordersCount > 1 
-        ? `Se crearon ${ordersCount} órdenes (una por proveedor)`
-        : `Número de orden: ${data.order.id}`;
+      const ordersInfo = `Numero de orden: ${data.order.id}`;
       
       const newMessages = [
         ...messages,
         {
           role: 'assistant' as const,
-          content: `✅ ¡Órdenes creadas exitosamente!\n\n${ordersInfo}\nEstado: ${data.order.status}\n\n${data.message}`,
+          content: `Orden creada exitosamente.\n\n${ordersInfo}\nEstado: ${data.order.status}\n\n${data.message}`,
         },
       ];
       setMessages(newMessages);
@@ -239,7 +236,7 @@ export default function Chatbot({ onFormDataExtracted, onOrderCreated }: Chatbot
         ...messages,
         {
           role: 'assistant' as const,
-          content: `❌ Error al crear la orden:\n\n${errorMessage}\n\nPor favor verifica que:\n• El nombre del solicitante esté registrado\n• El almacén/obra exista en el sistema\n• El proveedor esté dado de alta`,
+          content: `Error al crear la orden:\n\n${errorMessage}\n\nPor favor verifica que:\n- El nombre del solicitante este registrado\n- El almacen/obra exista en el sistema\n- El proveedor este dado de alta`,
         },
       ];
       setMessages(newMessages);

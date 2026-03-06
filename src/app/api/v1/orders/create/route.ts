@@ -210,6 +210,8 @@ export async function POST(request: Request) {
       applicant_id, // ID opcional desde el chatbot
       store_name,
       store_id, // ID opcional desde el chatbot
+      supplier_name, // Proveedor único para toda la orden (desde chatbot)
+      supplier_id, // ID opcional del proveedor (desde chatbot)
       items,
       justification,
       currency = 'MXN',
@@ -242,13 +244,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validar estructura de items (ahora cada item tiene su proveedor)
+    // Validar estructura de items
     const invalidItems = items.filter((item: OrderItem) => 
       !item.nombre || 
       !item.cantidad || 
       !item.unidad || 
       !item.precioUnitario ||
-      !item.proveedor ||
       parseFloat(String(item.cantidad)) <= 0 ||
       item.precioUnitario <= 0
     );
@@ -330,160 +331,136 @@ export async function POST(request: Request) {
       storeIdToUse = storeData.id;
     }
 
-    // Agrupar items por proveedor
-    const itemsBySupplier: { [key: string]: OrderItem[] } = {};
-    
-    for (const item of items) {
-      const supplierKey = item.supplier_name || item.proveedor || 'unknown';
-      if (!itemsBySupplier[supplierKey]) {
-        itemsBySupplier[supplierKey] = [];
-      }
-      itemsBySupplier[supplierKey].push(item);
-    }
+    // Resolver proveedor único para toda la orden
+    // Se acepta supplier_id o supplier_name a nivel de orden, o como fallback del primer item
+    let finalSupplierId: string | number | undefined = supplier_id;
+    const resolvedSupplierName = supplier_name || items[0]?.supplier_name || items[0]?.proveedor || '';
 
-    // Crear una orden por cada proveedor
-    const createdOrders = [];
-    const errors = [];
+    if (!finalSupplierId && resolvedSupplierName) {
+      const { data: supplierData, error: supplierError } = await supabaseAdmin
+        .from('suppliers')
+        .select('id')
+        .ilike('commercial_name', `%${resolvedSupplierName}%`)
+        .limit(1)
+        .single();
 
-    for (const [supplierKey, supplierItems] of Object.entries(itemsBySupplier)) {
-      try {
-        // Buscar el proveedor
-        const supplierId = supplierItems[0].supplier_id;
-        let finalSupplierId = supplierId;
-
-        if (!finalSupplierId) {
-          const { data: supplierData, error: supplierError } = await supabaseAdmin
-            .from('suppliers')
-            .select('id')
-            .ilike('commercial_name', `%${supplierKey}%`)
-            .limit(1)
-            .single();
-
-          if (supplierError || !supplierData) {
-            errors.push(`No se encontró el proveedor "${supplierKey}"`);
-            continue;
-          }
-          finalSupplierId = supplierData.id;
-        }
-
-        // Calcular totales para este proveedor
-        const subtotal = supplierItems.reduce((sum: number, item: OrderItem) => {
-          const cantidad = parseFloat(String(item.cantidad)) || 0;
-          const precio = item.precioUnitario || 0;
-          return sum + (cantidad * precio);
-        }, 0);
-
-        // Calcular IVA solo si tax_type es 'con_iva'
-        const effectiveIvaPercentage = tax_type === 'con_iva' ? (iva_percentage || 16) : 0;
-        const iva = tax_type === 'con_iva' ? subtotal * (effectiveIvaPercentage / 100) : 0;
-        const total = subtotal + iva;
-        const totalQuantity = supplierItems.reduce((sum: number, item: OrderItem) => 
-          sum + parseFloat(String(item.cantidad)), 0
+      if (supplierError || !supplierData) {
+        return NextResponse.json(
+          { 
+            error: `No se encontró el proveedor "${resolvedSupplierName}". Verifica que esté dado de alta en el sistema.`,
+            details: 'El proveedor debe estar registrado en la base de datos.'
+          },
+          { status: 404 }
         );
-
-        // Preparar los items con precio total calculado
-        const itemsWithTotal = supplierItems.map((item: OrderItem) => ({
-          nombre: item.nombre,
-          cantidad: parseFloat(String(item.cantidad)),
-          unidad: item.unidad,
-          precioUnitario: item.precioUnitario,
-          precioTotal: parseFloat(String(item.cantidad)) * item.precioUnitario,
-          proveedor: supplierKey
-        }));
-
-        // Crear la orden primero (sin evidencias) para obtener el ID
-        const orderData = {
-          applicant_id: userId,
-          store_id: storeIdToUse,
-          date: new Date().toISOString().split('T')[0],
-          supplier_id: finalSupplierId,
-          items: JSON.stringify(itemsWithTotal),
-          quantity: totalQuantity,
-          unity: supplierItems[0]?.unidad || 'pza',
-          price_excluding_iva: subtotal,
-          price_with_iva: total,
-          subtotal: subtotal,
-          iva: iva,
-          total: total,
-          currency: currency,
-          justification: justification || '',
-          retention: retention || '',
-          payment_type: payment_type || '',
-          tax_type: tax_type || 'sin_iva',
-          iva_percentage: effectiveIvaPercentage || null,
-          status: 'pending',
-          is_urgent: is_urgent || false,
-          urgency_justification: is_urgent ? urgency_justification : null,
-        };
-
-        const { data: orderCreated, error: orderError } = await supabaseAdmin
-          .from('orders')
-          .insert([orderData])
-          .select()
-          .single();
-
-        if (orderError) {
-          errors.push(`Error al crear orden para ${supplierKey}: ${orderError.message}`);
-        } else {
-          
-          // Subir archivos de evidencia si existen (solo para la primera orden)
-          if (evidenceFiles.length > 0 && createdOrders.length === 0) {
-            try {
-              const evidenceUrls = await uploadEvidenceFiles(evidenceFiles, String(orderCreated.id));
-              
-              if (evidenceUrls.length > 0) {
-                // Actualizar la orden con las URLs de las evidencias
-                await supabaseAdmin
-                  .from('orders')
-                  .update({ 
-                    justification_prove: evidenceUrls.join(',') 
-                  })
-                  .eq('id', orderCreated.id);
-                
-                orderCreated.justification_prove = evidenceUrls.join(',');
-              }
-            } catch {
-              // No fallar la orden si falla la subida de archivos
-            }
-          }
-          
-          createdOrders.push(orderCreated);
-          
-          // Crear el flujo de aprobaciones automáticamente
-          if (userDepartmentId) {
-            try {
-              await createOrderApprovalsServer(String(orderCreated.id), userDepartmentId, userId, is_urgent);
-            } catch {
-              // No fallar la creación de la orden si falla la creación de aprobaciones
-            }
-          }
-        }
-      } catch {
-        errors.push(`Error procesando ${supplierKey}`);
       }
+      finalSupplierId = supplierData.id;
     }
 
-    // Respuesta
-    if (createdOrders.length === 0) {
+    if (!finalSupplierId) {
+      return NextResponse.json(
+        { error: 'Se requiere un proveedor para la orden de compra.' },
+        { status: 400 }
+      );
+    }
+
+    // Calcular totales
+    const subtotal = items.reduce((sum: number, item: OrderItem) => {
+      const cantidad = parseFloat(String(item.cantidad)) || 0;
+      const precio = item.precioUnitario || 0;
+      return sum + (cantidad * precio);
+    }, 0);
+
+    const effectiveIvaPercentage = tax_type === 'con_iva' ? (iva_percentage || 16) : 0;
+    const iva = tax_type === 'con_iva' ? subtotal * (effectiveIvaPercentage / 100) : 0;
+    const total = subtotal + iva;
+    const totalQuantity = items.reduce((sum: number, item: OrderItem) => 
+      sum + parseFloat(String(item.cantidad)), 0
+    );
+
+    // Preparar los items con precio total calculado
+    const itemsWithTotal = items.map((item: OrderItem) => ({
+      nombre: item.nombre,
+      cantidad: parseFloat(String(item.cantidad)),
+      unidad: item.unidad,
+      precioUnitario: item.precioUnitario,
+      precioTotal: parseFloat(String(item.cantidad)) * item.precioUnitario,
+      proveedor: resolvedSupplierName
+    }));
+
+    // Crear la orden
+    const orderData = {
+      applicant_id: userId,
+      store_id: storeIdToUse,
+      date: new Date().toISOString().split('T')[0],
+      supplier_id: finalSupplierId,
+      items: JSON.stringify(itemsWithTotal),
+      quantity: totalQuantity,
+      unity: items[0]?.unidad || 'pza',
+      price_excluding_iva: subtotal,
+      price_with_iva: total,
+      subtotal: subtotal,
+      iva: iva,
+      total: total,
+      currency: currency,
+      justification: justification || '',
+      retention: retention || '',
+      payment_type: payment_type || '',
+      tax_type: tax_type || 'sin_iva',
+      iva_percentage: effectiveIvaPercentage || null,
+      status: 'pending',
+      is_urgent: is_urgent || false,
+      urgency_justification: is_urgent ? urgency_justification : null,
+    };
+
+    const { data: orderCreated, error: orderError } = await supabaseAdmin
+      .from('orders')
+      .insert([orderData])
+      .select()
+      .single();
+
+    if (orderError) {
       return NextResponse.json(
         { 
-          error: "No se pudieron crear las órdenes",
-          details: errors.join('. ')
+          error: `Error al crear la orden: ${orderError.message}`,
         },
         { status: 500 }
       );
     }
 
-    const responseMessage = createdOrders.length === 1
-      ? "Orden de compra creada exitosamente"
-      : `${createdOrders.length} órdenes de compra creadas exitosamente (una por proveedor)`;
+    // Subir archivos de evidencia si existen
+    if (evidenceFiles.length > 0) {
+      try {
+        const evidenceUrls = await uploadEvidenceFiles(evidenceFiles, String(orderCreated.id));
+        
+        if (evidenceUrls.length > 0) {
+          await supabaseAdmin
+            .from('orders')
+            .update({ 
+              justification_prove: evidenceUrls.join(',') 
+            })
+            .eq('id', orderCreated.id);
+          
+          orderCreated.justification_prove = evidenceUrls.join(',');
+        }
+      } catch {
+        // No fallar la orden si falla la subida de archivos
+      }
+    }
+    
+    // Crear el flujo de aprobaciones automáticamente
+    if (userDepartmentId) {
+      try {
+        await createOrderApprovalsServer(String(orderCreated.id), userDepartmentId, userId, is_urgent);
+      } catch {
+        // No fallar la creación de la orden si falla la creación de aprobaciones
+      }
+    }
 
     return NextResponse.json({
       success: true,
-      orders: createdOrders,
-      order: createdOrders[0], // Para compatibilidad con código existente
-      message: responseMessage,
-      warnings: errors.length > 0 ? errors : undefined
+      orders: [orderCreated],
+      order: orderCreated,
+      message: "Orden de compra creada exitosamente",
     });
 
   } catch (error: unknown) {

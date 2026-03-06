@@ -316,6 +316,8 @@ export interface CreateOrderRequest {
   applicant_id?: string;
   store_name: string;
   store_id?: number;
+  supplier_name?: string;
+  supplier_id?: string | number;
   items: OrderItem[];
   justification?: string;
   currency?: string;
