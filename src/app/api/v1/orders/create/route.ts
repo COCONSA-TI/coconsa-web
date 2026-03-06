@@ -89,37 +89,60 @@ async function createOrderApprovalsServer(orderId: string, applicantDepartmentId
       });
     }
   } else {
-    // ORDEN NORMAL: Flujo completo
-    // 1. Aprobación del departamento del solicitante (gerencia)
+    // ORDEN NORMAL: Determinar flujo según el departamento del solicitante
     const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
-    if (applicantDept) {
-      // Si el solicitante ES el jefe de su departamento, auto-aprobar su nivel
-      approvalsToCreate.push({
-        order_id: orderId,
-        department_id: applicantDept.id,
-        status: isApplicantDeptHead ? 'approved' : 'pending',
-        approval_order: applicantDept.approval_order,
-        approver_id: isApplicantDeptHead ? applicantId : null,
-        approved_at: isApplicantDeptHead ? new Date().toISOString() : null,
-        comments: isApplicantDeptHead ? 'Auto-aprobado (solicitante es jefe de departamento)' : null,
-      });
-    }
+    const applicantApprovalOrder = applicantDept?.approval_order ?? 0;
 
-    // 2. Aprobaciones para el resto del flujo (contraloría, dirección, contabilidad, pagos)
-    // Solo incluir departamentos con approval_order > 1 que NO sean otras gerencias
-    // El flujo es: Gerencia (1) -> Contraloría (2) -> Dirección (3) -> Contabilidad (4) -> Pagos (5)
-    // Evitamos duplicar el departamento del solicitante
-    const subsequentDepartments = departments.filter(
-      (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== applicantDepartmentId
-    );
+    if (applicantApprovalOrder >= 2) {
+      // El solicitante pertenece a un departamento del flujo de aprobación (Contraloría, Dirección, Contabilidad, Pagos).
+      // NO se incluye Gerencia (step 1) porque no tienen gerente que les apruebe.
+      // NO se auto-aprueba su propio paso para evitar conflictos de interés.
+      // Flujo: Contraloría (2) → Dirección (3) → Contabilidad (4) → Pagos (5)
+      const flowDepartments = departments.filter(
+        (d: Department) => d.approval_order && d.approval_order >= 2
+      );
 
-    for (const dept of subsequentDepartments) {
-      approvalsToCreate.push({
-        order_id: orderId,
-        department_id: dept.id,
-        status: 'pending',
-        approval_order: dept.approval_order,
-      });
+      for (const dept of flowDepartments) {
+        approvalsToCreate.push({
+          order_id: orderId,
+          department_id: dept.id,
+          status: 'pending',
+          approval_order: dept.approval_order,
+        });
+      }
+    } else {
+      // El solicitante es de una Gerencia (approval_order = 1) o no tiene departamento en el flujo.
+      // Flujo completo: Gerencia (1) → Contraloría (2) → Dirección (3) → Contabilidad (4) → Pagos (5)
+
+      // 1. Aprobación del departamento del solicitante (gerencia)
+      if (applicantDept) {
+        // Si el solicitante ES el jefe de su departamento, auto-aprobar su nivel
+        approvalsToCreate.push({
+          order_id: orderId,
+          department_id: applicantDept.id,
+          status: isApplicantDeptHead ? 'approved' : 'pending',
+          approval_order: applicantDept.approval_order,
+          approver_id: isApplicantDeptHead ? applicantId : null,
+          approved_at: isApplicantDeptHead ? new Date().toISOString() : null,
+          comments: isApplicantDeptHead ? 'Auto-aprobado (solicitante es jefe de departamento)' : null,
+        });
+      }
+
+      // 2. Aprobaciones para el resto del flujo (contraloría, dirección, contabilidad, pagos)
+      // Solo incluir departamentos con approval_order > 1 que NO sean otras gerencias
+      // Evitamos duplicar el departamento del solicitante
+      const subsequentDepartments = departments.filter(
+        (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== applicantDepartmentId
+      );
+
+      for (const dept of subsequentDepartments) {
+        approvalsToCreate.push({
+          order_id: orderId,
+          department_id: dept.id,
+          status: 'pending',
+          approval_order: dept.approval_order,
+        });
+      }
     }
   }
 
@@ -131,9 +154,14 @@ async function createOrderApprovalsServer(orderId: string, applicantDepartmentId
     throw new Error('Error al crear aprobaciones: ' + insertError.message);
   }
 
-  // Si se auto-aprobó el primer nivel (orden normal con dept head), actualizar estado de la orden a in_progress
+  // Si se auto-aprobó el primer nivel (orden normal con dept head de gerencia), actualizar estado a in_progress
   // Si es orden urgente, también ponerla en in_progress ya que se saltó gerencia y contraloría
-  if (isApplicantDeptHead || isUrgent) {
+  // Si el solicitante pertenece a un depto con approval_order >= 2, también in_progress porque no hay step 1
+  const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
+  const applicantApprovalOrder = applicantDept?.approval_order ?? 0;
+  const shouldBeInProgress = isUrgent || (isApplicantDeptHead && applicantApprovalOrder === 1) || applicantApprovalOrder >= 2;
+
+  if (shouldBeInProgress) {
     await supabaseAdmin
       .from('orders')
       .update({ status: 'in_progress' })

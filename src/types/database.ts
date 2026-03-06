@@ -205,6 +205,7 @@ export interface Order {
   justification_prove: string | null;
   is_urgent: boolean;
   urgency_justification: string | null;
+  is_definitive_rejection: boolean;
 }
 
 export interface OrderApproval {

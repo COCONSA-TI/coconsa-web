@@ -25,6 +25,7 @@ type SupabaseOrder = {
   items: string;
   payment_type: string | null;
   is_urgent: boolean;
+  is_definitive_rejection: boolean;
 };
 
 export async function GET(request: Request) {
@@ -45,7 +46,7 @@ export async function GET(request: Request) {
 
     let query = supabaseAdmin
       .from('orders')
-      .select('id, created_at, store_id, total, currency, status, applicant_id, items, payment_type, is_urgent');
+      .select('id, created_at, store_id, total, currency, status, applicant_id, items, payment_type, is_urgent, is_definitive_rejection');
 
     if (session!.role !== 'admin') {
       if (currentUserData?.is_department_head && currentUserData?.department_id) {
@@ -150,6 +151,7 @@ export async function GET(request: Request) {
         items_count: itemsArray.length,
         payment_type: order.payment_type || null,
         is_urgent: order.is_urgent || false,
+        is_definitive_rejection: order.is_definitive_rejection || false,
         my_department_status: userDeptApprovals.get(order.id) || null,
       };
     });

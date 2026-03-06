@@ -6,7 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 import { getOrderApprovals, canUserApprove, getApprovalIconType, type OrderApproval, type ApprovalIconType } from "@/lib/approvalFlow";
 import { useToast } from "@/components/ui/Toast";
-import { ConfirmModal, InputModal } from "@/components/ui/Modal";
+import { ConfirmModal, InputModal, Modal } from "@/components/ui/Modal";
 
 type OrderStatus = "pending" | "approved" | "rejected" | "in_progress" | "completed";
 
@@ -41,6 +41,7 @@ interface OrderDetail {
   items: OrderItem[];
   is_urgent: boolean;
   urgency_justification: string | null;
+  is_definitive_rejection: boolean;
 }
 
 const statusConfig: Record<OrderStatus, { label: string; className: string; iconBg: string }> = {
@@ -83,6 +84,7 @@ export default function OrdenDetallesPage() {
   // Modal states
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectDefinitive, setRejectDefinitive] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [processingAction, setProcessingAction] = useState(false);
 
@@ -162,7 +164,7 @@ export default function OrdenDetallesPage() {
     }
   };
 
-  const handleReject = async (reason: string) => {
+  const handleReject = async (reason: string, isDefinitive: boolean) => {
     if (!reason || reason.trim() === '') {
       toast.warning('Campo requerido', 'Debes proporcionar una razon para rechazar la orden');
       return;
@@ -173,7 +175,7 @@ export default function OrdenDetallesPage() {
       const response = await fetch(`/api/v1/orders/${orderId}/reject`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comments: reason }),
+        body: JSON.stringify({ comments: reason, is_definitive: isDefinitive }),
       });
 
       const data = await response.json();
@@ -184,6 +186,7 @@ export default function OrdenDetallesPage() {
 
       toast.success('Orden rechazada', data.message);
       setShowRejectModal(false);
+      setRejectDefinitive(false);
       await fetchOrderDetails();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error al rechazar la orden';
@@ -331,18 +334,82 @@ export default function OrdenDetallesPage() {
         loading={processingAction}
       />
 
-      <InputModal
+      <Modal
         isOpen={showRejectModal}
-        onClose={() => setShowRejectModal(false)}
-        onConfirm={handleReject}
+        onClose={() => { setShowRejectModal(false); setRejectDefinitive(false); }}
         title="Rechazar Orden"
-        message="Por favor, indica el motivo del rechazo. Esta informacion sera visible para el solicitante."
-        placeholder="Escribe el motivo del rechazo..."
-        confirmText="Rechazar"
-        cancelText="Cancelar"
-        required={true}
-        loading={processingAction}
-      />
+        size="md"
+      >
+        <div>
+          <p className="text-gray-600 mb-4">Por favor, indica el motivo del rechazo. Esta informacion sera visible para el solicitante.</p>
+          <textarea
+            id="reject-reason-textarea"
+            placeholder="Escribe el motivo del rechazo..."
+            rows={3}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none text-gray-900"
+          />
+          <p className="text-xs text-gray-500 mt-1">* Este campo es obligatorio</p>
+
+          {/* Toggle rechazo definitivo */}
+          <label className="flex items-start gap-3 mt-4 p-3 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+            <input
+              type="checkbox"
+              checked={rejectDefinitive}
+              onChange={(e) => setRejectDefinitive(e.target.checked)}
+              className="mt-0.5 w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+            />
+            <div>
+              <span className="text-sm font-medium text-gray-900">Rechazo definitivo</span>
+              <p className="text-xs text-gray-500 mt-0.5">
+                La orden no podra ser editada ni reenviada por el solicitante.
+              </p>
+            </div>
+          </label>
+
+          {rejectDefinitive && (
+            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-xs text-red-700 font-medium">
+                Esta accion es irreversible. El solicitante no podra modificar ni reenviar esta orden.
+              </p>
+            </div>
+          )}
+
+          <div className="flex gap-3 mt-5">
+            <button
+              onClick={() => { setShowRejectModal(false); setRejectDefinitive(false); }}
+              disabled={processingAction}
+              className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => {
+                const textarea = document.getElementById('reject-reason-textarea') as HTMLTextAreaElement;
+                const reason = textarea?.value || '';
+                handleReject(reason, rejectDefinitive);
+              }}
+              disabled={processingAction}
+              className={`flex-1 px-4 py-2.5 text-white rounded-lg transition-colors font-medium disabled:opacity-50 ${
+                rejectDefinitive 
+                  ? 'bg-red-800 hover:bg-red-900' 
+                  : 'bg-red-600 hover:bg-red-700'
+              }`}
+            >
+              {processingAction ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Procesando...
+                </span>
+              ) : (
+                rejectDefinitive ? 'Rechazar Definitivamente' : 'Rechazar'
+              )}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <ConfirmModal
         isOpen={showCompleteModal}
@@ -386,6 +453,16 @@ export default function OrdenDetallesPage() {
                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusInfo.className}`}>
                   {statusInfo.label}
                 </span>
+                {order.status === 'rejected' && order.is_definitive_rejection && (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-700 text-white">
+                    Definitiva
+                  </span>
+                )}
+                {order.status === 'rejected' && !order.is_definitive_rejection && (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
+                    Editable
+                  </span>
+                )}
               </div>
               <p className="text-red-100 text-sm mt-1">
                 {dateInfo.full} - {dateInfo.time}
@@ -441,7 +518,11 @@ export default function OrdenDetallesPage() {
 
         {/* Mensaje de orden rechazada */}
         {order.status === 'rejected' && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-5">
+          <div className={`border rounded-xl p-5 ${
+            order.is_definitive_rejection 
+              ? 'bg-red-100 border-red-300' 
+              : 'bg-red-50 border-red-200'
+          }`}>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-start gap-4">
                 <div className="bg-red-100 rounded-full p-2">
@@ -450,14 +531,28 @@ export default function OrdenDetallesPage() {
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-red-900 font-semibold">Orden Rechazada</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-red-900 font-semibold">Orden Rechazada</h3>
+                    {order.is_definitive_rejection ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-red-700 text-white">
+                        Definitiva
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 border border-yellow-300">
+                        Editable
+                      </span>
+                    )}
+                  </div>
                   <p className="text-red-700 text-sm mt-1">
-                    Esta orden de compra ha sido rechazada. Puedes editarla y reenviarla para aprobacion.
+                    {order.is_definitive_rejection
+                      ? 'Esta orden de compra ha sido rechazada de forma definitiva. No puede ser editada ni reenviada.'
+                      : 'Esta orden de compra ha sido rechazada. Puedes editarla y reenviarla para aprobacion.'
+                    }
                   </p>
                 </div>
               </div>
-              {/* Boton editar - solo para el solicitante original (NO para gerentes/admins) */}
-              {user?.email === order.applicant_email && (
+              {/* Boton editar - solo para el solicitante original y solo si NO es definitiva */}
+              {!order.is_definitive_rejection && user?.email === order.applicant_email && (
                 <Link
                   href={`/dashboard/ordenes-compra/${order.id}/editar`}
                   className="inline-flex items-center justify-center gap-2 bg-red-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-red-700 transition-colors shadow-sm whitespace-nowrap"
