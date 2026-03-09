@@ -173,36 +173,23 @@ export default function Chatbot({ onFormDataExtracted, onOrderCreated }: Chatbot
 
   const createOrder = async () => {
     if (!extractedData.isComplete) return;
+    if (attachedFiles.length === 0) return; // Evidencia obligatoria
 
     setIsCreatingOrder(true);
 
     try {
-      let response: Response;
+      const formData = new FormData();
+      formData.append('orderData', JSON.stringify(extractedData));
       
-      // Si hay archivos adjuntos, usar FormData
-      if (attachedFiles.length > 0) {
-        const formData = new FormData();
-        formData.append('orderData', JSON.stringify(extractedData));
-        
-        // Agregar cada archivo
-        attachedFiles.forEach((af) => {
-          formData.append('evidence', af.file);
-        });
-        
-        response = await fetch('/api/v1/orders/create', {
-          method: 'POST',
-          body: formData,
-        });
-      } else {
-        // Sin archivos, usar JSON normal
-        response = await fetch('/api/v1/orders/create', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(extractedData),
-        });
-      }
+      // Agregar cada archivo de evidencia
+      attachedFiles.forEach((af) => {
+        formData.append('evidence', af.file);
+      });
+      
+      const response = await fetch('/api/v1/orders/create', {
+        method: 'POST',
+        body: formData,
+      });
 
       const data = await response.json();
 
@@ -362,20 +349,37 @@ export default function Chatbot({ onFormDataExtracted, onOrderCreated }: Chatbot
 
       {/* Botón para crear orden cuando está completa */}
       {extractedData.isComplete === true && !orderCreated && (
-        <div className="border-t p-4 bg-green-50">
+        <div className={`border-t p-4 ${attachedFiles.length > 0 ? 'bg-green-50' : 'bg-amber-50'}`}>
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <p className="text-sm font-semibold text-green-900 mb-1">
-                ✅ Información completa
-              </p>
-              <p className="text-xs text-green-700">
-                Toda la información necesaria ha sido recopilada.
-              </p>
+              {attachedFiles.length > 0 ? (
+                <>
+                  <p className="text-sm font-semibold text-green-900 mb-1">
+                    Informacion completa - {attachedFiles.length} archivo(s) de evidencia
+                  </p>
+                  <p className="text-xs text-green-700">
+                    Toda la informacion necesaria ha sido recopilada. Puedes crear la orden.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-semibold text-amber-900 mb-1">
+                    Falta adjuntar evidencia (obligatorio)
+                  </p>
+                  <p className="text-xs text-amber-700">
+                    Usa el boton de clip para adjuntar al menos un archivo de evidencia antes de crear la orden.
+                  </p>
+                </>
+              )}
             </div>
             <button
               onClick={createOrder}
-              disabled={isCreatingOrder}
-              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-semibold"
+              disabled={isCreatingOrder || attachedFiles.length === 0}
+              className={`px-6 py-2 rounded-lg transition-colors font-semibold ${
+                attachedFiles.length > 0
+                  ? 'bg-green-600 text-white hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
             >
               {isCreatingOrder ? 'Creando...' : 'Crear Orden'}
             </button>
