@@ -153,11 +153,9 @@ export async function POST(request: Request) {
       .single();
 
     if (userError || !userData) {
+      console.error('[bot] Error obteniendo datos de usuario:', userError);
       return NextResponse.json(
-        { 
-          error: "No se pudieron obtener los datos de tu usuario",
-          details: userError?.message || 'Usuario no encontrado'
-        },
+        { error: "No se pudieron obtener los datos del usuario." },
         { status: 500 }
       );
     }
@@ -181,15 +179,21 @@ export async function POST(request: Request) {
     
     if (!validatedFields.success) {
       return NextResponse.json(
-        { 
-          error: "Datos inválidos",
-          details: validatedFields.error.flatten().fieldErrors,
-        },
+        { error: "Datos inválidos" },
         { status: 400 }
       );
     }
 
     const { message, conversationHistory = [] } = validatedFields.data;
+
+    // Limitar el historial a los últimos 20 turnos y truncar contenido largo
+    // para prevenir inyección de prompt y abusos de contexto
+    const safeHistory = conversationHistory
+      .slice(-20)
+      .map((msg) => ({
+        role: msg.role as 'user' | 'assistant',
+        content: String(msg.content).slice(0, 2000),
+      }));
 
     // Verificar que la API key esté configurada
     if (!process.env.GEMINI_API_KEY) {
@@ -212,7 +216,7 @@ export async function POST(request: Request) {
         role: "model",
         parts: [{ text: "Entendido. Actuaré como asistente virtual amigable de COCONSA y ayudaré a los usuarios a proporcionar su información de manera natural y conversacional." }],
       },
-      ...conversationHistory.map((msg) => ({
+      ...safeHistory.map((msg) => ({
         role: msg.role === "user" ? "user" : "model",
         parts: [{ text: msg.content }],
       })),
@@ -239,7 +243,7 @@ export async function POST(request: Request) {
     }
 
     // Extraer información estructurada usando IA (segunda pasada) para mayor precisión
-    const fullHistory = [...conversationHistory, { role: "user", content: message }, { role: "assistant", content: botMessage }];
+    const fullHistory = [...safeHistory, { role: "user", content: message }, { role: "assistant", content: botMessage }];
     const extractedData = await extractOrderDataWithAI(
       fullHistory,
       userData,
@@ -266,19 +270,16 @@ export async function POST(request: Request) {
       availableStores: stores || [],
       availableSuppliers: suppliers || [],
       conversationHistory: [
-        ...conversationHistory,
+        ...safeHistory,
         { role: "user", content: message },
         { role: "assistant", content: botMessage },
       ],
     });
 
   } catch (error: unknown) {
-    const apiError = error as ApiError;
+    console.error('[bot] Error al procesar solicitud:', error);
     return NextResponse.json(
-      { 
-        error: "Error al procesar la solicitud",
-        details: apiError?.message || 'Error desconocido',
-      },
+      { error: "Error al procesar la solicitud" },
       { status: 500 }
     );
   }

@@ -121,15 +121,7 @@ export async function POST(
       console.error('Error verificando aprobaciones:', checkError);
     }
 
-    // Debug: Log de todas las aprobaciones
-    console.log('Aprobaciones actualizadas:', JSON.stringify(updatedApprovals, null, 2));
-
     const allApproved = updatedApprovals?.every((a: { status: ApprovalStatus | null }) => a.status === 'approved');
-    const totalApprovals = updatedApprovals?.length || 0;
-    const approvedCount = updatedApprovals?.filter((a: { status: ApprovalStatus | null }) => a.status === 'approved').length || 0;
-    const pendingCount = updatedApprovals?.filter((a: { status: ApprovalStatus | null }) => a.status === 'pending').length || 0;
-
-    console.log(`Orden ${orderId}: Total=${totalApprovals}, Aprobadas=${approvedCount}, Pendientes=${pendingCount}, AllApproved=${allApproved}`);
 
     // 7. Si todas están aprobadas, cambiar estado de la orden
     if (allApproved) {
@@ -143,8 +135,6 @@ export async function POST(
 
       if (orderUpdateError) {
         console.error('Error actualizando orden a approved:', orderUpdateError);
-      } else {
-        console.log(`Orden ${orderId} marcada como APPROVED`);
       }
     } else {
       // Si no están todas aprobadas, actualizar estado a 'in_progress'
@@ -165,11 +155,6 @@ export async function POST(
       success: true,
       message: allApproved ? 'Orden completamente aprobada' : 'Aprobacion registrada exitosamente',
       allApproved,
-      debug: {
-        totalApprovals,
-        approvedCount,
-        pendingCount,
-      }
     });
   } catch (error) {
     return NextResponse.json(

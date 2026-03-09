@@ -13,7 +13,7 @@ const UpdateProfileSchema = z.object({
 // Schema para cambiar contraseña
 const ChangePasswordSchema = z.object({
   current_password: z.string().min(1, { message: 'La contraseña actual es requerida' }),
-  new_password: z.string().min(6, { message: 'La nueva contraseña debe tener al menos 6 caracteres' }),
+  new_password: z.string().min(8, { message: 'La nueva contraseña debe tener al menos 8 caracteres' }),
   confirm_password: z.string().min(1, { message: 'Confirma la nueva contraseña' }),
 }).refine((data) => data.new_password === data.confirm_password, {
   message: 'Las contraseñas no coinciden',

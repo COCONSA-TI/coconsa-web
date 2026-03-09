@@ -1,13 +1,29 @@
 import { NextResponse } from "next/server";
+import { headers } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { LoginSchema } from "@/lib/schemas";
 import { createSession } from "@/lib/auth";
 import bcrypt from 'bcryptjs';
 import { verifyRecaptcha } from "@/lib/captcha";
+import { rateLimit } from "@/lib/rate-limit";
 import { UserRoleRelation } from "@/types/database";
 
 export async function POST(request: Request) {
   try {
+    // Rate limiting por IP: máximo 5 intentos cada 15 minutos
+    const headersList = await headers();
+    const ip =
+      headersList.get("x-forwarded-for")?.split(",")[0].trim() ??
+      headersList.get("x-real-ip") ??
+      "unknown";
+
+    if (!rateLimit(ip, { maxRequests: 5, windowMs: 15 * 60 * 1000 })) {
+      return NextResponse.json(
+        { error: "Demasiados intentos de inicio de sesión. Espera 15 minutos e intenta de nuevo." },
+        { status: 429, headers: { "Retry-After": "900" } }
+      );
+    }
+
     const body = await request.json();
     
     const validatedFields = LoginSchema.safeParse(body);
@@ -25,10 +41,19 @@ export async function POST(request: Request) {
 
     const { email, password, recaptchaToken } = validatedFields.data;
 
-    // Solo verificar reCAPTCHA en producción
-    if (process.env.NODE_ENV === 'production') {
+    // Verificar reCAPTCHA siempre, excepto cuando SKIP_RECAPTCHA=true en no-producción
+    const skipRecaptcha =
+      process.env.SKIP_RECAPTCHA === "true" &&
+      process.env.NODE_ENV !== "production";
+
+    if (!skipRecaptcha) {
+      if (!recaptchaToken) {
+        return NextResponse.json(
+          { error: "Token de verificación requerido." },
+          { status: 400 }
+        );
+      }
       const recaptchaResult = await verifyRecaptcha(recaptchaToken);
-      
       if (!recaptchaResult.success) {
         return NextResponse.json(
           { error: "Verificación de seguridad fallida. Por favor, intenta nuevamente." },

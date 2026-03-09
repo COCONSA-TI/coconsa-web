@@ -7,7 +7,7 @@ import { z } from 'zod';
 // Schema para crear usuario
 const CreateUserSchema = z.object({
   email: z.string().email({ message: 'Email inválido' }),
-  password: z.string().min(6, { message: 'La contraseña debe tener al menos 6 caracteres' }),
+  password: z.string().min(8, { message: 'La contraseña debe tener al menos 8 caracteres' }),
   full_name: z.string().min(2, { message: 'El nombre debe tener al menos 2 caracteres' }),
   role: z.number().int().positive({ message: 'Rol inválido' }),
   department_id: z.string().uuid().nullable().optional(),

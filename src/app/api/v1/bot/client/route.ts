@@ -860,15 +860,20 @@ export async function POST(request: Request) {
     
     if (!validatedFields.success) {
       return NextResponse.json(
-        { 
-          error: "Datos inválidos",
-          details: validatedFields.error.flatten().fieldErrors,
-        },
+        { error: "Datos inválidos" },
         { status: 400 }
       );
     }
 
     const { message, conversationHistory = [] } = validatedFields.data;
+
+    // Limitar el historial a los últimos 20 turnos y truncar contenido largo
+    const safeHistory = conversationHistory
+      .slice(-20)
+      .map((msg) => ({
+        role: msg.role as 'user' | 'assistant',
+        content: String(msg.content).slice(0, 2000),
+      }));
 
     // Verificar que al menos un proveedor esté disponible - si GEMINI_API_KEY no está configurada, se usará Ollama
 
@@ -924,7 +929,7 @@ export async function POST(request: Request) {
     const { text: botMessage } = await getLLMResponse(
       systemPrompt,
       projectContext,
-      conversationHistory,
+      safeHistory,
       message,
       projectsWithMetrics // Pasar los proyectos con métricas para Ollama
     );
@@ -935,19 +940,16 @@ export async function POST(request: Request) {
       detectedProject,
       availableProjects: Object.keys(userProjects),
       conversationHistory: [
-        ...conversationHistory,
+        ...safeHistory,
         { role: "user", content: message },
         { role: "assistant", content: botMessage },
       ],
     });
 
   } catch (error: unknown) {
-    const apiError = error as ApiError;
+    console.error('[bot/client] Error al procesar solicitud:', error);
     return NextResponse.json(
-      { 
-        error: "Error al procesar la solicitud",
-        details: apiError.message || "Error desconocido"
-      },
+      { error: "Error al procesar la solicitud" },
       { status: 500 }
     );
   }
