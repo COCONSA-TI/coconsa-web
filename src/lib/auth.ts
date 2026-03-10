@@ -1,6 +1,5 @@
 import { SignJWT, jwtVerify, JWTPayload } from 'jose';
 import { cookies } from 'next/headers';
-import { randomUUID } from 'crypto';
 
 if (!process.env.JWT_SECRET) {
   throw new Error("JWT_SECRET is not defined");
@@ -48,7 +47,7 @@ export interface SessionPayload extends JWTPayload {
 }
 
 export async function encrypt(payload: Omit<SessionPayload, keyof JWTPayload>) {
-  const jti = randomUUID();
+  const jti = crypto.randomUUID();
   return await new SignJWT({ ...(payload as unknown as JWTPayload), jti })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()

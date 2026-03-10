@@ -291,7 +291,7 @@ export async function POST(request: Request) {
     }
 
     // Obtener datos del solicitante desde la DB usando el ID de la sesión (no el del body)
-    let userId: string = authenticatedUserId;
+    const userId: string = authenticatedUserId;
     let userDepartmentId: string | null = null;
     let userIsDeptHead: boolean = false;
 
