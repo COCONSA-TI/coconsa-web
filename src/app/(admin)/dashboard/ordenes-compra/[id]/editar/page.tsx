@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 import { RETENTION_OPTIONS, calculateRetentions } from "@/types/database";
+import { OrderFormSkeleton } from "@/components/ui/Skeletons";
 
 interface Item {
   id: string;
@@ -487,14 +488,7 @@ export default function EditarOrdenPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Cargando orden...</p>
-        </div>
-      </div>
-    );
+    return <OrderFormSkeleton />;
   }
 
   if (error && !originalOrder) {

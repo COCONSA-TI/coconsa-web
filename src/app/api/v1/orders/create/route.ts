@@ -1,22 +1,47 @@
 import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/api-auth";
+import { getSession } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import type { Department, OrderItem, CreateOrderRequest } from "@/types/database";
 import { calculateRetentions, RETENTION_OPTIONS } from "@/types/database";
 
 const BUCKET_NAME = "Coconsa";
 
+const ALLOWED_EVIDENCE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'application/pdf',
+]);
+const MAX_EVIDENCE_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_EVIDENCE_FILES = 5;
+
 // Función para subir archivos a Supabase Storage
 async function uploadEvidenceFiles(files: File[], orderId: string): Promise<string[]> {
   const uploadedUrls: string[] = [];
-  
+
+  if (files.length > MAX_EVIDENCE_FILES) {
+    throw new Error(`Se permiten máximo ${MAX_EVIDENCE_FILES} archivos de evidencia`);
+  }
+
   // Verificar que el bucket existe
   await supabaseAdmin.storage.listBuckets();
   
   for (const file of files) {
+    // Validar tipo MIME
+    if (!ALLOWED_EVIDENCE_MIME_TYPES.has(file.type)) {
+      throw new Error(`Tipo de archivo no permitido: "${file.type}". Solo se aceptan imágenes (JPEG, PNG, WebP, GIF) y PDFs.`);
+    }
+
+    // Validar tamaño
+    if (file.size > MAX_EVIDENCE_FILE_SIZE_BYTES) {
+      throw new Error(`El archivo "${file.name}" excede el límite de 10 MB.`);
+    }
+
     const timestamp = Date.now();
-    const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const filePath = `orders/${orderId}/evidence/${timestamp}_${sanitizedName}`;
+    const ext = file.name.split('.').pop()?.replace(/[^a-zA-Z0-9]/g, '') || 'bin';
+    const filePath = `orders/${orderId}/evidence/${timestamp}_evidence.${ext}`;
     
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
@@ -175,8 +200,12 @@ async function createOrderApprovalsServer(orderId: string, applicantDepartmentId
 export async function POST(request: Request) {
   try {
     // Verificar permisos de creación
-    const { error: authError } = await requirePermission('orders', 'create');
+    const { error: authError, session } = await requirePermission('orders', 'create');
     if (authError) return authError;
+
+    // Obtener el ID del solicitante siempre desde la sesión del servidor,
+    // nunca desde el body del request (previene suplantación de identidad)
+    const authenticatedUserId = session!.userId;
 
     // Detectar tipo de contenido para manejar FormData o JSON
     const contentType = request.headers.get('content-type') || '';
@@ -208,7 +237,7 @@ export async function POST(request: Request) {
 
     const {
       applicant_name,
-      applicant_id, // ID opcional desde el chatbot
+      applicant_id: _applicant_id_ignored, // ignorado: siempre se usa la sesión del servidor
       store_name,
       store_id, // ID opcional desde el chatbot
       supplier_name, // Proveedor único para toda la orden (desde chatbot)
@@ -225,9 +254,8 @@ export async function POST(request: Request) {
     } = body;
 
     // Validaciones básicas
-    if (!applicant_name || !store_name || !items || items.length === 0) {
+    if (!store_name || !items || items.length === 0) {
       const missing = [];
-      if (!applicant_name) missing.push('Nombre del solicitante');
       if (!store_name) missing.push('Almacén u obra');
       if (!items || items.length === 0) missing.push('Artículos');
       
@@ -262,45 +290,25 @@ export async function POST(request: Request) {
       );
     }
 
-    // Buscar el usuario por nombre o usar el ID proporcionado
-    let userId: string = applicant_id || '';
+    // Obtener datos del solicitante desde la DB usando el ID de la sesión (no el del body)
+    const userId: string = authenticatedUserId;
     let userDepartmentId: string | null = null;
     let userIsDeptHead: boolean = false;
-    
-    if (!userId) {
-      const { data: userData, error: userError } = await supabaseAdmin
-        .from('users')
-        .select('id, department_id, is_department_head')
-        .ilike('full_name', `%${applicant_name}%`)
-        .limit(1)
-        .single();
 
-      if (userError || !userData) {
-        return NextResponse.json(
-          { 
-            error: `No se encontró el usuario "${applicant_name}". Verifica que el nombre esté registrado en el sistema.`,
-            details: 'El nombre debe coincidir con un usuario registrado en la base de datos.'
-          },
-          { status: 404 }
-        );
-      }
-      userId = userData.id;
-      userDepartmentId = userData.department_id;
-      userIsDeptHead = userData.is_department_head || false;
-    } else {
-      // Si tenemos el ID, obtener el departamento
-      const { data: userData } = await supabaseAdmin
-        .from('users')
-        .select('department_id, is_department_head')
-        .eq('id', userId)
-        .single();
-      
-      if (userData) {
-        userDepartmentId = userData.department_id;
-        userIsDeptHead = userData.is_department_head || false;
-      }
+    const { data: userData, error: userError } = await supabaseAdmin
+      .from('users')
+      .select('id, full_name, department_id, is_department_head')
+      .eq('id', userId)
+      .single();
+
+    if (userError || !userData) {
+      return NextResponse.json(
+        { error: 'No se encontró el usuario en el sistema.' },
+        { status: 404 }
+      );
     }
-
+    userDepartmentId = userData.department_id;
+    userIsDeptHead = userData.is_department_head || false;
     // Validar que solo jefes de departamento pueden crear órdenes urgentes
     if (is_urgent && !userIsDeptHead) {
       return NextResponse.json(
@@ -322,10 +330,7 @@ export async function POST(request: Request) {
 
       if (storeError || !storeData) {
         return NextResponse.json(
-          { 
-            error: `No se encontró el almacén u obra "${store_name}". Verifica que esté registrado en el sistema.`,
-            details: 'El almacén debe estar dado de alta en la base de datos.'
-          },
+          { error: `No se encontró el almacén u obra "${store_name}". Verifica que esté registrado en el sistema.` },
           { status: 404 }
         );
       }
@@ -347,10 +352,7 @@ export async function POST(request: Request) {
 
       if (supplierError || !supplierData) {
         return NextResponse.json(
-          { 
-            error: `No se encontró el proveedor "${resolvedSupplierName}". Verifica que esté dado de alta en el sistema.`,
-            details: 'El proveedor debe estar registrado en la base de datos.'
-          },
+          { error: `No se encontró el proveedor "${resolvedSupplierName}". Verifica que esté dado de alta en el sistema.` },
           { status: 404 }
         );
       }
@@ -444,10 +446,9 @@ export async function POST(request: Request) {
       .single();
 
     if (orderError) {
+      console.error('[orders/create] Error al insertar orden:', orderError);
       return NextResponse.json(
-        { 
-          error: `Error al crear la orden: ${orderError.message}`,
-        },
+        { error: "Error al crear la orden" },
         { status: 500 }
       );
     }
@@ -467,8 +468,14 @@ export async function POST(request: Request) {
           
           orderCreated.justification_prove = evidenceUrls.join(',');
         }
-      } catch {
-        // No fallar la orden si falla la subida de archivos
+      } catch (uploadError: unknown) {
+        // Si el error es de validación (tipo/tamaño), rechazar la orden con 400
+        const msg = uploadError instanceof Error ? uploadError.message : 'Error al subir archivos';
+        if (msg.includes('no permitido') || msg.includes('excede') || msg.includes('máximo')) {
+          return NextResponse.json({ error: msg }, { status: 400 });
+        }
+        // Errores de storage (red, bucket) no bloquean la creación de la orden
+        console.error('[orders/create] Error uploading evidence files:', msg);
       }
     }
     
@@ -489,11 +496,9 @@ export async function POST(request: Request) {
     });
 
   } catch (error: unknown) {
+    console.error('[orders/create] Error inesperado:', error);
     return NextResponse.json(
-      { 
-        error: "Error al procesar la solicitud",
-        details: error instanceof Error ? error.message : 'Error desconocido'
-      },
+      { error: "Error al procesar la solicitud" },
       { status: 500 }
     );
   }

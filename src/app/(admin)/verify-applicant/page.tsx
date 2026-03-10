@@ -2,6 +2,7 @@
 
 import { useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
+import { FullPageSkeleton } from '@/components/ui/Skeletons';
 
 function VerifyApplicantContent() {
   const searchParams = useSearchParams();
@@ -113,11 +114,7 @@ function VerifyApplicantContent() {
 
 export default function VerifyApplicantPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    }>
+    <Suspense fallback={<FullPageSkeleton />}>
       <VerifyApplicantContent />
     </Suspense>
   );

@@ -8,6 +8,7 @@ import { getOrderApprovals, canUserApprove, getApprovalIconType, type OrderAppro
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmModal, InputModal, Modal } from "@/components/ui/Modal";
 import { RETENTION_OPTIONS, calculateRetentions } from "@/types/database";
+import { OrderDetailSkeleton } from "@/components/ui/Skeletons";
 
 type OrderStatus = "pending" | "approved" | "rejected" | "in_progress" | "completed";
 
@@ -250,14 +251,7 @@ export default function OrdenDetallesPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Cargando orden...</p>
-        </div>
-      </div>
-    );
+    return <OrderDetailSkeleton />;
   }
 
   if (!order) {

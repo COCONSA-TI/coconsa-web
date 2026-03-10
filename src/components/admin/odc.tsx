@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
+import { FullPageSkeleton } from '@/components/ui/Skeletons';
 
 // Tipos
 interface User {
@@ -252,11 +253,7 @@ export default function OrdenDeCompra() {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-xl">Cargando...</div>
-      </div>
-    );
+    return <FullPageSkeleton />;
   }
 
   return (

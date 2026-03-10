@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
+import { UsersPageSkeleton } from '@/components/ui/Skeletons';
 
 type UserStatus = 'active' | 'inactive' | 'all';
 
@@ -325,14 +326,7 @@ function UsersContent() {
   };
 
   if (authLoading || loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Cargando...</p>
-        </div>
-      </div>
-    );
+    return <UsersPageSkeleton />;
   }
 
   if (!isAdmin) {
@@ -1004,14 +998,7 @@ function UsersContent() {
 }
 
 function UsersLoading() {
-  return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto"></div>
-        <p className="mt-4 text-gray-600">Cargando usuarios...</p>
-      </div>
-    </div>
-  );
+  return <UsersPageSkeleton />;
 }
 
 export default function UsersPage() {

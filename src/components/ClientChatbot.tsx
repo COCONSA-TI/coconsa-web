@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import DOMPurify from "isomorphic-dompurify";
 
 interface Message {
   role: "user" | "assistant";
@@ -147,14 +146,9 @@ export default function ClientChatbot() {
                   </span>
                 </div>
               )}
-              <div
-                className="whitespace-pre-wrap text-sm leading-relaxed"
-                dangerouslySetInnerHTML={{
-                  __html: DOMPurify.sanitize(msg.content
-                    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-                    .replace(/\n/g, "<br/>"))
-                }}
-              />
+              <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                {msg.content}
+              </div>
             </div>
           </div>
         ))}

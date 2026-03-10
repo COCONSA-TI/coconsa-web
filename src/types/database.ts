@@ -37,6 +37,16 @@ export const RETENTION_OPTIONS: RetentionOption[] = [
 ];
 
 /**
+ * Mapa indexado por clave para lookup O(1) en calculateRetentions.
+ * Antes: RETENTION_OPTIONS.find(o => o.key === key) → O(R) por clave seleccionada.
+ * Ahora: RETENTION_MAP.get(key)                     → O(1) por clave seleccionada.
+ * Impacto: O(K×R) → O(K) donde K = claves seleccionadas, R = 7 opciones totales.
+ */
+export const RETENTION_MAP = new Map<string, RetentionOption>(
+  RETENTION_OPTIONS.map((o) => [o.key, o])
+);
+
+/**
  * Calcula el monto total de retenciones a partir de las claves seleccionadas.
  * Retorna el monto total a restar y el desglose por retencion.
  */
@@ -49,7 +59,7 @@ export function calculateRetentions(
   let totalRetention = 0;
 
   for (const key of selectedKeys) {
-    const option = RETENTION_OPTIONS.find(o => o.key === key);
+    const option = RETENTION_MAP.get(key);
     if (!option) continue;
 
     let amount: number;

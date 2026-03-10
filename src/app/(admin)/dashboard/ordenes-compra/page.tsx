@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
+import { OrdersPageSkeleton } from "@/components/ui/Skeletons";
 
 type OrderStatus = "pending" | "approved" | "rejected" | "in_progress" | "completed";
 
@@ -189,14 +190,7 @@ function OrdenesCompraContent() {
   };
 
   if (authLoading || loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Cargando...</p>
-        </div>
-      </div>
-    );
+    return <OrdersPageSkeleton />;
   }
 
   if (!hasPermission('orders', 'view')) {
@@ -751,14 +745,7 @@ function OrdenesCompraContent() {
 
 // Loading fallback component
 function OrdersLoading() {
-  return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto"></div>
-        <p className="mt-4 text-gray-600">Cargando órdenes...</p>
-      </div>
-    </div>
-  );
+  return <OrdersPageSkeleton />;
 }
 
 // Main export wrapped in Suspense for useSearchParams

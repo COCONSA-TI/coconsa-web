@@ -180,10 +180,7 @@ export async function GET(
 
     if (orderError) {
       return NextResponse.json(
-        { 
-          error: "Orden no encontrada",
-          details: orderError.message 
-        },
+        { error: "Orden no encontrada" },
         { status: 404 }
       );
     }
@@ -276,12 +273,9 @@ export async function GET(
     });
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+    console.error('[orders/GET] Error inesperado:', error);
     return NextResponse.json(
-      { 
-        error: "Error al procesar la solicitud",
-        details: errorMessage
-      },
+      { error: "Error al procesar la solicitud" },
       { status: 500 }
     );
   }
@@ -552,8 +546,9 @@ export async function PUT(
       .single();
 
     if (updateError) {
+      console.error('[orders/PUT] Error al actualizar orden:', updateError);
       return NextResponse.json(
-        { error: "Error al actualizar la orden", details: updateError.message },
+        { error: "Error al actualizar la orden" },
         { status: 500 }
       );
     }
@@ -581,12 +576,9 @@ export async function PUT(
     });
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+    console.error('[orders/PUT] Error inesperado:', error);
     return NextResponse.json(
-      { 
-        error: "Error al procesar la solicitud",
-        details: errorMessage
-      },
+      { error: "Error al procesar la solicitud" },
       { status: 500 }
     );
   }

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Project } from "@/types/project";
+import { ProjectsListSkeleton } from "@/components/ui/Skeletons";
 
 interface ProjectsListProps {
   onEdit: (project: Project) => void;
@@ -117,9 +118,7 @@ export default function ProjectsList({
       {/* Projects List */}
       <div className="overflow-y-auto max-h-[calc(100vh-300px)]">
         {loading ? (
-          <div className="p-8 text-center text-gray-500">
-            Cargando proyectos...
-          </div>
+          <ProjectsListSkeleton count={5} />
         ) : filteredProjects.length === 0 ? (
           <div className="p-8 text-center text-gray-500">
             {searchTerm

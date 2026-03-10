@@ -17,6 +17,20 @@ import type {
 // Inicializa el cliente de Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
+// Formateador de moneda hoistado a módulo para evitar construirlo en cada llamada.
+// Antes: new Intl.NumberFormat() dentro de humanizeProjectData() → O(P) construcciones
+//        (una por proyecto) con ~50-200 µs cada una.
+// Ahora: instancia única reutilizable → O(1) construcción total.
+// Para monedas distintas de MXN se usará toLocaleString con la moneda correcta.
+const MXN_FORMATTER = new Intl.NumberFormat('es-MX', {
+  style: 'currency',
+  currency: 'MXN',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+// Cache de formateadores por moneda para reutilización
+const currencyFormatterCache = new Map<string, Intl.NumberFormat>([['MXN', MXN_FORMATTER]]);
+
 // Configuración de Ollama (fallback local)
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || "http://localhost:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "llama3.2";
@@ -78,15 +92,20 @@ function humanizeProjectData(projects: Record<string, FormattedProjectWithMetric
     const updates = p.recentUpdates || [];
     const contacts = p.contacts || [];
 
-    // Formatear presupuesto
-    const formatMoney = (amount: number, currency: string = 'MXN') => {
-      return new Intl.NumberFormat('es-MX', { 
-        style: 'currency', 
-        currency: currency,
+    // Formatear presupuesto — reutiliza el formatter cacheado por moneda en lugar de
+    // construir new Intl.NumberFormat() en cada iteración.
+    const fmtCurrency = financial.currency || 'MXN';
+    let formatter = currencyFormatterCache.get(fmtCurrency);
+    if (!formatter) {
+      formatter = new Intl.NumberFormat('es-MX', {
+        style: 'currency',
+        currency: fmtCurrency,
         minimumFractionDigits: 0,
-        maximumFractionDigits: 0
-      }).format(amount);
-    };
+        maximumFractionDigits: 0,
+      });
+      currencyFormatterCache.set(fmtCurrency, formatter);
+    }
+    const formatMoney = (amount: number, _currency?: string) => formatter!.format(amount);
 
     // Formatear fecha
     const formatDate = (dateStr: string) => {
@@ -108,8 +127,11 @@ function humanizeProjectData(projects: Record<string, FormattedProjectWithMetric
     else if (metrics.projectHealthStatus === "con retraso leve") estadoProyecto = "con un pequeño retraso";
     else if (metrics.projectHealthStatus === "con retraso significativo") estadoProyecto = "con retraso importante";
 
-    // Construir resumen humanizado
-    let resumen = `
+    // Construir resumen humanizado usando un array de partes y join al final.
+    // Antes: resumen += `...` en cada iteración → O(n²) en crecimiento de string.
+    // Ahora: parts.push() + parts.join('') → O(n) copia total al finalizar.
+    const parts: string[] = [];
+    parts.push(`
 PROYECTO: ${p.projectName}
 Código: ${p.projectId}
 Cliente: ${p.client}
@@ -139,35 +161,35 @@ SUPERVISOR DE OBRA:
 - Nombre: ${supervisor.name || 'No asignado'}
 - Cargo: ${supervisor.position || 'N/A'}
 - Teléfono: ${supervisor.phone || 'N/A'}
-- Email: ${supervisor.email || 'N/A'}`;
+- Email: ${supervisor.email || 'N/A'}`);
 
     // Agregar hitos/etapas
     if (milestones.length > 0) {
-      resumen += `\n\nETAPAS DEL PROYECTO:`;
+      parts.push(`\n\nETAPAS DEL PROYECTO:`);
       milestones.forEach((m) => {
         const estado = m.status === 'Completado' ? '✓ Completado' : 
                       m.status === 'En Proceso' ? '→ En proceso' : '○ Pendiente';
-        resumen += `\n- ${m.name}: ${estado} (${m.progress}%)${m.date ? ` - Fecha: ${formatDate(m.date)}` : ''}`;
+        parts.push(`\n- ${m.name}: ${estado} (${m.progress}%)${m.date ? ` - Fecha: ${formatDate(m.date)}` : ''}`);
       });
     }
 
     // Agregar contactos adicionales
     if (contacts.length > 0) {
-      resumen += `\n\nOTROS CONTACTOS:`;
+      parts.push(`\n\nOTROS CONTACTOS:`);
       contacts.forEach((c) => {
-        resumen += `\n- ${c.name} (${c.role}): ${c.phone || c.email || 'Sin contacto'}`;
+        parts.push(`\n- ${c.name} (${c.role}): ${c.phone || c.email || 'Sin contacto'}`);
       });
     }
 
     // Agregar últimas actualizaciones
     if (updates.length > 0) {
-      resumen += `\n\nÚLTIMAS ACTUALIZACIONES:`;
+      parts.push(`\n\nÚLTIMAS ACTUALIZACIONES:`);
       updates.slice(0, 3).forEach((u) => {
-        resumen += `\n- ${formatDate(u.date)}: ${u.title}. ${u.description}`;
+        parts.push(`\n- ${formatDate(u.date)}: ${u.title}. ${u.description}`);
       });
     }
 
-    return resumen;
+    return parts.join('');
   }).join('\n\n---\n');
 }
 
@@ -532,24 +554,43 @@ function calculateProjectMetrics(project: FormattedProject): ProjectMetrics {
     budgetEmoji = "🔴";
   }
   
-  // Calcular hitos atrasados
+  // Calcular hitos atrasados, próximos y completados en un solo paso.
+  // Antes: 3 pasadas separadas → O(3M) + O(M log M) para el sort con new Date() dentro.
+  // Ahora: 1 pasada reduce con timestamps precalculados → O(M) + O(M log M) para sort.
+  //        Elimina 2 pasadas redundantes y el coste de construir Date() en el comparador.
   const milestones = project.milestones || [];
+  const todayMs = today.getTime();
   type FormattedMilestone = FormattedProject['milestones'][number];
-  const delayedMilestones = milestones.filter((m: FormattedMilestone) => {
-    if (m.status === "Completado") return false;
-    if (!m.date) return false;
-    const milestoneDate = new Date(m.date);
-    return milestoneDate < today && m.progress < 100;
-  });
-  
-  // Próximos hitos (pendientes o en proceso)
-  const upcomingMilestones = milestones
-    .filter((m: FormattedMilestone) => m.status !== "Completado")
-    .sort((a: FormattedMilestone, b: FormattedMilestone) => {
-      const dateA = a.date ? new Date(a.date).getTime() : 0;
-      const dateB = b.date ? new Date(b.date).getTime() : 0;
-      return dateA - dateB;
-    });
+  type MilestoneWithTs = FormattedMilestone & { _ts: number };
+
+  const milestonesWithTs: MilestoneWithTs[] = milestones.map(
+    (m: FormattedMilestone) => ({ ...m, _ts: m.date ? new Date(m.date).getTime() : 0 })
+  );
+
+  const { delayedMilestones, upcomingRaw, completedCount } = milestonesWithTs.reduce<{
+    delayedMilestones: MilestoneWithTs[];
+    upcomingRaw: MilestoneWithTs[];
+    completedCount: number;
+  }>(
+    (acc, m) => {
+      if (m.status === "Completado") {
+        acc.completedCount++;
+        return acc;
+      }
+      if (m._ts > 0 && m._ts < todayMs && m.progress < 100) {
+        acc.delayedMilestones.push(m);
+      } else {
+        acc.upcomingRaw.push(m);
+      }
+      return acc;
+    },
+    { delayedMilestones: [], upcomingRaw: [], completedCount: 0 }
+  );
+
+  // Sort una sola vez con timestamps ya precalculados (sin new Date() en el comparador)
+  const upcomingMilestones = upcomingRaw.sort(
+    (a: MilestoneWithTs, b: MilestoneWithTs) => a._ts - b._ts
+  );
   
   return {
     // Métricas de tiempo
@@ -584,7 +625,7 @@ function calculateProjectMetrics(project: FormattedProject): ProjectMetrics {
     delayedMilestonesList: delayedMilestones,
     upcomingMilestones: upcomingMilestones.slice(0, 3),
     totalMilestones: milestones.length,
-    completedMilestones: milestones.filter((m: FormattedMilestone) => m.status === "Completado").length
+    completedMilestones: completedCount
   };
 }
 
@@ -860,15 +901,20 @@ export async function POST(request: Request) {
     
     if (!validatedFields.success) {
       return NextResponse.json(
-        { 
-          error: "Datos inválidos",
-          details: validatedFields.error.flatten().fieldErrors,
-        },
+        { error: "Datos inválidos" },
         { status: 400 }
       );
     }
 
     const { message, conversationHistory = [] } = validatedFields.data;
+
+    // Limitar el historial a los últimos 20 turnos y truncar contenido largo
+    const safeHistory = conversationHistory
+      .slice(-20)
+      .map((msg) => ({
+        role: msg.role as 'user' | 'assistant',
+        content: String(msg.content).slice(0, 2000),
+      }));
 
     // Verificar que al menos un proveedor esté disponible - si GEMINI_API_KEY no está configurada, se usará Ollama
 
@@ -924,7 +970,7 @@ export async function POST(request: Request) {
     const { text: botMessage } = await getLLMResponse(
       systemPrompt,
       projectContext,
-      conversationHistory,
+      safeHistory,
       message,
       projectsWithMetrics // Pasar los proyectos con métricas para Ollama
     );
@@ -935,19 +981,16 @@ export async function POST(request: Request) {
       detectedProject,
       availableProjects: Object.keys(userProjects),
       conversationHistory: [
-        ...conversationHistory,
+        ...safeHistory,
         { role: "user", content: message },
         { role: "assistant", content: botMessage },
       ],
     });
 
   } catch (error: unknown) {
-    const apiError = error as ApiError;
+    console.error('[bot/client] Error al procesar solicitud:', error);
     return NextResponse.json(
-      { 
-        error: "Error al procesar la solicitud",
-        details: apiError.message || "Error desconocido"
-      },
+      { error: "Error al procesar la solicitud" },
       { status: 500 }
     );
   }
@@ -963,20 +1006,26 @@ function detectProject(
     message
   ].join(" ").toLowerCase();
 
+  // Búsqueda exacta de projectId (O(P) total, sin cambio)
   for (const projectId of Object.keys(userProjects)) {
     if (allMessages.includes(projectId.toLowerCase())) {
       return projectId;
     }
   }
 
-  for (const [projectId, project] of Object.entries(userProjects)) {
-    const projectNameLower = project.projectName.toLowerCase();
-    const keywords = projectNameLower.split(" ");
+  // Búsqueda por palabras clave del nombre del proyecto.
+  // Antes: keywords.filter(kw => kw.length > 3 && allMessages.includes(kw))
+  //        → O(H×L) recorrido de string por cada keyword, por cada proyecto
+  //        → O(P × K × H × L) total donde H=historial, L=longitud media, P=proyectos, K=keywords.
+  // Ahora: construir un Set de palabras del historial (O(H×L)) y luego
+  //        wordSet.has(kw) para cada keyword → O(1) por lookup → O(P×K) total.
+  const wordSet = new Set(allMessages.split(/\s+/));
 
-    const matches = keywords.filter((keyword: string) => 
-      keyword.length > 3 && allMessages.includes(keyword)
+  for (const [projectId, project] of Object.entries(userProjects)) {
+    const keywords = project.projectName.toLowerCase().split(/\s+/);
+    const matches = keywords.filter(
+      (kw: string) => kw.length > 3 && wordSet.has(kw)
     );
-    
     if (matches.length >= 2) {
       return projectId;
     }

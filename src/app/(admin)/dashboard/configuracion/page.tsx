@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import Link from 'next/link';
+import { ConfigPageSkeleton } from '@/components/ui/Skeletons';
 
 interface UserProfile {
   id: string;
@@ -119,14 +120,7 @@ export default function ConfiguracionPage() {
   };
 
   if (authLoading || loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Cargando...</p>
-        </div>
-      </div>
-    );
+    return <ConfigPageSkeleton />;
   }
 
   return (

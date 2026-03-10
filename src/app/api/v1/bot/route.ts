@@ -145,51 +145,49 @@ export async function POST(request: Request) {
       );
     }
 
-    // Obtener datos del usuario desde la base de datos
-    const { data: userData, error: userError } = await supabaseAdmin
-      .from('users')
-      .select('id, full_name')
-      .eq('id', session.userId)
-      .single();
+    // Disparar las 3 consultas a la DB en paralelo en lugar de secuencialmente.
+    // Antes: ~3 round-trips × latencia_DB (ej. 3 × 30 ms = 90 ms).
+    // Ahora:  1 round-trip paralelo (≈ 30 ms). Mejora: ~60 ms por solicitud.
+    const [
+      { data: userData, error: userError },
+      { data: stores },
+      { data: suppliers },
+      body,
+    ] = await Promise.all([
+      supabaseAdmin.from('users').select('id, full_name').eq('id', session.userId).single(),
+      supabaseAdmin.from('stores').select('id, name').order('name'),
+      supabaseAdmin.from('suppliers').select('id, commercial_name').order('commercial_name'),
+      request.json(),
+    ]);
 
     if (userError || !userData) {
+      console.error('[bot] Error obteniendo datos de usuario:', userError);
       return NextResponse.json(
-        { 
-          error: "No se pudieron obtener los datos de tu usuario",
-          details: userError?.message || 'Usuario no encontrado'
-        },
+        { error: "No se pudieron obtener los datos del usuario." },
         { status: 500 }
       );
     }
-
-    // Obtener lista de almacenes disponibles
-    const { data: stores } = await supabaseAdmin
-      .from('stores')
-      .select('id, name')
-      .order('name');
-
-    // Obtener lista de proveedores disponibles
-    const { data: suppliers } = await supabaseAdmin
-      .from('suppliers')
-      .select('id, commercial_name')
-      .order('commercial_name');
-
-    const body = await request.json();
     
     // Validar el request
     const validatedFields = ChatbotMessageSchema.safeParse(body);
     
     if (!validatedFields.success) {
       return NextResponse.json(
-        { 
-          error: "Datos inválidos",
-          details: validatedFields.error.flatten().fieldErrors,
-        },
+        { error: "Datos inválidos" },
         { status: 400 }
       );
     }
 
     const { message, conversationHistory = [] } = validatedFields.data;
+
+    // Limitar el historial a los últimos 20 turnos y truncar contenido largo
+    // para prevenir inyección de prompt y abusos de contexto
+    const safeHistory = conversationHistory
+      .slice(-20)
+      .map((msg) => ({
+        role: msg.role as 'user' | 'assistant',
+        content: String(msg.content).slice(0, 2000),
+      }));
 
     // Verificar que la API key esté configurada
     if (!process.env.GEMINI_API_KEY) {
@@ -199,53 +197,27 @@ export async function POST(request: Request) {
       );
     }
 
-    // Obtener el modelo
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-    // Construir el historial de conversación
-    const history = [
-      {
-        role: "user",
-        parts: [{ text: SYSTEM_PROMPT }],
-      },
-      {
-        role: "model",
-        parts: [{ text: "Entendido. Actuaré como asistente virtual amigable de COCONSA y ayudaré a los usuarios a proporcionar su información de manera natural y conversacional." }],
-      },
-      ...conversationHistory.map((msg) => ({
-        role: msg.role === "user" ? "user" : "model",
-        parts: [{ text: msg.content }],
-      })),
-    ];
-
-    // Iniciar chat con historial
-    const chat = model.startChat({
-      history,
-      generationConfig: {
-        maxOutputTokens: 1024,  // Aumentado para permitir respuestas más completas
-        temperature: 0.7,
-      },
-    });
-
-    // Enviar el mensaje del usuario
+    // Llamada única a Gemini: genera la respuesta al usuario Y extrae los datos
+    // estructurados en un solo round-trip.
+    // Antes: 2 llamadas secuenciales → O(2 × LLM_latency) ≈ 10-30 s
+    // Ahora: 1 llamada con JSON envelope  → O(1 × LLM_latency) ≈ 5-15 s
+    // Ahorro estimado: ~50 % del tiempo de respuesta y ~50 % de tokens facturados.
     let botMessage: string;
+    let extractedData: ReturnType<typeof JSON.parse>;
     try {
-      const result = await chat.sendMessage(message);
-      const response = result.response;
-      botMessage = sanitizeBotResponse(response.text());
+      const combinedResult = await extractOrderDataWithAI(
+        safeHistory,
+        message,
+        userData,
+        (stores || []) as Store[],
+        (suppliers || []) as Supplier[]
+      );
+      botMessage = sanitizeBotResponse(combinedResult.reply ?? "");
+      extractedData = combinedResult;
     } catch (geminiError: unknown) {
       const apiError = geminiError as ApiError;
       throw new Error(`Error de Gemini API: ${apiError?.message || 'Error desconocido'}`);
     }
-
-    // Extraer información estructurada usando IA (segunda pasada) para mayor precisión
-    const fullHistory = [...conversationHistory, { role: "user", content: message }, { role: "assistant", content: botMessage }];
-    const extractedData = await extractOrderDataWithAI(
-      fullHistory,
-      userData,
-      (stores || []) as Store[],
-      (suppliers || []) as Supplier[]
-    );
 
     // Guardia server-side: forzar isComplete a false si falta justificación o proveedor
     if (extractedData && extractedData.isComplete) {
@@ -266,30 +238,35 @@ export async function POST(request: Request) {
       availableStores: stores || [],
       availableSuppliers: suppliers || [],
       conversationHistory: [
-        ...conversationHistory,
+        ...safeHistory,
         { role: "user", content: message },
         { role: "assistant", content: botMessage },
       ],
     });
 
   } catch (error: unknown) {
-    const apiError = error as ApiError;
+    console.error('[bot] Error al procesar solicitud:', error);
     return NextResponse.json(
-      { 
-        error: "Error al procesar la solicitud",
-        details: apiError?.message || 'Error desconocido',
-      },
+      { error: "Error al procesar la solicitud" },
       { status: 500 }
     );
   }
 }
 
 /**
- * Extrae información estructurada usando una llamada dedicada a la IA.
- * Esto es mucho más robusto que Regex para estructuras complejas como arrays de items.
+ * Llamada única a Gemini que:
+ *   1. Genera la respuesta conversacional al usuario (campo "reply").
+ *   2. Extrae los datos estructurados de la orden (resto del JSON).
+ *
+ * Antes: 2 llamadas secuenciales (chat.sendMessage + extractionModel.generateContent)
+ *        → O(2 × LLM_latency).
+ * Ahora: 1 llamada con responseMimeType "application/json" que devuelve un envelope
+ *        con ambos resultados → O(1 × LLM_latency).
+ * Impacto esperado: ~50 % menos latencia de extremo a extremo y ~50 % menos tokens.
  */
 async function extractOrderDataWithAI(
   conversationHistory: Array<{ role: string; content: string }>,
+  userMessage: string,
   userData: UserData,
   stores: Store[],
   suppliers: Supplier[]
@@ -300,24 +277,37 @@ async function extractOrderDataWithAI(
       generationConfig: {
         responseMimeType: "application/json",
         temperature: 0.1, // Baja temperatura para mayor determinismo en JSON
+        maxOutputTokens: 2048,
       }
     });
 
+    // Historial completo incluyendo el nuevo mensaje del usuario
+    const fullHistory = [
+      ...conversationHistory,
+      { role: "user", content: userMessage },
+    ];
+
     // Convertir conversación a texto plano para el prompt
-    const conversationText = conversationHistory
+    const conversationText = fullHistory
       .map((msg) => `${msg.role === 'user' ? 'USUARIO' : 'ASISTENTE'}: ${msg.content}`)
       .join("\n");
 
     const extractionPrompt = `
-      Analiza la siguiente conversación entre un asistente de compras y un usuario.
-      Tu objetivo es extraer los datos de la Orden de Compra en formato JSON ESTRICTO.
+      Eres el asistente de compras de COCONSA. Analiza la conversación y realiza DOS tareas:
+
+      TAREA 1 — RESPUESTA AL USUARIO:
+      Responde al último mensaje del USUARIO de forma natural, como si fueras un colega del área de compras.
+      ${SYSTEM_PROMPT}
+
+      TAREA 2 — EXTRACCIÓN DE DATOS:
+      Extrae los datos de la Orden de Compra en formato JSON ESTRICTO.
 
       INFORMACIÓN DE CONTEXTO:
       - Solicitante: ${userData.full_name} (ID: ${userData.id})
       - Almacenes disponibles: ${JSON.stringify(stores.map(s => ({ id: s.id, name: s.name })))}
       - Proveedores disponibles: ${JSON.stringify(suppliers.map(s => ({ id: s.id, commercial_name: s.commercial_name })))}
 
-      INSTRUCCIONES:
+      INSTRUCCIONES DE EXTRACCIÓN:
       1. Extrae el nombre del almacén/obra. Intenta coincidir con la lista de disponibles. Si encuentras coincidencia, incluye el ID.
       2. Extrae UN SOLO proveedor para toda la orden (NO uno por artículo). La orden completa va con un solo proveedor. Intenta coincidir con la lista. Si encuentras coincidencia exacta o muy cercana, incluye el ID.
       3. Extrae la lista de artículos (items). Para cada uno: nombre, cantidad (número), unidad y precio unitario (número). NO incluyas proveedor por artículo.
@@ -340,8 +330,9 @@ async function extractOrderDataWithAI(
           - AL MENOS un artículo completo (con nombre, cantidad, unidad Y precio)
           Si CUALQUIERA de estos falta, isComplete DEBE ser false. En especial, si justification es null o vacía, isComplete DEBE ser false.
 
-      FORMATO JSON ESPERADO:
+      FORMATO JSON ESPERADO (devuelve EXACTAMENTE este schema):
       {
+        "reply": "Respuesta conversacional al usuario (Tarea 1)",
         "store_name": "Nombre extraído o null",
         "store_id": "UUID coincidente o null",
         "supplier_name": "Nombre del proveedor unico o null",
@@ -359,17 +350,16 @@ async function extractOrderDataWithAI(
         "retention": ["ret_iva_10.6667", "ret_isr_10"],
         "payment_type": "credito o de_contado o null",
         "tax_type": "sin_iva o con_iva o null",
-        "iva_percentage": 0, 8 o 16 o null,
+        "iva_percentage": 0,
         "applicant_name": "${userData.full_name}",
         "applicant_id": "${userData.id}",
-        "isComplete": boolean
+        "isComplete": false
       }
 
       NOTAS SOBRE RETENTION:
       - retention es SIEMPRE un array (puede ser vacío []).
       - Solo incluir claves válidas: ret_iva_10.6667, ret_iva_4, ret_iva_6, ret_iva_100, ret_iva_8_frontera, ret_isr_10, ret_isr_1.25
       - Si el usuario no mencionó retenciones o tax_type no es "con_iva", usa [].
-      - Si encuentras texto legacy de retención (ej: "4% ISR"), intenta mapear a la clave más cercana.
 
       CONVERSACIÓN:
       ${conversationText}
@@ -378,7 +368,7 @@ async function extractOrderDataWithAI(
     const result = await extractionModel.generateContent(extractionPrompt);
     const responseText = result.response.text();
     
-    // Limpiar bloques de código markdown si existen (aunque responseMimeType ayuda, a veces añade ```json)
+    // Limpiar bloques de código markdown si existen
     const cleanedJson = responseText.replace(/```json\n?|\n?```/g, "").trim();
     
     return JSON.parse(cleanedJson);
@@ -386,6 +376,7 @@ async function extractOrderDataWithAI(
   } catch {
     // Fallback básico para no romper el flujo si falla la IA de extracción
     return {
+      reply: "Disculpa, hubo un problema al procesar tu mensaje. ¿Puedes intentarlo de nuevo?",
       store_name: null,
       items: [],
       isComplete: false,

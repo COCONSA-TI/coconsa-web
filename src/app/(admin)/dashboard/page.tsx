@@ -3,6 +3,7 @@
 import { useRequireAuth } from '@/hooks/useAuth';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { DashboardStatsSkeleton, OrdersListSkeleton } from '@/components/ui/Skeletons';
 
 interface Order {
   id: string;
@@ -110,10 +111,31 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Cargando...</p>
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Welcome skeleton */}
+        <div className="bg-gradient-to-r from-gray-200 to-gray-300 rounded-xl shadow-lg p-6 animate-pulse">
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 bg-gray-300 rounded-full"></div>
+            <div>
+              <div className="h-7 w-48 bg-gray-300 rounded mb-2"></div>
+              <div className="h-5 w-24 bg-gray-300 rounded-full"></div>
+            </div>
+          </div>
+        </div>
+        <DashboardStatsSkeleton />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-xl shadow p-5">
+            <div className="border-b border-gray-100 pb-4 mb-4">
+              <div className="h-5 w-32 bg-gray-200 rounded animate-pulse"></div>
+            </div>
+            <OrdersListSkeleton count={4} />
+          </div>
+          <div className="bg-white rounded-xl shadow p-5">
+            <div className="border-b border-gray-100 pb-4 mb-4">
+              <div className="h-5 w-36 bg-gray-200 rounded animate-pulse"></div>
+            </div>
+            <OrdersListSkeleton count={5} />
+          </div>
         </div>
       </div>
     );
@@ -150,7 +172,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-gray-500 text-sm font-medium">Pendientes</p>
               <p className="text-2xl font-bold text-yellow-600 mt-1">
-                {loadingOrders ? '-' : stats.pending}
+                {loadingOrders ? <span className="inline-block h-7 w-8 bg-gray-200 rounded animate-pulse"></span> : stats.pending}
               </p>
             </div>
             <div className="bg-yellow-100 rounded-full p-3">
@@ -166,7 +188,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-gray-500 text-sm font-medium">Aprobadas</p>
               <p className="text-2xl font-bold text-green-600 mt-1">
-                {loadingOrders ? '-' : stats.approved}
+                {loadingOrders ? <span className="inline-block h-7 w-8 bg-gray-200 rounded animate-pulse"></span> : stats.approved}
               </p>
             </div>
             <div className="bg-green-100 rounded-full p-3">
@@ -182,7 +204,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-gray-500 text-sm font-medium">Rechazadas</p>
               <p className="text-2xl font-bold text-red-600 mt-1">
-                {loadingOrders ? '-' : stats.rejected}
+                {loadingOrders ? <span className="inline-block h-7 w-8 bg-gray-200 rounded animate-pulse"></span> : stats.rejected}
               </p>
             </div>
             <div className="bg-red-100 rounded-full p-3">
@@ -198,7 +220,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-gray-500 text-sm font-medium">Total</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">
-                {loadingOrders ? '-' : stats.total}
+                {loadingOrders ? <span className="inline-block h-7 w-8 bg-gray-200 rounded animate-pulse"></span> : stats.total}
               </p>
             </div>
             <div className="bg-gray-100 rounded-full p-3">
@@ -227,9 +249,7 @@ export default function DashboardPage() {
           </div>
           <div className="p-5">
             {loadingOrders ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
-              </div>
+              <OrdersListSkeleton count={4} />
             ) : pendingOrders.length === 0 ? (
               <div className="text-center py-8">
                 <div className="bg-green-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
@@ -296,9 +316,7 @@ export default function DashboardPage() {
           </div>
           <div className="p-5">
             {loadingOrders ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div>
-              </div>
+              <OrdersListSkeleton count={4} />
             ) : recentOrders.length === 0 ? (
               <div className="text-center py-8">
                 <div className="bg-gray-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-3">
