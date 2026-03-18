@@ -24,7 +24,7 @@ export async function POST(
     
     // Parsear request - puede ser JSON o FormData
     let comments = '';
-    let files: File[] = [];
+    const files: File[] = [];
     
     const contentType = request.headers.get('content-type');
     if (contentType?.includes('multipart/form-data')) {
@@ -115,7 +115,7 @@ export async function POST(
     }
 
     // 5. Subir archivos a Supabase Storage si existen
-    let uploadedFileIds: string[] = [];
+    const uploadedFileIds: string[] = [];
     if (files.length > 0) {
       for (const file of files) {
         try {
@@ -155,7 +155,7 @@ export async function POST(
           const storagePath = `${orderId}/${timestamp}_${file.name}`;
           
           // Subir a Storage
-          const { data: uploadData, error: uploadError } = await supabaseAdmin
+          const { error: uploadError } = await supabaseAdmin
             .storage
             .from('order-attachments')
             .upload(storagePath, uint8Array, {
