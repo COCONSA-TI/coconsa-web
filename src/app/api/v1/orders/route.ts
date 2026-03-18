@@ -149,6 +149,7 @@ export async function GET(request: Request) {
         status: statusMap[order.status] || 'pending',
         applicant_name: usersMap.get(order.applicant_id) || 'N/A',
         items_count: itemsArray.length,
+        first_item_name: itemsArray.length > 0 ? itemsArray[0].nombre : null,
         payment_type: order.payment_type || null,
         is_urgent: order.is_urgent || false,
         is_definitive_rejection: order.is_definitive_rejection || false,

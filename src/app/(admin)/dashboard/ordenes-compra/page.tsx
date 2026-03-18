@@ -17,6 +17,7 @@ interface Order {
   status: OrderStatus;
   applicant_name: string;
   items_count: number;
+  first_item_name: string | null;
   is_urgent: boolean;
   is_definitive_rejection: boolean;
   my_department_status?: 'pending' | 'approved' | 'rejected' | null;
@@ -72,15 +73,53 @@ function OrdenesCompraContent() {
   const [applicantFilter, setApplicantFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
+  const [myApprovalFilter, setMyApprovalFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
   const [showFilters, setShowFilters] = useState(false);
 
-  // Leer filtro de URL al cargar
+  // Leer filtro de URL al cargar (para compartir enlaces)
   useEffect(() => {
     const statusParam = searchParams.get('status');
     if (statusParam && Object.keys(statusConfig).includes(statusParam)) {
       setStatusFilter(statusParam as OrderStatus);
     }
   }, [searchParams]);
+
+  // Restaurar filtros desde sessionStorage al cargar la página
+  useEffect(() => {
+    const savedFilters = sessionStorage.getItem('orderFilters');
+    if (savedFilters) {
+      try {
+        const filters = JSON.parse(savedFilters);
+        setStatusFilter(filters.statusFilter || "all");
+        setSearchTerm(filters.searchTerm || "");
+        setStoreFilter(filters.storeFilter || "all");
+        setApplicantFilter(filters.applicantFilter || "all");
+        setDateFrom(filters.dateFrom || "");
+        setDateTo(filters.dateTo || "");
+        setMyApprovalFilter(filters.myApprovalFilter || "all");
+        setShowFilters(filters.showFilters || false);
+        // Limpiar sessionStorage después de restaurar
+        sessionStorage.removeItem('orderFilters');
+      } catch (error) {
+        console.error('Error al restaurar filtros:', error);
+      }
+    }
+  }, []);
+
+  // Guardar filtros en sessionStorage cuando cambian (para persistencia)
+  const saveFiltersToSession = () => {
+    const filters = {
+      statusFilter,
+      searchTerm,
+      storeFilter,
+      applicantFilter,
+      dateFrom,
+      dateTo,
+      myApprovalFilter,
+      showFilters,
+    };
+    sessionStorage.setItem('orderFilters', JSON.stringify(filters));
+  };
 
   useEffect(() => {
     if (!authLoading) {
@@ -166,9 +205,16 @@ function OrdenesCompraContent() {
         }
       }
 
+      // Filtro por mi estado de aprobación
+      if (myApprovalFilter !== "all") {
+        if (order.my_department_status !== myApprovalFilter) {
+          return false;
+        }
+      }
+
       return true;
     });
-  }, [orders, statusFilter, searchTerm, storeFilter, applicantFilter, dateFrom, dateTo]);
+  }, [orders, statusFilter, searchTerm, storeFilter, applicantFilter, dateFrom, dateTo, myApprovalFilter]);
 
   const stats = {
     total: orders.length,
@@ -178,7 +224,7 @@ function OrdenesCompraContent() {
     rejected: orders.filter(o => o.status === "rejected").length,
   };
 
-  const hasActiveFilters = searchTerm || storeFilter !== "all" || applicantFilter !== "all" || dateFrom || dateTo;
+  const hasActiveFilters = searchTerm || storeFilter !== "all" || applicantFilter !== "all" || dateFrom || dateTo || myApprovalFilter !== "all";
 
   const clearAllFilters = () => {
     setStatusFilter("all");
@@ -187,6 +233,7 @@ function OrdenesCompraContent() {
     setApplicantFilter("all");
     setDateFrom("");
     setDateTo("");
+    setMyApprovalFilter("all");
   };
 
   if (authLoading || loading) {
@@ -383,6 +430,23 @@ function OrdenesCompraContent() {
         {showFilters && (
           <div className="mt-4 pt-4 border-t border-gray-100">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Mi Estado de Aprobación Filter */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
+                  Mi Aprobación
+                </label>
+                <select
+                  value={myApprovalFilter}
+                  onChange={(e) => setMyApprovalFilter(e.target.value as "all" | "pending" | "approved" | "rejected")}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                >
+                  <option value="all">Todas</option>
+                  <option value="pending">Requieren mi aprobación</option>
+                  <option value="approved">Ya aprobé</option>
+                  <option value="rejected">Ya rechacé</option>
+                </select>
+              </div>
+
               {/* Almacén Filter */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
@@ -468,6 +532,23 @@ function OrdenesCompraContent() {
             <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${statusConfig[statusFilter].className}`}>
               {statusConfig[statusFilter].label}
               <button onClick={() => setStatusFilter("all")} className="hover:opacity-70">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </span>
+          )}
+          
+          {myApprovalFilter !== "all" && (
+            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${
+              myApprovalFilter === "pending" ? "bg-orange-100 text-orange-700" :
+              myApprovalFilter === "approved" ? "bg-green-100 text-green-700" :
+              "bg-red-100 text-red-700"
+            }`}>
+              {myApprovalFilter === "pending" && "Requieren mi aprobación"}
+              {myApprovalFilter === "approved" && "Ya aprobé"}
+              {myApprovalFilter === "rejected" && "Ya rechacé"}
+              <button onClick={() => setMyApprovalFilter("all")} className="hover:opacity-70">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -569,6 +650,7 @@ function OrdenesCompraContent() {
                     key={order.id}
                     href={`/dashboard/ordenes-compra/${order.id}`}
                     className="block p-4 hover:bg-gray-50 transition-colors"
+                    onClick={saveFiltersToSession}
                   >
                     <div className="flex items-start justify-between gap-3 mb-3">
                       <div className="flex items-center gap-3">
@@ -618,11 +700,32 @@ function OrdenesCompraContent() {
                       </div>
                     </div>
 
+                    {/* Badge de estado de aprobación del usuario */}
                     {order.my_department_status === 'pending' && order.status === 'pending' && (
                       <div className="mt-3 ml-5">
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">
                           <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse"></span>
                           Requiere tu aprobación
+                        </span>
+                      </div>
+                    )}
+                    {order.my_department_status === 'approved' && (
+                      <div className="mt-3 ml-5">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Ya aprobaste
+                        </span>
+                      </div>
+                    )}
+                    {order.my_department_status === 'rejected' && (
+                      <div className="mt-3 ml-5">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                          Ya rechazaste
                         </span>
                       </div>
                     )}
@@ -694,7 +797,16 @@ function OrdenesCompraContent() {
                           <span className="text-sm text-gray-900">{order.store_name}</span>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-sm text-gray-600">{order.items_count}</span>
+                          <div className="flex flex-col">
+                            <span className="text-sm text-gray-900">
+                              {order.first_item_name || 'Sin items'}
+                            </span>
+                            {order.items_count > 1 && (
+                              <span className="text-xs text-gray-500">
+                                +{order.items_count - 1} más
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <span className="font-semibold text-gray-900">{formatCurrency(order.total, order.currency)}</span>
@@ -711,10 +823,27 @@ function OrdenesCompraContent() {
                                 </span>
                               )}
                             </div>
+                            {/* Badges de estado de aprobación del usuario */}
                             {order.my_department_status === 'pending' && order.status === 'pending' && (
                               <span className="inline-flex items-center gap-1 text-xs text-orange-600 font-medium">
                                 <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse"></span>
                                 Requiere aprobación
+                              </span>
+                            )}
+                            {order.my_department_status === 'approved' && (
+                              <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Ya aprobaste
+                              </span>
+                            )}
+                            {order.my_department_status === 'rejected' && (
+                              <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                                Ya rechazaste
                               </span>
                             )}
                           </div>
@@ -723,6 +852,7 @@ function OrdenesCompraContent() {
                           <Link
                             href={`/dashboard/ordenes-compra/${order.id}`}
                             className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 font-medium text-sm transition-colors"
+                            onClick={saveFiltersToSession}
                           >
                             Ver
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
