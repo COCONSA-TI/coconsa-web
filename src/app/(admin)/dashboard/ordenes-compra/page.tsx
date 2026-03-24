@@ -21,10 +21,11 @@ interface Order {
   is_urgent: boolean;
   is_definitive_rejection: boolean;
   my_department_status?: 'pending' | 'approved' | 'rejected' | null;
+  current_department_name?: string | null;
 }
 
 const statusConfig: Record<OrderStatus, { label: string; className: string; iconBg: string }> = {
-  pending: { label: "Pendiente", className: "bg-yellow-100 text-yellow-800", iconBg: "bg-yellow-500" },
+  pending: { label: "Nuevo", className: "bg-yellow-100 text-yellow-800", iconBg: "bg-yellow-500" },
   approved: { label: "Aprobada", className: "bg-green-100 text-green-800", iconBg: "bg-green-500" },
   rejected: { label: "Rechazada", className: "bg-red-100 text-red-800", iconBg: "bg-red-500" },
   in_progress: { label: "En Proceso", className: "bg-blue-100 text-blue-800", iconBg: "bg-blue-500" },
@@ -285,25 +286,6 @@ function OrdenesCompraContent() {
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <button
-          onClick={() => setStatusFilter("all")}
-          className={`bg-white rounded-xl shadow p-4 text-left transition-all ${
-            statusFilter === "all" ? "ring-2 ring-red-500 ring-offset-2" : "hover:shadow-md"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">Total</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{stats.total}</p>
-            </div>
-            <div className="bg-gray-100 rounded-full p-2.5">
-              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-          </div>
-        </button>
-
-        <button
           onClick={() => setStatusFilter("pending")}
           className={`bg-white rounded-xl shadow p-4 text-left transition-all ${
             statusFilter === "pending" ? "ring-2 ring-yellow-500 ring-offset-2" : "hover:shadow-md"
@@ -311,31 +293,12 @@ function OrdenesCompraContent() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">Pendientes</p>
+              <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">Nuevas</p>
               <p className="text-2xl font-bold text-yellow-600 mt-1">{stats.pending}</p>
             </div>
             <div className="bg-yellow-100 rounded-full p-2.5">
               <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setStatusFilter("approved")}
-          className={`bg-white rounded-xl shadow p-4 text-left transition-all ${
-            statusFilter === "approved" ? "ring-2 ring-green-500 ring-offset-2" : "hover:shadow-md"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">Aprobadas</p>
-              <p className="text-2xl font-bold text-green-600 mt-1">{stats.approved}</p>
-            </div>
-            <div className="bg-green-100 rounded-full p-2.5">
-              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
           </div>
@@ -361,6 +324,25 @@ function OrdenesCompraContent() {
         </button>
 
         <button
+          onClick={() => setStatusFilter("approved")}
+          className={`bg-white rounded-xl shadow p-4 text-left transition-all ${
+            statusFilter === "approved" ? "ring-2 ring-green-500 ring-offset-2" : "hover:shadow-md"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">Aprobadas</p>
+              <p className="text-2xl font-bold text-green-600 mt-1">{stats.approved}</p>
+            </div>
+            <div className="bg-green-100 rounded-full p-2.5">
+              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
+        </button>
+
+        <button
           onClick={() => setStatusFilter("rejected")}
           className={`bg-white rounded-xl shadow p-4 text-left transition-all ${
             statusFilter === "rejected" ? "ring-2 ring-red-500 ring-offset-2" : "hover:shadow-md"
@@ -374,6 +356,25 @@ function OrdenesCompraContent() {
             <div className="bg-red-100 rounded-full p-2.5">
               <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => setStatusFilter("all")}
+          className={`bg-white rounded-xl shadow p-4 text-left transition-all ${
+            statusFilter === "all" ? "ring-2 ring-gray-900 ring-offset-2" : "hover:shadow-md"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">Total</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{stats.total}</p>
+            </div>
+            <div className="bg-gray-100 rounded-full p-2.5">
+              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
           </div>
@@ -652,26 +653,26 @@ function OrdenesCompraContent() {
                     className="block p-4 hover:bg-gray-50 transition-colors"
                     onClick={saveFiltersToSession}
                   >
-                    <div className="flex items-start justify-between gap-3 mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-2 h-2 rounded-full ${status.iconBg}`}></div>
-                        <div>
-                          <span className="font-semibold text-gray-900">#{order.id}</span>
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className={`w-2 h-2 flex-shrink-0 rounded-full ${status.iconBg}`}></div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-gray-900 break-all">#{order.id}</span>
                           {order.is_urgent && (
-                            <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-medium">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-medium">
                               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                               </svg>
                               Urgente
                             </span>
                           )}
-                          <span className="text-gray-400 mx-2">·</span>
+                          <span className="text-gray-400">·</span>
                           <span className="text-sm text-gray-500">{dateInfo.relative}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${status.className}`}>
-                          {status.label}
+                          {order.status === 'pending' && order.current_department_name ? `${status.label} | ${order.current_department_name}` : status.label}
                         </span>
                         {order.status === 'rejected' && order.is_definitive_rejection && (
                           <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-700 text-white">
@@ -815,7 +816,7 @@ function OrdenesCompraContent() {
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-1.5">
                               <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${status.className} w-fit`}>
-                                {status.label}
+                                {order.status === 'pending' && order.current_department_name ? `${status.label} | ${order.current_department_name}` : status.label}
                               </span>
                               {order.status === 'rejected' && order.is_definitive_rejection && (
                                 <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-700 text-white w-fit">

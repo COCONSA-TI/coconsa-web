@@ -116,20 +116,19 @@ export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarPr
 
   return (
     <>
-      {/* Sidebar - Desktop: siempre visible, Móvil: drawer lateral */}
+      {/* Sidebar - Actúa como drawer lateral en todas las pantallas */}
       <aside
         className={`
-          fixed lg:static inset-y-0 left-0 z-50
+          fixed inset-y-0 left-0 z-50
           w-64 bg-white border-r border-gray-200
           transform transition-transform duration-300 ease-in-out
-          lg:transform-none lg:translate-x-0
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           flex flex-col
-          pt-16 lg:pt-0
+          pt-16
         `}
       >
-        {/* Header del sidebar (solo móvil) */}
-        <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-200">
+        {/* Header del sidebar */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
           <span className="font-semibold text-gray-900">Menú</span>
           <button
             onClick={onClose}

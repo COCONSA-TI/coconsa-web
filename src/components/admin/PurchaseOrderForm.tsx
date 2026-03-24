@@ -405,6 +405,11 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     }
   };
 
+  // Separar almacenes normales de maquinaria (nomenclatura ej: "13C.", "C01.", "M01.", "V01.", etc.)
+  const IS_MACHINERY_REGEX = /^([a-zA-Z]\d+|\d+[a-zA-Z])[\.\s-]/;
+  const regularStores = availableStores.filter(store => !IS_MACHINERY_REGEX.test(store));
+  const machineryStores = availableStores.filter(store => IS_MACHINERY_REGEX.test(store));
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-4xl mx-auto">
       {/* Mensajes de estado */}
@@ -454,9 +459,16 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
               required
             >
               <option value="">Selecciona un almacén u obra</option>
-              {availableStores.map((store) => (
+              {regularStores.map((store) => (
                 <option key={store} value={store}>{store}</option>
               ))}
+              {machineryStores.length > 0 && (
+                <optgroup label="----- Maquinaria -----">
+                  {machineryStores.map((store) => (
+                    <option key={store} value={store}>{store}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
           <div>

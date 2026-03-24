@@ -57,10 +57,11 @@ interface OrderDetail {
   is_urgent: boolean;
   urgency_justification: string | null;
   is_definitive_rejection: boolean;
+  current_department_name?: string | null;
 }
 
 const statusConfig: Record<OrderStatus, { label: string; className: string; iconBg: string }> = {
-  pending: { label: "Pendiente", className: "bg-yellow-100 text-yellow-800", iconBg: "bg-yellow-500" },
+  pending: { label: "Nuevo", className: "bg-yellow-100 text-yellow-800", iconBg: "bg-yellow-500" },
   approved: { label: "Aprobada", className: "bg-green-100 text-green-800", iconBg: "bg-green-500" },
   rejected: { label: "Rechazada", className: "bg-red-100 text-red-800", iconBg: "bg-red-500" },
   in_progress: { label: "En Proceso", className: "bg-blue-100 text-blue-800", iconBg: "bg-blue-500" },
@@ -650,8 +651,8 @@ export default function OrdenDetallesPage() {
           
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold">Orden #{order.id}</h1>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-2xl font-bold break-all">Orden #{order.id}</h1>
                 {order.is_urgent && (
                   <span className="px-3 py-1 rounded-full text-xs font-medium bg-orange-500 text-white flex items-center gap-1">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -661,7 +662,7 @@ export default function OrdenDetallesPage() {
                   </span>
                 )}
                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusInfo.className}`}>
-                  {statusInfo.label}
+                  {order.status === 'pending' && order.current_department_name ? `${statusInfo.label} | ${order.current_department_name}` : statusInfo.label}
                 </span>
                 {order.status === 'rejected' && order.is_definitive_rejection && (
                   <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-700 text-white">

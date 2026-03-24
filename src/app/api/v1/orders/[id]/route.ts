@@ -206,6 +206,25 @@ export async function GET(
       .eq('id', typedOrder.supplier_id)
       .single();
 
+    // Obtener las aprobaciones pendientes para saber en qué departamento está la orden (la de menor approval_order)
+    const { data: pendingApprovals } = await supabaseAdmin
+      .from('order_approvals')
+      .select('department_id, approval_order')
+      .eq('order_id', orderId)
+      .eq('status', 'pending')
+      .order('approval_order', { ascending: true })
+      .limit(1);
+
+    let currentDepartmentName = null;
+    if (pendingApprovals && pendingApprovals.length > 0) {
+      const { data: dept } = await supabaseAdmin
+        .from('departments')
+        .select('name')
+        .eq('id', pendingApprovals[0].department_id)
+        .single();
+      currentDepartmentName = dept?.name || null;
+    }
+
     // Mapear status de español a inglés (soporta ambos formatos)
     const statusMap: Record<string, string> = {
       // Español
@@ -256,6 +275,7 @@ export async function GET(
       is_urgent: typedOrder.is_urgent || false,
       urgency_justification: typedOrder.urgency_justification,
       is_definitive_rejection: typedOrder.is_definitive_rejection || false,
+      current_department_name: currentDepartmentName,
       items: itemsArray.map((item, index: number) => ({
         id: `${typedOrder.id}-${index}`,
         name: item.nombre || 'N/A',
