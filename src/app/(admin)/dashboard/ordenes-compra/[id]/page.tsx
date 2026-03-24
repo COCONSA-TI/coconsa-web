@@ -198,17 +198,45 @@ export default function OrdenDetallesPage() {
       const isContraloria = userDepartmentCode === 'contraloria';
       
       if (isContraloria && approveFiles.length > 0) {
-        // Use FormData for file upload
-        const formData = new FormData();
-        formData.append('comments', comments || '');
+        // 1. Obtener urls firmadas y subir a Supabase S3 directamente (bypass Vercel 4.5MB limit)
+        const filesInfo = [];
+        for (const file of approveFiles) {
+          const urlRes = await fetch('/api/v1/storage/signed-url', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ 
+               fileName: file.name, 
+               contentType: file.type, 
+               bucket: 'order-attachments', 
+               folder: String(orderId) 
+             })
+          });
+          
+          if (!urlRes.ok) throw new Error('Error obteniendo url de subida para ' + file.name);
+          const urlData = await urlRes.json();
+          
+          const uploadRes = await fetch(urlData.signedUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type },
+            body: file
+          });
+          
+          if (!uploadRes.ok) throw new Error('Error subiendo ' + file.name);
+          
+          filesInfo.push({
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            url: urlData.publicUrl,
+            path: urlData.path
+          });
+        }
         
-        approveFiles.forEach((file, index) => {
-          formData.append(`file_${index}`, file);
-        });
-        
+        // 2. Registrar aprobacion con archivos via JSON Ligero
         const response = await fetch(`/api/v1/orders/${orderId}/approve`, {
           method: 'POST',
-          body: formData,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ comments: comments || '', filesInfo }),
         });
 
         const data = await response.json();

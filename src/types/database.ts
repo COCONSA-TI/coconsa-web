@@ -395,6 +395,7 @@ export interface CreateOrderRequest {
   iva_percentage?: number;
   is_urgent?: boolean;
   urgency_justification?: string;
+  evidenceUrls?: string[];
 }
 
 export interface ApiError {

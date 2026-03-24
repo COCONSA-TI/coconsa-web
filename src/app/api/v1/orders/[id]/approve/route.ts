@@ -25,6 +25,7 @@ export async function POST(
     // Parsear request - puede ser JSON o FormData
     let comments = '';
     const files: File[] = [];
+    let filesInfo: Array<{ name: string, size: number, type: string, url: string, path: string }> = [];
     
     const contentType = request.headers.get('content-type');
     if (contentType?.includes('multipart/form-data')) {
@@ -42,6 +43,7 @@ export async function POST(
       // Manejar JSON
       const body = await request.json();
       comments = body.comments || '';
+      filesInfo = body.filesInfo || [];
     }
 
     // 1. Obtener usuario con departamento (usar admin client para queries)
@@ -207,6 +209,44 @@ export async function POST(
           return NextResponse.json(
             { success: false, error: `Error procesando archivo ${file.name}` },
             { status: 500 }
+          );
+        }
+      }
+    }
+
+    // 5.1 Registrar metadata de archivos subidos por el cliente (Presigned URLs limit bypass)
+    if (filesInfo.length > 0) {
+      for (const file of filesInfo) {
+        try {
+          const { data: attachmentData, error: insertError } = await supabaseAdmin
+            .from('order_attachments')
+            .insert({
+              order_id: orderId,
+              uploaded_by: session.userId,
+              file_name: file.name,
+              file_size: file.size,
+              file_type: file.type,
+              file_url: file.url,
+              storage_path: file.path,
+              description: null,
+            })
+            .select('id')
+            .single();
+
+          if (insertError) {
+            console.error('Database insert error:', insertError);
+            return NextResponse.json(
+              { success: false, error: `Error al registrar archivo ${file.name}` },
+              { status: 500 }
+            );
+          }
+
+          uploadedFileIds.push(attachmentData.id);
+        } catch (error) {
+          console.error('Error procesando info del archivo:', error);
+          return NextResponse.json(
+             { success: false, error: `Error procesando metadata del archivo ${file.name}` },
+             { status: 500 }
           );
         }
       }

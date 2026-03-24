@@ -352,20 +352,44 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     setLoading(true);
     setUploadingFiles(evidenceFiles.length > 0);
 
-    try {
-      // Crear FormData para enviar datos y archivos
-      const formDataToSend = new FormData();
-      formDataToSend.append('orderData', JSON.stringify(orderData));
-      
-      // Agregar archivos de evidencia
-      evidenceFiles.forEach((file) => {
-        formDataToSend.append('evidence', file);
-      });
+      try {
+        const uploadedUrls: string[] = [];
 
-      const response = await fetch("/api/v1/orders/create", {
-        method: "POST",
-        body: formDataToSend,
-      });
+        // 1. Subir archivos de evidencia usando Presigned URLs directamente a Supabase (salta límite de 4.5MB Vercel)
+        if (evidenceFiles.length > 0) {
+          for (const file of evidenceFiles) {
+            const urlRes = await fetch('/api/v1/storage/signed-url', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fileName: file.name, contentType: file.type })
+            });
+            
+            if (!urlRes.ok) throw new Error(`Error obteniendo permiso para subir archivo: ${file.name}`);
+            const urlData = await urlRes.json();
+
+            const uploadRes = await fetch(urlData.signedUrl, {
+              method: 'PUT',
+              headers: { 'Content-Type': file.type },
+              body: file
+            });
+
+            if (!uploadRes.ok) throw new Error(`Error subiendo el archivo: ${file.name}`);
+
+            uploadedUrls.push(urlData.publicUrl);
+          }
+        }
+
+        // 2. Crear la orden (como JSON ligero)
+        const finalOrderPayload = {
+          ...orderData,
+          evidenceUrls: uploadedUrls
+        };
+
+        const response = await fetch("/api/v1/orders/create", {
+          method: "POST",
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(finalOrderPayload),
+        });
 
       const data = await response.json();
 

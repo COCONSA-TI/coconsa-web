@@ -363,6 +363,7 @@ export async function PUT(
       payment_type?: string;
       tax_type?: string;
       iva_percentage?: number;
+      evidenceUrls?: string[];
     };
     let evidenceFiles: File[] = [];
 
@@ -385,7 +386,7 @@ export async function PUT(
       body = await request.json();
     }
 
-    const { items, justification, store_name, currency = 'MXN', retention, payment_type, tax_type, iva_percentage } = body;
+    const { items, justification, store_name, currency = 'MXN', retention, payment_type, tax_type, iva_percentage, evidenceUrls = [] } = body;
 
     // Validaciones
     if (!items || items.length === 0) {
@@ -521,10 +522,10 @@ export async function PUT(
       updateData.retention = retention;
     }
 
-    // Manejar archivos de evidencia si se proporcionaron
+    // Manejar archivos de evidencia de FormData (fallback) y URLs presignadas
+    let finalEvidenceUrls = [...evidenceUrls];
     if (evidenceFiles.length > 0) {
       const BUCKET_NAME = "Coconsa";
-      const uploadedUrls: string[] = [];
       
       for (const file of evidenceFiles) {
         const timestamp = Date.now();
@@ -547,14 +548,14 @@ export async function PUT(
             .getPublicUrl(filePath);
           
           if (urlData?.publicUrl) {
-            uploadedUrls.push(urlData.publicUrl);
+            finalEvidenceUrls.push(urlData.publicUrl);
           }
         }
       }
-      
-      if (uploadedUrls.length > 0) {
-        updateData.justification_prove = uploadedUrls.join(',');
-      }
+    }
+    
+    if (finalEvidenceUrls.length > 0) {
+      updateData.justification_prove = finalEvidenceUrls.join(',');
     }
 
     // Actualizar la orden
