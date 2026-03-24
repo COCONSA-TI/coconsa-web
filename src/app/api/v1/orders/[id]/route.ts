@@ -523,7 +523,7 @@ export async function PUT(
     }
 
     // Manejar archivos de evidencia de FormData (fallback) y URLs presignadas
-    let finalEvidenceUrls = [...evidenceUrls];
+    const finalEvidenceUrls = [...evidenceUrls];
     if (evidenceFiles.length > 0) {
       const BUCKET_NAME = "Coconsa";
       
