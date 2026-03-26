@@ -22,6 +22,19 @@ interface OrderItem {
   supplier_name: string;
 }
 
+interface OrderAttachment {
+  id: string;
+  order_id: string;
+  uploaded_by: string;
+  file_name: string;
+  file_size: number;
+  file_type: string;
+  file_url: string;
+  storage_path: string;
+  description: string | null;
+  created_at: string;
+}
+
 interface OrderDetail {
   id: string;
   created_at: string;
@@ -44,10 +57,11 @@ interface OrderDetail {
   is_urgent: boolean;
   urgency_justification: string | null;
   is_definitive_rejection: boolean;
+  current_department_name?: string | null;
 }
 
 const statusConfig: Record<OrderStatus, { label: string; className: string; iconBg: string }> = {
-  pending: { label: "Pendiente", className: "bg-yellow-100 text-yellow-800", iconBg: "bg-yellow-500" },
+  pending: { label: "Nuevo", className: "bg-yellow-100 text-yellow-800", iconBg: "bg-yellow-500" },
   approved: { label: "Aprobada", className: "bg-green-100 text-green-800", iconBg: "bg-green-500" },
   rejected: { label: "Rechazada", className: "bg-red-100 text-red-800", iconBg: "bg-red-500" },
   in_progress: { label: "En Proceso", className: "bg-blue-100 text-blue-800", iconBg: "bg-blue-500" },
@@ -83,12 +97,17 @@ export default function OrdenDetallesPage() {
   const [confirmComplete, setConfirmComplete] = useState(false);
   const [approvals, setApprovals] = useState<OrderApproval[]>([]);
   const [canApproveOrder, setCanApproveOrder] = useState(false);
+  const [userDepartmentCode, setUserDepartmentCode] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<OrderAttachment[]>([]);
   // Modal states
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectDefinitive, setRejectDefinitive] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [processingAction, setProcessingAction] = useState(false);
+  // Approval modal states
+  const [approveComments, setApproveComments] = useState('');
+  const [approveFiles, setApproveFiles] = useState<File[]>([]);
 
   const fetchOrderDetails = async () => {
     try {
@@ -109,11 +128,42 @@ export default function OrdenDetallesPage() {
         .filter(a => a.approval_order && a.approval_order >= 1 && a.approval_order <= 5)
         .sort((a, b) => (a.approval_order || 0) - (b.approval_order || 0));
       setApprovals(filteredApprovals);
+      
+      // Cargar archivos adjuntos
+      await fetchAttachments();
     } catch {
       toast.error('Error', 'No se pudo cargar la orden');
       router.push('/dashboard/ordenes-compra');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAttachments = async () => {
+    try {
+      const response = await fetch(`/api/v1/orders/${orderId}/attachments`);
+      const data = await response.json();
+      
+      if (data.success && data.attachments) {
+        setAttachments(data.attachments);
+      }
+    } catch {
+      // Error silencioso
+    }
+  };
+
+  const fetchUserDepartment = async () => {
+    if (!user?.department_id) return;
+    
+    try {
+      const response = await fetch(`/api/v1/departments/${user.department_id}`);
+      const data = await response.json();
+      
+      if (data.success && data.department) {
+        setUserDepartmentCode(data.department.code);
+      }
+    } catch {
+      // Error silencioso
     }
   };
 
@@ -136,27 +186,86 @@ export default function OrdenDetallesPage() {
   useEffect(() => {
     if (order && user) {
       checkUserCanApprove();
+      fetchUserDepartment();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order, user]);
 
-  const handleApprove = async (approveComments?: string) => {
+  const handleApprove = async (comments?: string) => {
     setProcessingAction(true);
     try {
-      const response = await fetch(`/api/v1/orders/${orderId}/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comments: approveComments || '' }),
-      });
+      // Check if we need to send files (only for Contraloría)
+      const isContraloria = userDepartmentCode === 'contraloria';
+      
+      if (isContraloria && approveFiles.length > 0) {
+        // 1. Obtener urls firmadas y subir a Supabase S3 directamente (bypass Vercel 4.5MB limit)
+        const filesInfo = [];
+        for (const file of approveFiles) {
+          const urlRes = await fetch('/api/v1/storage/signed-url', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ 
+               fileName: file.name, 
+               contentType: file.type, 
+               bucket: 'order-attachments', 
+               folder: String(orderId) 
+             })
+          });
+          
+          if (!urlRes.ok) throw new Error('Error obteniendo url de subida para ' + file.name);
+          const urlData = await urlRes.json();
+          
+          const uploadRes = await fetch(urlData.signedUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type },
+            body: file
+          });
+          
+          if (!uploadRes.ok) throw new Error('Error subiendo ' + file.name);
+          
+          filesInfo.push({
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            url: urlData.publicUrl,
+            path: urlData.path
+          });
+        }
+        
+        // 2. Registrar aprobacion con archivos via JSON Ligero
+        const response = await fetch(`/api/v1/orders/${orderId}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ comments: comments || '', filesInfo }),
+        });
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (!data.success) {
-        throw new Error(data.error || 'Error al aprobar la orden');
+        if (!data.success) {
+          throw new Error(data.error || 'Error al aprobar la orden');
+        }
+
+        toast.success('Orden aprobada', data.message);
+      } else {
+        // Regular JSON request (no files)
+        const response = await fetch(`/api/v1/orders/${orderId}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ comments: comments || '' }),
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+          throw new Error(data.error || 'Error al aprobar la orden');
+        }
+
+        toast.success('Orden aprobada', data.message);
       }
-
-      toast.success('Orden aprobada', data.message);
+      
       setShowApproveModal(false);
+      setApproveComments('');
+      setApproveFiles([]);
       await fetchOrderDetails();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Error al aprobar la orden';
@@ -336,18 +445,133 @@ export default function OrdenDetallesPage() {
   return (
     <>
       {/* Modales */}
-      <InputModal
+      <Modal
         isOpen={showApproveModal}
-        onClose={() => setShowApproveModal(false)}
-        onConfirm={handleApprove}
+        onClose={() => {
+          setShowApproveModal(false);
+          setApproveComments('');
+          setApproveFiles([]);
+        }}
         title="Aprobar Orden"
-        message="¿Deseas agregar un comentario a esta aprobacion? (opcional)"
-        placeholder="Escribe un comentario (opcional)..."
-        confirmText="Aprobar"
-        cancelText="Cancelar"
-        required={false}
-        loading={processingAction}
-      />
+        size="md"
+      >
+        <div>
+          <p className="text-gray-600 mb-4">
+            ¿Deseas agregar un comentario a esta aprobacion? (opcional)
+          </p>
+          
+          <textarea
+            value={approveComments}
+            onChange={(e) => setApproveComments(e.target.value)}
+            placeholder="Escribe un comentario (opcional)..."
+            rows={3}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none text-gray-900"
+          />
+
+          {/* File upload section - only for Contraloría */}
+          {userDepartmentCode === 'contraloria' && (
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Adjuntar documentos (opcional)
+              </label>
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-green-500 transition-colors">
+                <input
+                  type="file"
+                  multiple
+                  accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx,.doc,.docx"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    const maxSize = 10 * 1024 * 1024; // 10MB
+                    const validFiles = files.filter(file => {
+                      if (file.size > maxSize) {
+                        toast.warning('Archivo muy grande', `${file.name} excede el límite de 10MB`);
+                        return false;
+                      }
+                      return true;
+                    });
+                    setApproveFiles(prev => [...prev, ...validFiles]);
+                  }}
+                  className="hidden"
+                  id="file-upload"
+                />
+                <label
+                  htmlFor="file-upload"
+                  className="flex flex-col items-center cursor-pointer"
+                >
+                  <svg className="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  <span className="text-sm text-gray-600">
+                    Click para seleccionar archivos
+                  </span>
+                  <span className="text-xs text-gray-500 mt-1">
+                    PDF, imágenes, Excel, Word (máx. 10MB por archivo)
+                  </span>
+                </label>
+              </div>
+
+              {/* File list */}
+              {approveFiles.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {approveFiles.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <svg className="w-4 h-4 text-gray-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-sm text-gray-700 truncate">{file.name}</span>
+                        <span className="text-xs text-gray-500 flex-shrink-0">
+                          ({(file.size / 1024).toFixed(1)} KB)
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setApproveFiles(prev => prev.filter((_, i) => i !== index))}
+                        className="ml-2 text-red-500 hover:text-red-700 flex-shrink-0"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex gap-3 mt-6">
+            <button
+              onClick={() => {
+                setShowApproveModal(false);
+                setApproveComments('');
+                setApproveFiles([]);
+              }}
+              disabled={processingAction}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => handleApprove(approveComments)}
+              disabled={processingAction}
+              className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+            >
+              {processingAction ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Procesando...
+                </>
+              ) : (
+                'Aprobar'
+              )}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         isOpen={showRejectModal}
@@ -455,8 +679,8 @@ export default function OrdenDetallesPage() {
           
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold">Orden #{order.id}</h1>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-2xl font-bold break-all">Orden #{order.id}</h1>
                 {order.is_urgent && (
                   <span className="px-3 py-1 rounded-full text-xs font-medium bg-orange-500 text-white flex items-center gap-1">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -466,7 +690,7 @@ export default function OrdenDetallesPage() {
                   </span>
                 )}
                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusInfo.className}`}>
-                  {statusInfo.label}
+                  {order.status === 'pending' && order.current_department_name ? `${statusInfo.label} | ${order.current_department_name}` : statusInfo.label}
                 </span>
                 {order.status === 'rejected' && order.is_definitive_rejection && (
                   <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-700 text-white">
@@ -701,6 +925,47 @@ export default function OrdenDetallesPage() {
                     </div>
                   </div>
                 ))}
+            </div>
+          </div>
+        )}
+
+        {/* Archivos Adjuntos - Visible para Contraloría */}
+        {attachments.length > 0 && (
+          <div className="bg-white rounded-xl shadow p-5">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Archivos Adjuntos</h2>
+            <div className="space-y-3">
+              {attachments.map(attachment => (
+                <div key={attachment.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-blue-100">
+                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{attachment.file_name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-xs text-gray-500">
+                          {(attachment.file_size / 1024).toFixed(1)} KB
+                        </p>
+                        <span className="text-xs text-gray-400">•</span>
+                        <p className="text-xs text-gray-500">
+                          {new Date(attachment.created_at).toLocaleDateString('es-MX')}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <a
+                    href={attachment.file_url}
+                    download
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-2 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex-shrink-0"
+                  >
+                    Descargar
+                  </a>
+                </div>
+              ))}
             </div>
           </div>
         )}

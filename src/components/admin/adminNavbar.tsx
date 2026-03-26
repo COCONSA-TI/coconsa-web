@@ -29,47 +29,47 @@ export default function AdminNavbar({ onMenuClick }: AdminNavbarProps) {
     <header className="bg-white shadow-md sticky top-0 z-50 border-b border-gray-200">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Botón hamburguesa (móvil) */}
-          <button
-            onClick={onMenuClick}
-            className="lg:hidden p-2 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-            aria-label="Abrir menú"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
+          {/* Lado izquierdo: Hamburguesa y Logo */}
+          <div className="flex items-center gap-4">
+            <button
+              onClick={onMenuClick}
+              className="p-2 -ml-2 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+              aria-label="Abrir menú"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
 
-          {/* Logo y Título */}
-          <div className="flex items-center gap-3">
-            <Link href="/dashboard" className="flex items-center gap-3">
-              <Image
-                src="/logo-coconsa.png"
-                alt="Logo de COCONSA"
-                width={40}
-                height={40}
-                priority
-                className="drop-shadow-sm"
-              />
+            <Link href="/dashboard" className="flex items-center gap-3 group">
+              <div className="bg-white p-1 rounded-lg border border-gray-100 shadow-sm group-hover:shadow-md transition-shadow">
+                <Image
+                  src="/logo-coconsa.png"
+                  alt="Logo de COCONSA"
+                  width={34}
+                  height={34}
+                  priority
+                />
+              </div>
               <div className="hidden sm:block">
-                <h1 className="text-lg font-bold text-gray-900">COCONSA</h1>
-                <p className="text-xs text-gray-500">Sistema Interno</p>
+                <h1 className="text-base font-extrabold text-gray-900 tracking-tight leading-none">COCONSA</h1>
+                <p className="text-[10px] text-gray-500 font-semibold tracking-wider uppercase mt-0.5">Sistema Interno</p>
               </div>
             </Link>
           </div>
 
           {/* Navegación (oculta en móvil, visible en desktop) */}
           {/* TEMPORAL: Solo Dashboard y Órdenes de Compra durante el desarrollo */}
-          <nav className="hidden lg:flex items-center space-x-6">
+          <nav className="hidden lg:flex items-center space-x-1">
             <Link 
               href="/dashboard" 
-              className="text-gray-700 hover:text-red-600 font-medium transition-colors"
+              className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-all"
             >
               Dashboard
             </Link>
             <Link 
               href="/dashboard/ordenes-compra" 
-              className="text-gray-700 hover:text-red-600 font-medium transition-colors"
+              className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-all"
             >
               Órdenes de Compra
             </Link>
@@ -78,13 +78,13 @@ export default function AdminNavbar({ onMenuClick }: AdminNavbarProps) {
               <>
                 <Link 
                   href="/dashboard/proyectos" 
-                  className="text-gray-700 hover:text-red-600 font-medium transition-colors"
+                  className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-all"
                 >
                   Proyectos
                 </Link>
                 <Link 
                   href="/dashboard/clientes" 
-                  className="text-gray-700 hover:text-red-600 font-medium transition-colors"
+                  className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-all"
                 >
                   Clientes
                 </Link>
@@ -94,15 +94,17 @@ export default function AdminNavbar({ onMenuClick }: AdminNavbarProps) {
           </nav>
 
           {/* Botón de logout */}
-          <button
-            onClick={handleLogout}
-            className="bg-red-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
-          >
-            <span className="hidden sm:inline">Cerrar Sesión</span>
-            <svg className="w-5 h-5 sm:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-          </button>
+          <div className="flex items-center">
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 bg-gray-900 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors shadow-sm text-sm font-medium"
+            >
+              <span className="hidden sm:inline">Cerrar Sesión</span>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </header>

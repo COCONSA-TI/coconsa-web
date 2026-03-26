@@ -20,8 +20,31 @@ export async function POST(
       );
     }
 
-    const { comments } = await request.json();
     const orderId = resolvedParams.id;
+    
+    // Parsear request - puede ser JSON o FormData
+    let comments = '';
+    const files: File[] = [];
+    let filesInfo: Array<{ name: string, size: number, type: string, url: string, path: string }> = [];
+    
+    const contentType = request.headers.get('content-type');
+    if (contentType?.includes('multipart/form-data')) {
+      // Manejar FormData (con archivos)
+      const formData = await request.formData();
+      comments = formData.get('comments') as string || '';
+      
+      // Extraer archivos
+      for (const [key, value] of formData) {
+        if (key.startsWith('file_') && value instanceof File) {
+          files.push(value);
+        }
+      }
+    } else {
+      // Manejar JSON
+      const body = await request.json();
+      comments = body.comments || '';
+      filesInfo = body.filesInfo || [];
+    }
 
     // 1. Obtener usuario con departamento (usar admin client para queries)
     const { data: user, error: userError } = await supabaseAdmin
@@ -93,7 +116,143 @@ export async function POST(
       );
     }
 
-    // 5. Aprobar
+    // 5. Subir archivos a Supabase Storage si existen
+    const uploadedFileIds: string[] = [];
+    if (files.length > 0) {
+      for (const file of files) {
+        try {
+          // Validar tamaño (máx 10MB)
+          if (file.size > 10 * 1024 * 1024) {
+            return NextResponse.json(
+              { success: false, error: `Archivo ${file.name} excede el límite de 10MB` },
+              { status: 400 }
+            );
+          }
+
+          // Validar tipo MIME
+          const allowedMimes = [
+            'application/pdf',
+            'image/jpeg',
+            'image/png',
+            'image/jpg',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          ];
+          
+          if (!allowedMimes.includes(file.type)) {
+            return NextResponse.json(
+              { success: false, error: `Tipo de archivo no permitido: ${file.type}` },
+              { status: 400 }
+            );
+          }
+
+          // Convertir File a Buffer
+          const buffer = await file.arrayBuffer();
+          const uint8Array = new Uint8Array(buffer);
+          
+          // Crear ruta: order-attachments/{orderId}/{timestamp}_{filename}
+          const timestamp = Date.now();
+          const storagePath = `${orderId}/${timestamp}_${file.name}`;
+          
+          // Subir a Storage
+          const { error: uploadError } = await supabaseAdmin
+            .storage
+            .from('order-attachments')
+            .upload(storagePath, uint8Array, {
+              contentType: file.type,
+              upsert: false,
+            });
+
+          if (uploadError) {
+            console.error('Storage upload error:', uploadError);
+            return NextResponse.json(
+              { success: false, error: `Error al subir archivo ${file.name}: ${uploadError.message}` },
+              { status: 500 }
+            );
+          }
+
+          // Obtener URL pública del archivo
+          const { data: { publicUrl } } = supabaseAdmin
+            .storage
+            .from('order-attachments')
+            .getPublicUrl(storagePath);
+
+          // Guardar metadata en order_attachments
+          const { data: attachmentData, error: insertError } = await supabaseAdmin
+            .from('order_attachments')
+            .insert({
+              order_id: orderId,
+              uploaded_by: session.userId,
+              file_name: file.name,
+              file_size: file.size,
+              file_type: file.type,
+              file_url: publicUrl,
+              storage_path: storagePath,
+              description: null,
+            })
+            .select('id')
+            .single();
+
+          if (insertError) {
+            console.error('Database insert error:', insertError);
+            return NextResponse.json(
+              { success: false, error: `Error al registrar archivo ${file.name}` },
+              { status: 500 }
+            );
+          }
+
+          uploadedFileIds.push(attachmentData.id);
+        } catch (error) {
+          console.error('Error processing file:', error);
+          return NextResponse.json(
+            { success: false, error: `Error procesando archivo ${file.name}` },
+            { status: 500 }
+          );
+        }
+      }
+    }
+
+    // 5.1 Registrar metadata de archivos subidos por el cliente (Presigned URLs limit bypass)
+    if (filesInfo.length > 0) {
+      for (const file of filesInfo) {
+        try {
+          const { data: attachmentData, error: insertError } = await supabaseAdmin
+            .from('order_attachments')
+            .insert({
+              order_id: orderId,
+              uploaded_by: session.userId,
+              file_name: file.name,
+              file_size: file.size,
+              file_type: file.type,
+              file_url: file.url,
+              storage_path: file.path,
+              description: null,
+            })
+            .select('id')
+            .single();
+
+          if (insertError) {
+            console.error('Database insert error:', insertError);
+            return NextResponse.json(
+              { success: false, error: `Error al registrar archivo ${file.name}` },
+              { status: 500 }
+            );
+          }
+
+          uploadedFileIds.push(attachmentData.id);
+        } catch (error) {
+          console.error('Error procesando info del archivo:', error);
+          return NextResponse.json(
+             { success: false, error: `Error procesando metadata del archivo ${file.name}` },
+             { status: 500 }
+          );
+        }
+      }
+    }
+
+    // 6. Aprobar
     const { error: updateError } = await supabaseAdmin
       .from('order_approvals')
       .update({
@@ -111,7 +270,7 @@ export async function POST(
       );
     }
 
-    // 6. Verificar si todas las aprobaciones están completas
+    // 7. Verificar si todas las aprobaciones están completas
     const { data: updatedApprovals, error: checkError } = await supabaseAdmin
       .from('order_approvals')
       .select('id, status, department_id, approval_order')
@@ -123,7 +282,7 @@ export async function POST(
 
     const allApproved = updatedApprovals?.every((a: { status: ApprovalStatus | null }) => a.status === 'approved');
 
-    // 7. Si todas están aprobadas, cambiar estado de la orden
+    // 8. Si todas están aprobadas, cambiar estado de la orden
     if (allApproved) {
       const { error: orderUpdateError } = await supabaseAdmin
         .from('orders')
@@ -155,8 +314,10 @@ export async function POST(
       success: true,
       message: allApproved ? 'Orden completamente aprobada' : 'Aprobacion registrada exitosamente',
       allApproved,
+      filesUploaded: uploadedFileIds.length,
     });
   } catch (error) {
+    console.error('Approve endpoint error:', error);
     return NextResponse.json(
       { success: false, error: 'Error interno del servidor' },
       { status: 500 }

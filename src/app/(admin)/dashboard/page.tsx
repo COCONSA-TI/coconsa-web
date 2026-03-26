@@ -15,6 +15,7 @@ interface Order {
   applicant_name: string;
   items_count: number;
   my_department_status: string | null;
+  current_department_name?: string | null;
 }
 
 interface OrderStats {
@@ -35,18 +36,19 @@ function getRoleName(role?: string): string {
   return roleNames[role || ''] || 'Usuario';
 }
 
-function getStatusBadge(status: string) {
+function getStatusBadge(status: string, departmentName?: string | null) {
   const statusConfig: Record<string, { label: string; className: string }> = {
-    pending: { label: 'Pendiente', className: 'bg-yellow-100 text-yellow-800' },
+    pending: { label: 'Nuevo', className: 'bg-yellow-100 text-yellow-800' },
     approved: { label: 'Aprobada', className: 'bg-green-100 text-green-800' },
     rejected: { label: 'Rechazada', className: 'bg-red-100 text-red-800' },
     in_progress: { label: 'En Proceso', className: 'bg-blue-100 text-blue-800' },
     completed: { label: 'Completada', className: 'bg-gray-100 text-gray-800' },
   };
   const config = statusConfig[status] || statusConfig.pending;
+  const label = status === 'pending' && departmentName ? `${config.label} | ${departmentName}` : config.label;
   return (
     <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.className}`}>
-      {config.label}
+      {label}
     </span>
   );
 }
@@ -170,7 +172,7 @@ export default function DashboardPage() {
         <div className="bg-white rounded-xl shadow p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-gray-500 text-sm font-medium">Pendientes</p>
+              <p className="text-gray-500 text-sm font-medium">Nuevas</p>
               <p className="text-2xl font-bold text-yellow-600 mt-1">
                 {loadingOrders ? <span className="inline-block h-7 w-8 bg-gray-200 rounded animate-pulse"></span> : stats.pending}
               </p>
@@ -242,7 +244,7 @@ export default function DashboardPage() {
               </h2>
               {pendingOrders.length > 0 && (
                 <span className="px-2 py-1 bg-red-100 text-red-600 rounded-full text-xs font-medium">
-                  {pendingOrders.length} pendiente{pendingOrders.length > 1 ? 's' : ''}
+                  {pendingOrders.length} nueva{pendingOrders.length > 1 ? 's' : ''}
                 </span>
               )}
             </div>
@@ -257,7 +259,7 @@ export default function DashboardPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <p className="text-gray-500 text-sm">No hay órdenes pendientes</p>
+                <p className="text-gray-500 text-sm">No hay órdenes nuevas</p>
                 <p className="text-gray-400 text-xs mt-1">Todas las órdenes han sido procesadas</p>
               </div>
             ) : (
@@ -291,7 +293,7 @@ export default function DashboardPage() {
                     href="/dashboard/ordenes-compra?status=pending"
                     className="block text-center text-sm text-red-600 hover:text-red-700 font-medium py-2"
                   >
-                    Ver todas las pendientes ({pendingOrders.length})
+                    Ver todas las nuevas ({pendingOrders.length})
                   </Link>
                 )}
               </div>
@@ -345,7 +347,7 @@ export default function DashboardPage() {
                         <p className="text-sm font-medium text-gray-900">
                           #{order.id}
                         </p>
-                        {getStatusBadge(order.status)}
+                        {getStatusBadge(order.status, order.current_department_name)}
                       </div>
                       <p className="text-xs text-gray-500 mt-1">
                         {order.store_name} · {formatCurrency(order.total, order.currency)}

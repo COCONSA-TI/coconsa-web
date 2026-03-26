@@ -99,6 +99,34 @@ export async function GET(request: Request) {
     const storesMap = new Map(stores?.map(s => [s.id, s.name]) || []);
     const usersMap = new Map(users?.map(u => [u.id, u.full_name]) || []);
 
+    const orderIds = (orders as SupabaseOrder[]).map((o) => o.id);
+
+    // Obtener todos los departamentos para mapear sus nombres
+    const { data: allDepts } = await supabaseAdmin
+      .from('departments')
+      .select('id, name');
+    const allDeptsMap = new Map(allDepts?.map(d => [d.id, d.name]) || []);
+
+    // Obtener las aprobaciones pendientes para saber en qué departamento está la orden (la de menor approval_order)
+    const { data: allPendingApprovals } = await supabaseAdmin
+      .from('order_approvals')
+      .select('order_id, department_id, approval_order')
+      .in('order_id', orderIds)
+      .eq('status', 'pending');
+
+    const currentDeptMap = new Map<string, { order: number, name: string }>();
+    if (allPendingApprovals) {
+      allPendingApprovals.forEach((a: any) => {
+        const existing = currentDeptMap.get(a.order_id);
+        if (!existing || a.approval_order < existing.order) {
+           currentDeptMap.set(a.order_id, {
+             order: a.approval_order,
+             name: allDeptsMap.get(a.department_id) || 'Desconocido'
+           });
+        }
+      });
+    }
+
     // Si el usuario es jefe de departamento, obtener todas las aprobaciones de las órdenes para su departamento
     const userDeptApprovals = new Map();
     if (currentUserData?.is_department_head && currentUserData?.department_id) {
@@ -149,10 +177,12 @@ export async function GET(request: Request) {
         status: statusMap[order.status] || 'pending',
         applicant_name: usersMap.get(order.applicant_id) || 'N/A',
         items_count: itemsArray.length,
+        first_item_name: itemsArray.length > 0 ? itemsArray[0].nombre : null,
         payment_type: order.payment_type || null,
         is_urgent: order.is_urgent || false,
         is_definitive_rejection: order.is_definitive_rejection || false,
         my_department_status: userDeptApprovals.get(order.id) || null,
+        current_department_name: currentDeptMap.get(order.id)?.name || null,
       };
     });
 

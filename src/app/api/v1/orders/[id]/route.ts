@@ -206,6 +206,25 @@ export async function GET(
       .eq('id', typedOrder.supplier_id)
       .single();
 
+    // Obtener las aprobaciones pendientes para saber en qué departamento está la orden (la de menor approval_order)
+    const { data: pendingApprovals } = await supabaseAdmin
+      .from('order_approvals')
+      .select('department_id, approval_order')
+      .eq('order_id', orderId)
+      .eq('status', 'pending')
+      .order('approval_order', { ascending: true })
+      .limit(1);
+
+    let currentDepartmentName = null;
+    if (pendingApprovals && pendingApprovals.length > 0) {
+      const { data: dept } = await supabaseAdmin
+        .from('departments')
+        .select('name')
+        .eq('id', pendingApprovals[0].department_id)
+        .single();
+      currentDepartmentName = dept?.name || null;
+    }
+
     // Mapear status de español a inglés (soporta ambos formatos)
     const statusMap: Record<string, string> = {
       // Español
@@ -256,6 +275,7 @@ export async function GET(
       is_urgent: typedOrder.is_urgent || false,
       urgency_justification: typedOrder.urgency_justification,
       is_definitive_rejection: typedOrder.is_definitive_rejection || false,
+      current_department_name: currentDepartmentName,
       items: itemsArray.map((item, index: number) => ({
         id: `${typedOrder.id}-${index}`,
         name: item.nombre || 'N/A',
@@ -343,6 +363,7 @@ export async function PUT(
       payment_type?: string;
       tax_type?: string;
       iva_percentage?: number;
+      evidenceUrls?: string[];
     };
     let evidenceFiles: File[] = [];
 
@@ -365,7 +386,7 @@ export async function PUT(
       body = await request.json();
     }
 
-    const { items, justification, store_name, currency = 'MXN', retention, payment_type, tax_type, iva_percentage } = body;
+    const { items, justification, store_name, currency = 'MXN', retention, payment_type, tax_type, iva_percentage, evidenceUrls = [] } = body;
 
     // Validaciones
     if (!items || items.length === 0) {
@@ -501,10 +522,10 @@ export async function PUT(
       updateData.retention = retention;
     }
 
-    // Manejar archivos de evidencia si se proporcionaron
+    // Manejar archivos de evidencia de FormData (fallback) y URLs presignadas
+    const finalEvidenceUrls = [...evidenceUrls];
     if (evidenceFiles.length > 0) {
       const BUCKET_NAME = "Coconsa";
-      const uploadedUrls: string[] = [];
       
       for (const file of evidenceFiles) {
         const timestamp = Date.now();
@@ -527,14 +548,14 @@ export async function PUT(
             .getPublicUrl(filePath);
           
           if (urlData?.publicUrl) {
-            uploadedUrls.push(urlData.publicUrl);
+            finalEvidenceUrls.push(urlData.publicUrl);
           }
         }
       }
-      
-      if (uploadedUrls.length > 0) {
-        updateData.justification_prove = uploadedUrls.join(',');
-      }
+    }
+    
+    if (finalEvidenceUrls.length > 0) {
+      updateData.justification_prove = finalEvidenceUrls.join(',');
     }
 
     // Actualizar la orden

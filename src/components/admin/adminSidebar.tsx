@@ -48,6 +48,15 @@ const menuItems = [
     ),
   },
   {
+    name: 'Proveedores',
+    href: '/dashboard/proveedores',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+      </svg>
+    ),
+  },
+  {
     name: 'Mensajes',
     href: '/dashboard/mensajes',
     icon: (
@@ -89,6 +98,10 @@ export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarPr
     if (item.href === '/dashboard/ordenes-compra') {
       return true;
     }
+    // Proveedores: solo admin
+    if (item.href === '/dashboard/proveedores') {
+      return isAdmin;
+    }
     // Configuración: solo admin
     if (item.href === '/dashboard/configuracion') {
       return isAdmin;
@@ -116,20 +129,19 @@ export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarPr
 
   return (
     <>
-      {/* Sidebar - Desktop: siempre visible, Móvil: drawer lateral */}
+      {/* Sidebar - Actúa como drawer lateral en todas las pantallas */}
       <aside
         className={`
-          fixed lg:static inset-y-0 left-0 z-50
+          fixed inset-y-0 left-0 z-50
           w-64 bg-white border-r border-gray-200
           transform transition-transform duration-300 ease-in-out
-          lg:transform-none lg:translate-x-0
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           flex flex-col
-          pt-16 lg:pt-0
+          pt-16
         `}
       >
-        {/* Header del sidebar (solo móvil) */}
-        <div className="lg:hidden flex items-center justify-between p-4 border-b border-gray-200">
+        {/* Header del sidebar */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
           <span className="font-semibold text-gray-900">Menú</span>
           <button
             onClick={onClose}

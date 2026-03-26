@@ -251,6 +251,7 @@ export async function POST(request: Request) {
       iva_percentage,
       is_urgent = false,
       urgency_justification,
+      evidenceUrls = [],
     } = body;
 
     // Validaciones básicas
@@ -453,30 +454,31 @@ export async function POST(request: Request) {
       );
     }
 
-    // Subir archivos de evidencia si existen
+    // Manejar archivos de evidencia de FormData (fallback) y URLs presignadas
+    let finalEvidenceUrls = [...evidenceUrls];
     if (evidenceFiles.length > 0) {
       try {
-        const evidenceUrls = await uploadEvidenceFiles(evidenceFiles, String(orderCreated.id));
-        
-        if (evidenceUrls.length > 0) {
-          await supabaseAdmin
-            .from('orders')
-            .update({ 
-              justification_prove: evidenceUrls.join(',') 
-            })
-            .eq('id', orderCreated.id);
-          
-          orderCreated.justification_prove = evidenceUrls.join(',');
-        }
+        const uploadedUrls = await uploadEvidenceFiles(evidenceFiles, String(orderCreated.id));
+        finalEvidenceUrls = [...finalEvidenceUrls, ...uploadedUrls];
       } catch (uploadError: unknown) {
         // Si el error es de validación (tipo/tamaño), rechazar la orden con 400
         const msg = uploadError instanceof Error ? uploadError.message : 'Error al subir archivos';
         if (msg.includes('no permitido') || msg.includes('excede') || msg.includes('máximo')) {
           return NextResponse.json({ error: msg }, { status: 400 });
         }
-        // Errores de storage (red, bucket) no bloquean la creación de la orden
         console.error('[orders/create] Error uploading evidence files:', msg);
       }
+    }
+    
+    if (finalEvidenceUrls.length > 0) {
+      await supabaseAdmin
+        .from('orders')
+        .update({ 
+          justification_prove: finalEvidenceUrls.join(',') 
+        })
+        .eq('id', orderCreated.id);
+      
+      orderCreated.justification_prove = finalEvidenceUrls.join(',');
     }
     
     // Crear el flujo de aprobaciones automáticamente
