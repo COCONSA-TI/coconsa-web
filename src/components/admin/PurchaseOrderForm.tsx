@@ -429,8 +429,8 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     }
   };
 
-  // Separar almacenes normales de maquinaria (nomenclatura ej: "13C.", "C01.", "M01.", "V01.", etc.)
-  const IS_MACHINERY_REGEX = /^([a-zA-Z]\d+|\d+[a-zA-Z])[\.\s-]/;
+  // Separar almacenes normales de maquinaria (nomenclatura ej: "C01.", "M01.", "V01.", "AT01", etc.)
+  const IS_MACHINERY_REGEX = /^(M|C|V|AT)\d+[\.\s-]?/i;
   const regularStores = availableStores.filter(store => !IS_MACHINERY_REGEX.test(store));
   const machineryStores = availableStores.filter(store => IS_MACHINERY_REGEX.test(store));
 
