@@ -690,7 +690,7 @@ export default function OrdenDetallesPage() {
                   </span>
                 )}
                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusInfo.className}`}>
-                  {order.status === 'pending' && order.current_department_name ? `${statusInfo.label} | ${order.current_department_name}` : statusInfo.label}
+                  {(order.status === 'pending' || order.status === 'in_progress') && order.current_department_name ? `${statusInfo.label} | ${order.current_department_name}` : statusInfo.label}
                 </span>
                 {order.status === 'rejected' && order.is_definitive_rejection && (
                   <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-700 text-white">
@@ -1087,32 +1087,32 @@ export default function OrdenDetallesPage() {
 
               {/* Desktop Table */}
               <div className="hidden lg:block overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full text-left">
                   <thead>
                     <tr className="border-b border-gray-100">
-                      <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide pb-3">Articulo</th>
-                      <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide pb-3">Proveedor</th>
-                      <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wide pb-3">Cantidad</th>
-                      <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wide pb-3">P. Unitario</th>
-                      <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wide pb-3">Subtotal</th>
+                      <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide pb-3 pr-4">Articulo</th>
+                      <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide pb-3 px-4">Proveedor</th>
+                      <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wide pb-3 px-4">Cantidad</th>
+                      <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wide pb-3 px-4 whitespace-nowrap">P. Unitario</th>
+                      <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wide pb-3 pl-4">Subtotal</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {order.items.map((item) => (
                       <tr key={item.id}>
-                        <td className="py-3">
+                        <td className="py-3 pr-4">
                           <span className="font-medium text-gray-900">{item.name}</span>
                         </td>
-                        <td className="py-3">
+                        <td className="py-3 px-4">
                           <span className="text-gray-600">{item.supplier_name}</span>
                         </td>
-                        <td className="py-3 text-right">
+                        <td className="py-3 px-4 text-right whitespace-nowrap">
                           <span className="text-gray-900">{item.quantity} {item.unit}</span>
                         </td>
-                        <td className="py-3 text-right">
+                        <td className="py-3 px-4 text-right whitespace-nowrap">
                           <span className="text-gray-900">{formatCurrency(item.unit_price, order.currency)}</span>
                         </td>
-                        <td className="py-3 text-right">
+                        <td className="py-3 pl-4 text-right whitespace-nowrap">
                           <span className="font-semibold text-gray-900">{formatCurrency(item.subtotal, order.currency)}</span>
                         </td>
                       </tr>
