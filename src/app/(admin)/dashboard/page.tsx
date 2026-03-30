@@ -45,7 +45,7 @@ function getStatusBadge(status: string, departmentName?: string | null) {
     completed: { label: 'Completada', className: 'bg-gray-100 text-gray-800' },
   };
   const config = statusConfig[status] || statusConfig.pending;
-  const label = status === 'pending' && departmentName ? `${config.label} | ${departmentName}` : config.label;
+  const label = (status === 'pending' || status === 'in_progress') && departmentName ? `${config.label} | ${departmentName}` : config.label;
   return (
     <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.className}`}>
       {label}

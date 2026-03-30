@@ -672,7 +672,7 @@ function OrdenesCompraContent() {
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${status.className}`}>
-                          {order.status === 'pending' && order.current_department_name ? `${status.label} | ${order.current_department_name}` : status.label}
+                          {(order.status === 'pending' || order.status === 'in_progress') && order.current_department_name ? `${status.label} | ${order.current_department_name}` : status.label}
                         </span>
                         {order.status === 'rejected' && order.is_definitive_rejection && (
                           <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-700 text-white">
@@ -816,7 +816,7 @@ function OrdenesCompraContent() {
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-1.5">
                               <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${status.className} w-fit`}>
-                                {order.status === 'pending' && order.current_department_name ? `${status.label} | ${order.current_department_name}` : status.label}
+                                {(order.status === 'pending' || order.status === 'in_progress') && order.current_department_name ? `${status.label} | ${order.current_department_name}` : status.label}
                               </span>
                               {order.status === 'rejected' && order.is_definitive_rejection && (
                                 <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-700 text-white w-fit">
