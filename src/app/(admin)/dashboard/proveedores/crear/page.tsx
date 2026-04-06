@@ -167,7 +167,7 @@ export default function CrearProveedorPage() {
                 type="text" 
                 {...register('bank')}
                 placeholder="Ej. BBVA"
-                className={`w-full px-4 py-2 rounded-lg border focus:ring-2 outline-none transition-all ${errors.bank ? 'border-red-300 focus:ring-red-200' : 'border-gray-300 focus:ring-red-100 focus:border-red-500'}`}
+                className={`w-full px-4 py-2 text-gray-900 bg-white rounded-lg border focus:ring-2 outline-none transition-all ${errors.bank ? 'border-red-300 focus:ring-red-200' : 'border-gray-300 focus:ring-red-100 focus:border-red-500'}`}
               />
               {errors.bank && <p className="mt-1 text-sm text-red-600">{errors.bank.message}</p>}
             </div>
@@ -180,7 +180,7 @@ export default function CrearProveedorPage() {
                 maxLength={18}
                 {...register('clabe')}
                 placeholder="18 dígitos"
-                className={`w-full px-4 py-2 rounded-lg border focus:ring-2 outline-none transition-all ${errors.clabe ? 'border-red-300 focus:ring-red-200' : 'border-gray-300 focus:ring-red-100 focus:border-red-500'}`}
+                className={`w-full px-4 py-2 text-gray-900 bg-white rounded-lg border focus:ring-2 outline-none transition-all ${errors.clabe ? 'border-red-300 focus:ring-red-200' : 'border-gray-300 focus:ring-red-100 focus:border-red-500'}`}
               />
               {errors.clabe && <p className="mt-1 text-sm text-red-600">{errors.clabe.message}</p>}
             </div>
