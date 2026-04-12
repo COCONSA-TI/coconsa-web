@@ -29,6 +29,13 @@ interface PurchaseOrderFormProps {
   onSubmit?: (data: OrderData) => void;
 }
 
+interface MachineOption {
+  id: string | number;
+  name: string;
+}
+
+const LEGACY_MACHINE_STORE_REGEX = /^(CG|M|C|V|AT)\d+[\.\s-]?/i;
+
 function SearchableSupplierSelect({
   value,
   suppliers,
@@ -156,9 +163,11 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
   const [currentUser, setCurrentUser] = useState<{name: string, email: string, isDepartmentHead: boolean} | null>(null);
   const [availableStores, setAvailableStores] = useState<string[]>([]);
   const [availableSuppliers, setAvailableSuppliers] = useState<string[]>([]);
+  const [availableMachines, setAvailableMachines] = useState<MachineOption[]>([]);
   const [formData, setFormData] = useState({
     applicant_name: "",
     store_name: "",
+    machine_name: "",
     supplier_name: "",
     justification: "",
     currency: "MXN",
@@ -197,7 +206,25 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
         if (storesResponse.ok) {
           const data = await storesResponse.json();
           if (data.stores && Array.isArray(data.stores)) {
-            setAvailableStores(data.stores.map((store: { name: string }) => store.name));
+            setAvailableStores(
+              data.stores
+                .map((store: { name: string }) => store.name)
+                .filter((name: string) => {
+                  const normalized = name.trim().toLowerCase();
+                  if (normalized === "maquinaria") return true;
+                  return !LEGACY_MACHINE_STORE_REGEX.test(name);
+                })
+            );
+          }
+          if (data.machines && Array.isArray(data.machines)) {
+            setAvailableMachines(
+              data.machines
+                .map((machine: { id: string | number; name: string }) => ({
+                  id: machine.id,
+                  name: machine.name,
+                }))
+                .filter((machine: MachineOption) => machine.name)
+            );
           }
           if (data.suppliers && Array.isArray(data.suppliers)) {
             setAvailableSuppliers(data.suppliers.map((supplier: { commercial_name: string }) => supplier.commercial_name));
@@ -212,7 +239,16 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => {
+      if (name === "store_name") {
+        return {
+          ...prev,
+          store_name: value,
+          machine_name: value.toLowerCase() === "maquinaria" ? prev.machine_name : "",
+        };
+      }
+      return { ...prev, [name]: value };
+    });
   };
 
   const handleItemChange = (id: string, field: keyof Item, value: string) => {
@@ -330,6 +366,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     const orderData = {
       applicant_name: formData.applicant_name,
       store_name: formData.store_name,
+      machine_name: formData.machine_name || undefined,
       supplier_name: formData.supplier_name,
       justification: formData.justification,
       currency: formData.currency,
@@ -401,6 +438,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
       setFormData({
         applicant_name: currentUser?.name || "",
         store_name: "",
+        machine_name: "",
         supplier_name: "",
         justification: "",
         currency: "MXN",
@@ -429,10 +467,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     }
   };
 
-  // Separar almacenes normales de maquinaria (nomenclatura ej: "C01.", "M01.", "V01.", "AT01", etc.)
-  const IS_MACHINERY_REGEX = /^(M|C|V|AT)\d+[\.\s-]?/i;
-  const regularStores = availableStores.filter(store => !IS_MACHINERY_REGEX.test(store));
-  const machineryStores = availableStores.filter(store => IS_MACHINERY_REGEX.test(store));
+  const isMachineryCostCenter = formData.store_name.toLowerCase() === "maquinaria";
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-4xl mx-auto">
@@ -473,7 +508,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Almacén u Obra <span className="text-red-500">*</span>
+              Centro de costos <span className="text-red-500">*</span>
             </label>
             <select
               name="store_name"
@@ -482,19 +517,31 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
               required
             >
-              <option value="">Selecciona un almacén u obra</option>
-              {regularStores.map((store) => (
+              <option value="">Selecciona un centro de costos</option>
+              {availableStores.map((store) => (
                 <option key={store} value={store}>{store}</option>
               ))}
-              {machineryStores.length > 0 && (
-                <optgroup label="----- Maquinaria -----">
-                  {machineryStores.map((store) => (
-                    <option key={store} value={store}>{store}</option>
-                  ))}
-                </optgroup>
-              )}
             </select>
           </div>
+          {isMachineryCostCenter && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Máquina <span className="text-red-500">*</span>
+              </label>
+              <select
+                name="machine_name"
+                value={formData.machine_name || ""}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                required={isMachineryCostCenter}
+              >
+                <option value="">Selecciona una máquina</option>
+                {availableMachines.map((machine) => (
+                  <option key={machine.id} value={machine.name}>{machine.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Proveedor <span className="text-red-500">*</span>
@@ -930,6 +977,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
             setFormData({
               applicant_name: currentUser?.name || "",
               store_name: "",
+              machine_name: "",
               supplier_name: "",
               justification: "",
               currency: "MXN",

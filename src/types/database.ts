@@ -383,6 +383,7 @@ export interface CreateOrderRequest {
   applicant_name: string;
   applicant_id?: string;
   store_name: string;
+  machine_name?: string;
   store_id?: number;
   supplier_name?: string;
   supplier_id?: string | number;
