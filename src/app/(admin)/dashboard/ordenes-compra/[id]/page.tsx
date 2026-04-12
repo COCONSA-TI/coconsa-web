@@ -204,13 +204,13 @@ export default function OrdenDetallesPage() {
           const urlRes = await fetch('/api/v1/storage/signed-url', {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({ 
-               fileName: file.name, 
-               contentType: file.type, 
-               bucket: 'order-attachments', 
-               folder: String(orderId) 
-             })
-          });
+              body: JSON.stringify({ 
+                fileName: file.name, 
+                contentType: file.type, 
+                bucket: 'order-attachment', 
+                folder: `orders/${orderId}/attachments` 
+              })
+           });
           
           if (!urlRes.ok) throw new Error('Error obteniendo url de subida para ' + file.name);
           const urlData = await urlRes.json();
