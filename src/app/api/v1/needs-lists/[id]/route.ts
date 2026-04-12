@@ -2,7 +2,54 @@ import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/api-auth";
 import { getSession } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import type { NeedsListItem, Department } from "@/types/database";
+import type { Department } from "@/types/database";
+
+interface NormalizedNeedsListItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  unit_price: number;
+  subtotal: number;
+}
+
+function toSafeNumber(value: unknown): number {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.replace(/[$,\s]/g, '');
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
+function normalizeNeedsListItem(item: unknown, index: number): NormalizedNeedsListItem {
+  const source = typeof item === 'object' && item !== null
+    ? item as Record<string, unknown>
+    : {};
+
+  const quantity = toSafeNumber(source.quantity ?? source.cantidad);
+  const unitPrice = toSafeNumber(source.unit_price ?? source.precioUnitario);
+  const rawSubtotal = source.subtotal ?? source.precioTotal;
+  const subtotal = rawSubtotal !== undefined
+    ? toSafeNumber(rawSubtotal)
+    : Math.round(quantity * unitPrice * 100) / 100;
+
+  const description = String(source.description ?? source.nombre ?? source.descripcion ?? '').trim();
+
+  return {
+    id: String(source.id ?? `item-${index + 1}`),
+    description: description || `Concepto ${index + 1}`,
+    quantity,
+    unit: String(source.unit ?? source.unidad ?? '').trim(),
+    unit_price: unitPrice,
+    subtotal,
+  };
+}
 
 // Función para recrear aprobaciones de lista de necesidades
 async function recreateNeedsListApprovals(
@@ -197,10 +244,13 @@ export async function GET(
       );
     }
 
-    // Parsear items
-    let parsedItems: NeedsListItem[] = [];
+    // Parsear y normalizar items (soporta formato histórico y formato actual)
+    let parsedItems: NormalizedNeedsListItem[] = [];
     try {
-      parsedItems = JSON.parse(needsList.items);
+      const rawItems = JSON.parse(needsList.items);
+      parsedItems = Array.isArray(rawItems)
+        ? rawItems.map((item, index) => normalizeNeedsListItem(item, index))
+        : [];
     } catch {
       parsedItems = [];
     }
