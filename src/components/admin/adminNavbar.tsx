@@ -11,9 +11,7 @@ interface AdminNavbarProps {
 
 export default function AdminNavbar({ onMenuClick }: AdminNavbarProps) {
   const router = useRouter();
-  // TODO: Descomentar cuando las demás secciones estén listas
-  // const { isAdmin } = useAuth();
-  useAuth(); // Mantener hook para verificar autenticación
+  const { isAdmin, isDepartmentHead } = useAuth();
 
   const handleLogout = async () => {
     try {
@@ -73,12 +71,22 @@ export default function AdminNavbar({ onMenuClick }: AdminNavbarProps) {
             >
               Órdenes de Compra
             </Link>
-            <Link 
-              href="/dashboard/listas-necesidades" 
-              className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-all"
-            >
-              Listas de Necesidades
-            </Link>
+            {isAdmin && (
+              <Link 
+                href="/dashboard/listas-necesidades" 
+                className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-all"
+              >
+                Listas de Necesidades
+              </Link>
+            )}
+            {isDepartmentHead && (
+              <Link 
+                href="/dashboard/proveedores" 
+                className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-all"
+              >
+                Proveedores
+              </Link>
+            )}
             {/* TODO: Descomentar cuando las demás secciones estén listas
             {isAdmin && (
               <>
