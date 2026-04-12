@@ -7,6 +7,8 @@ const protectedRoutes = [
   { path: '/dashboard', roles: ['admin', 'user', 'supervisor'] },
   { path: '/dashboard/chatbot', roles: ['admin'] },
   { path: '/dashboard/ordenes-compra', roles: ['admin', 'user', 'supervisor'] },
+  { path: '/dashboard/listas-necesidades', roles: ['admin'] },
+  { path: '/dashboard/proveedores', roles: ['admin', 'user', 'supervisor'] },
   { path: '/dashboard/reportes', roles: ['admin', 'supervisor'] },
   { path: '/dashboard/configuracion/usuarios', roles: ['admin'] },
   { path: '/dashboard/configuracion', roles: ['admin', 'user', 'supervisor'] },
@@ -50,6 +52,27 @@ export async function middleware(request: NextRequest) {
     if (userRole && !protectedRoute.roles.includes(userRole)) {
       // Redirigir a dashboard principal si no tiene permisos
       return NextResponse.redirect(new URL('/dashboard?error=unauthorized', request.url));
+    }
+
+    if (path.startsWith('/dashboard/proveedores')) {
+      if (!session.userId) {
+        return NextResponse.redirect(new URL('/dashboard?error=unauthorized', request.url));
+      }
+
+      const meResponse = await fetch(new URL('/api/v1/me', request.url), {
+        headers: {
+          cookie: request.headers.get('cookie') || '',
+        },
+      });
+
+      if (!meResponse.ok) {
+        return NextResponse.redirect(new URL('/dashboard?error=unauthorized', request.url));
+      }
+
+      const meData = await meResponse.json();
+      if (!meData?.user?.is_department_head) {
+        return NextResponse.redirect(new URL('/dashboard?error=unauthorized', request.url));
+      }
     }
   }
 

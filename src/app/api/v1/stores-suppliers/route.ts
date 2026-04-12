@@ -38,9 +38,29 @@ export async function GET() {
       );
     }
 
+    // Obtener catálogo de máquinas (si existe)
+    let machines: Array<{ id: string | number; name: string }> = [];
+    const { data: machinesData, error: machinesError } = await supabaseAdmin
+      .from("machines")
+      .select("*")
+      .order("name");
+
+    if (!machinesError && Array.isArray(machinesData)) {
+      machines = machinesData
+        .map((machine: Record<string, unknown>) => {
+          const id = machine.id as string | number | undefined;
+          const rawName = machine.name ?? machine.machine_name ?? machine.nombre;
+          const name = typeof rawName === "string" ? rawName.trim() : "";
+          if (!id || !name) return null;
+          return { id, name };
+        })
+        .filter((machine): machine is { id: string | number; name: string } => machine !== null);
+    }
+
     return NextResponse.json({
       stores: stores || [],
       suppliers: suppliers || [],
+      machines,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Error desconocido";

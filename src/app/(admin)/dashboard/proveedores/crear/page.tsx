@@ -25,7 +25,7 @@ const supplierSchema = z.object({
 type SupplierFormData = z.infer<typeof supplierSchema>;
 
 export default function CrearProveedorPage() {
-  const { user, isAdmin, loading } = useRequireAuth();
+  const { isDepartmentHead, loading } = useRequireAuth();
   const { success, error: toastError } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,11 +82,11 @@ export default function CrearProveedorPage() {
 
   if (loading) return <div className="p-6">Cargando...</div>;
 
-  if (!isAdmin) {
+  if (!isDepartmentHead) {
     return (
       <div className="p-6 text-center">
         <h2 className="text-2xl font-bold text-red-600 mb-2">Acceso Denegado</h2>
-        <p>Solo los administradores pueden registrar proveedores.</p>
+        <p>Solo los jefes de departamento pueden registrar proveedores.</p>
         <Link href="/dashboard" className="text-blue-600 mt-4 block">Regresar</Link>
       </div>
     );
@@ -167,7 +167,7 @@ export default function CrearProveedorPage() {
                 type="text" 
                 {...register('bank')}
                 placeholder="Ej. BBVA"
-                className={`w-full px-4 py-2 rounded-lg border focus:ring-2 outline-none transition-all ${errors.bank ? 'border-red-300 focus:ring-red-200' : 'border-gray-300 focus:ring-red-100 focus:border-red-500'}`}
+                className={`w-full px-4 py-2 text-gray-900 bg-white rounded-lg border focus:ring-2 outline-none transition-all ${errors.bank ? 'border-red-300 focus:ring-red-200' : 'border-gray-300 focus:ring-red-100 focus:border-red-500'}`}
               />
               {errors.bank && <p className="mt-1 text-sm text-red-600">{errors.bank.message}</p>}
             </div>
@@ -180,7 +180,7 @@ export default function CrearProveedorPage() {
                 maxLength={18}
                 {...register('clabe')}
                 placeholder="18 dígitos"
-                className={`w-full px-4 py-2 rounded-lg border focus:ring-2 outline-none transition-all ${errors.clabe ? 'border-red-300 focus:ring-red-200' : 'border-gray-300 focus:ring-red-100 focus:border-red-500'}`}
+                className={`w-full px-4 py-2 text-gray-900 bg-white rounded-lg border focus:ring-2 outline-none transition-all ${errors.clabe ? 'border-red-300 focus:ring-red-200' : 'border-gray-300 focus:ring-red-100 focus:border-red-500'}`}
               />
               {errors.clabe && <p className="mt-1 text-sm text-red-600">{errors.clabe.message}</p>}
             </div>

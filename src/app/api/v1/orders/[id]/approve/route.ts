@@ -3,6 +3,8 @@ import { supabaseAdmin } from '@/lib/supabase/server';
 import { getSession } from '@/lib/auth';
 import { OrderApprovalWithRelations, ApprovalStatus } from '@/types/database';
 
+const ORDER_ATTACHMENTS_BUCKET = 'order-attachment';
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -152,14 +154,15 @@ export async function POST(
           const buffer = await file.arrayBuffer();
           const uint8Array = new Uint8Array(buffer);
           
-          // Crear ruta: order-attachments/{orderId}/{timestamp}_{filename}
+          // Crear ruta: orders/{orderId}/attachments/{timestamp}_{filename}
           const timestamp = Date.now();
-          const storagePath = `${orderId}/${timestamp}_${file.name}`;
+          const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+          const storagePath = `orders/${orderId}/attachments/${timestamp}_${sanitizedName}`;
           
           // Subir a Storage
           const { error: uploadError } = await supabaseAdmin
             .storage
-            .from('order-attachments')
+            .from(ORDER_ATTACHMENTS_BUCKET)
             .upload(storagePath, uint8Array, {
               contentType: file.type,
               upsert: false,
@@ -176,7 +179,7 @@ export async function POST(
           // Obtener URL pública del archivo
           const { data: { publicUrl } } = supabaseAdmin
             .storage
-            .from('order-attachments')
+            .from(ORDER_ATTACHMENTS_BUCKET)
             .getPublicUrl(storagePath);
 
           // Guardar metadata en order_attachments

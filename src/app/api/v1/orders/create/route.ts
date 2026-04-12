@@ -239,6 +239,7 @@ export async function POST(request: Request) {
       applicant_name,
       applicant_id: _applicant_id_ignored, // ignorado: siempre se usa la sesión del servidor
       store_name,
+      machine_name,
       store_id, // ID opcional desde el chatbot
       supplier_name, // Proveedor único para toda la orden (desde chatbot)
       supplier_id, // ID opcional del proveedor (desde chatbot)
@@ -257,11 +258,18 @@ export async function POST(request: Request) {
     // Validaciones básicas
     if (!store_name || !items || items.length === 0) {
       const missing = [];
-      if (!store_name) missing.push('Almacén u obra');
+      if (!store_name) missing.push('Centro de costos');
       if (!items || items.length === 0) missing.push('Artículos');
       
       return NextResponse.json(
         { error: `Faltan datos requeridos: ${missing.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    if (store_name.trim().toLowerCase() === 'maquinaria' && (!machine_name || !machine_name.trim())) {
+      return NextResponse.json(
+        { error: 'Debes seleccionar una máquina cuando el centro de costos es Maquinaria.' },
         { status: 400 }
       );
     }
