@@ -16,20 +16,20 @@ interface Supplier {
 }
 
 export default function ProveedoresPage() {
-  const { user, loading, isAdmin } = useRequireAuth();
+  const { user, loading, isDepartmentHead } = useRequireAuth();
   const { success, error: toastError } = useToast();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    if (user && isAdmin) {
+    if (user && isDepartmentHead) {
       fetchSuppliers();
-    } else if (user && !isAdmin) {
+    } else if (user && !isDepartmentHead) {
       // Si no es admin y ya cargó, redirigir o mostrar error
       setLoadingData(false);
     }
-  }, [user, isAdmin]);
+  }, [user, isDepartmentHead]);
 
   const fetchSuppliers = async (search?: string) => {
     try {
@@ -86,14 +86,14 @@ export default function ProveedoresPage() {
     );
   }
 
-  if (!isAdmin) {
+  if (!isDepartmentHead) {
     return (
       <div className="p-6 flex flex-col items-center justify-center h-[60vh] text-center">
         <svg className="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
         </svg>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Acceso Denegado</h2>
-        <p className="text-gray-500">No tienes permisos de Administrador para ver esta sección.</p>
+        <p className="text-gray-500">Solo los jefes de departamento pueden ver esta sección.</p>
         <Link href="/dashboard" className="mt-6 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
           Volver al Inicio
         </Link>

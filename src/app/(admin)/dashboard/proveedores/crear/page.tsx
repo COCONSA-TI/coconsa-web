@@ -25,7 +25,7 @@ const supplierSchema = z.object({
 type SupplierFormData = z.infer<typeof supplierSchema>;
 
 export default function CrearProveedorPage() {
-  const { user, isAdmin, loading } = useRequireAuth();
+  const { isDepartmentHead, loading } = useRequireAuth();
   const { success, error: toastError } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,11 +82,11 @@ export default function CrearProveedorPage() {
 
   if (loading) return <div className="p-6">Cargando...</div>;
 
-  if (!isAdmin) {
+  if (!isDepartmentHead) {
     return (
       <div className="p-6 text-center">
         <h2 className="text-2xl font-bold text-red-600 mb-2">Acceso Denegado</h2>
-        <p>Solo los administradores pueden registrar proveedores.</p>
+        <p>Solo los jefes de departamento pueden registrar proveedores.</p>
         <Link href="/dashboard" className="text-blue-600 mt-4 block">Regresar</Link>
       </div>
     );

@@ -29,7 +29,7 @@ export default function EditarProveedorPage({
   params: Promise<{ id: string }> 
 }) {
   const { id } = use(params);
-  const { user, isAdmin, loading } = useRequireAuth();
+  const { user, isDepartmentHead, loading } = useRequireAuth();
   const { success, error: toastError } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,7 +45,7 @@ export default function EditarProveedorPage({
   });
 
   useEffect(() => {
-    if (user && isAdmin) {
+    if (user && isDepartmentHead) {
       const fetchSupplier = async () => {
         try {
           const response = await fetch(`/api/v1/suppliers/${id}`);
@@ -74,7 +74,7 @@ export default function EditarProveedorPage({
       
       fetchSupplier();
     }
-  }, [user, isAdmin, id, setValue, router]);
+  }, [user, isDepartmentHead, id, setValue, router]);
 
   const onSubmit = async (data: SupplierFormData) => {
     try {
@@ -108,11 +108,11 @@ export default function EditarProveedorPage({
 
   if (loading || isLoadingData) return <div className="p-6">Preparando editor...</div>;
 
-  if (!isAdmin) {
+  if (!isDepartmentHead) {
     return (
       <div className="p-6 text-center">
         <h2 className="text-2xl font-bold text-red-600 mb-2">Acceso Denegado</h2>
-        <p>Solo los administradores pueden editar proveedores.</p>
+        <p>Solo los jefes de departamento pueden editar proveedores.</p>
         <Link href="/dashboard" className="text-blue-600 mt-4 block">Regresar</Link>
       </div>
     );

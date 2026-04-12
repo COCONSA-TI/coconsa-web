@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requirePermission } from "@/lib/api-auth";
+import { requireAdmin } from "@/lib/api-auth";
 import { getSession } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import type { Department, NeedsListItem } from "@/types/database";
@@ -206,7 +206,7 @@ async function createNeedsListApprovalsServer(
 export async function POST(request: Request) {
   try {
     // Verificar permisos
-    const { error: authError } = await requirePermission('orders', 'create');
+    const { error: authError } = await requireAdmin();
     if (authError) return authError;
 
     // Obtener sesión del usuario

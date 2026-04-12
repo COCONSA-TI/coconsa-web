@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
 import { hasPermission, PERMISSION_ERRORS, PERMISSIONS } from '@/lib/permissions';
+import { supabaseAdmin } from '@/lib/supabase/server';
 
 /**
  * Middleware para verificar autenticación en endpoints de API
@@ -73,6 +74,35 @@ export async function requireAdmin() {
     };
   }
   
+  return { error: null, session };
+}
+
+/**
+ * Middleware para verificar que el usuario sea jefe de departamento
+ */
+export async function requireDepartmentHead() {
+  const { error, session } = await requireAuth();
+
+  if (error) {
+    return { error, session: null };
+  }
+
+  const { data: userData, error: userError } = await supabaseAdmin
+    .from('users')
+    .select('is_department_head')
+    .eq('id', session!.userId)
+    .single();
+
+  if (userError || !userData?.is_department_head) {
+    return {
+      error: NextResponse.json(
+        { error: 'Esta acción solo está disponible para jefes de departamento' },
+        { status: 403 }
+      ),
+      session: null,
+    };
+  }
+
   return { error: null, session };
 }
 

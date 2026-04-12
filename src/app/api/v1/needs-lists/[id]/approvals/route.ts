@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAuth } from "@/lib/api-auth";
+import { requireAdmin } from "@/lib/api-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 /**
@@ -11,7 +11,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { error: authError } = await requireAuth();
+    const { error: authError } = await requireAdmin();
     if (authError) return authError;
 
     const { id } = await params;

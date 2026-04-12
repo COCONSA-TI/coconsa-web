@@ -98,18 +98,21 @@ const menuItems = [
 export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
   // TODO: Descomentar 'user' cuando las demás secciones estén listas
-  const { isAdmin } = useAuth();
+  const { isAdmin, isDepartmentHead } = useAuth();
 
   // Filtrar items según rol
   // TEMPORAL: Solo mostrar Órdenes de compra, Listas de necesidades y Configuración durante el desarrollo
   const allowedItems = menuItems.filter(item => {
     // Solo mostrar estas secciones por ahora (las demás están en desarrollo)
     if (item.href === '/dashboard/ordenes-compra' || item.href === '/dashboard/listas-necesidades') {
+      if (item.href === '/dashboard/listas-necesidades') {
+        return isAdmin;
+      }
       return true;
     }
-    // Proveedores: solo admin
+    // Proveedores: solo jefes de departamento
     if (item.href === '/dashboard/proveedores') {
-      return isAdmin;
+      return isDepartmentHead;
     }
     // Configuración: solo admin
     if (item.href === '/dashboard/configuracion') {

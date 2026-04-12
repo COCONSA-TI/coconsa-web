@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/api-auth';
+import { requireDepartmentHead } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { z } from 'zod';
 
@@ -19,7 +19,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { error: authError } = await requireAdmin();
+  const { error: authError } = await requireDepartmentHead();
   if (authError) return authError;
 
   const { id } = await params;
@@ -45,7 +45,7 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { error: authError } = await requireAdmin();
+  const { error: authError } = await requireDepartmentHead();
   if (authError) return authError;
 
   const { id } = await params;
@@ -82,7 +82,7 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { error: authError } = await requireAdmin();
+  const { error: authError } = await requireDepartmentHead();
   if (authError) return authError;
 
   const { id } = await params;
