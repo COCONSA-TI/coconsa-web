@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requirePermission } from "@/lib/api-auth";
 import { getSession } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import type { Department, NeedsListItem, CreateNeedsListRequest } from "@/types/database";
+import type { Department, NeedsListItem } from "@/types/database";
 
 const BUCKET_NAME = "Coconsa";
 
@@ -14,59 +14,46 @@ const ALLOWED_EVIDENCE_MIME_TYPES = new Set([
   'application/pdf',
 ]);
 const MAX_EVIDENCE_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
-const MAX_EVIDENCE_FILES = 5;
 
-// Función para subir archivos de evidencia a Supabase Storage
-async function uploadEvidenceFiles(files: File[], needsListId: string): Promise<string[]> {
-  const uploadedUrls: string[] = [];
-
-  if (files.length > MAX_EVIDENCE_FILES) {
-    throw new Error(`Se permiten máximo ${MAX_EVIDENCE_FILES} archivos de evidencia`);
+async function uploadItemEvidenceFile(
+  file: File,
+  needsListId: string,
+  itemIndex: number
+): Promise<string> {
+  if (!ALLOWED_EVIDENCE_MIME_TYPES.has(file.type)) {
+    throw new Error(`Tipo de archivo no permitido en item ${itemIndex + 1}: "${file.type}"`);
   }
 
-  // Verificar que el bucket existe
-  await supabaseAdmin.storage.listBuckets();
-  
-  for (const file of files) {
-    // Validar tipo MIME
-    if (!ALLOWED_EVIDENCE_MIME_TYPES.has(file.type)) {
-      throw new Error(`Tipo de archivo no permitido: "${file.type}". Solo se aceptan imágenes (JPEG, PNG, WebP, GIF) y PDFs.`);
-    }
-
-    // Validar tamaño
-    if (file.size > MAX_EVIDENCE_FILE_SIZE_BYTES) {
-      throw new Error(`El archivo "${file.name}" excede el límite de 10 MB.`);
-    }
-
-    const timestamp = Date.now();
-    const ext = file.name.split('.').pop()?.replace(/[^a-zA-Z0-9]/g, '') || 'bin';
-    const filePath = `needs-lists/${needsListId}/evidence/${timestamp}_evidence.${ext}`;
-    
-    const arrayBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-    
-    const { error } = await supabaseAdmin.storage
-      .from(BUCKET_NAME)
-      .upload(filePath, buffer, {
-        contentType: file.type,
-        upsert: false
-      });
-    
-    if (error) {
-      continue;
-    }
-    
-    // Obtener la URL pública del archivo
-    const { data: urlData } = supabaseAdmin.storage
-      .from(BUCKET_NAME)
-      .getPublicUrl(filePath);
-    
-    if (urlData?.publicUrl) {
-      uploadedUrls.push(urlData.publicUrl);
-    }
+  if (file.size > MAX_EVIDENCE_FILE_SIZE_BYTES) {
+    throw new Error(`El archivo del item ${itemIndex + 1} excede el límite de 10 MB.`);
   }
-  
-  return uploadedUrls;
+
+  const timestamp = Date.now();
+  const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const filePath = `needs-lists/${needsListId}/items/${itemIndex + 1}/${timestamp}_${sanitizedName}`;
+  const arrayBuffer = await file.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  const { error } = await supabaseAdmin.storage
+    .from(BUCKET_NAME)
+    .upload(filePath, buffer, {
+      contentType: file.type,
+      upsert: false,
+    });
+
+  if (error) {
+    throw new Error(`No se pudo subir evidencia del item ${itemIndex + 1}: ${error.message}`);
+  }
+
+  const { data: urlData } = supabaseAdmin.storage
+    .from(BUCKET_NAME)
+    .getPublicUrl(filePath);
+
+  if (!urlData?.publicUrl) {
+    throw new Error(`No se pudo obtener URL pública para evidencia del item ${itemIndex + 1}`);
+  }
+
+  return urlData.publicUrl;
 }
 
 // Función para crear aprobaciones de lista de necesidades en el servidor
@@ -231,6 +218,8 @@ export async function POST(request: Request) {
       );
     }
 
+    await supabaseAdmin.storage.listBuckets();
+
     // Parsear FormData
     const formData = await request.formData();
     
@@ -239,7 +228,6 @@ export async function POST(request: Request) {
     const storeId = formData.get('store_id') as string;
     const bankAccountId = formData.get('bank_account_id') as string;
     const itemsStr = formData.get('items') as string;
-    const justification = formData.get('justification') as string;
     const currency = (formData.get('currency') as string) || 'MXN';
     const ivaPercentageStr = formData.get('iva_percentage') as string;
     const isUrgentStr = formData.get('is_urgent') as string;
@@ -305,6 +293,13 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
+
+      if (!item.justificacion || typeof item.justificacion !== 'string' || item.justificacion.trim().length < 10) {
+        return NextResponse.json(
+          { success: false, error: `El item "${item.nombre}" debe incluir una justificación de al menos 10 caracteres` },
+          { status: 400 }
+        );
+      }
     }
 
     const isUrgent = isUrgentStr === 'true';
@@ -331,6 +326,13 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
+    }
+
+    if (!storeId && (!storeName || storeName.trim() === '')) {
+      return NextResponse.json(
+        { success: false, error: "El centro de costos es requerido" },
+        { status: 400 }
+      );
     }
 
     // Verificar que la cuenta bancaria existe y pertenece al usuario
@@ -392,14 +394,18 @@ export async function POST(request: Request) {
     const iva = Math.round(subtotal * (ivaPercentage / 100) * 100) / 100;
     const total = Math.round((subtotal + iva) * 100) / 100;
 
-    // Procesar archivos de evidencia
-    const evidenceFiles: File[] = [];
-    const evidenceKeys = Array.from(formData.keys()).filter(key => key.startsWith('evidence_'));
-    
-    for (const key of evidenceKeys) {
-      const file = formData.get(key);
-      if (file instanceof File && file.size > 0) {
-        evidenceFiles.push(file);
+    // Procesar evidencia por item (obligatoria)
+    const itemEvidenceFiles = items.map((_, index) => {
+      const file = formData.get(`item_evidence_${index}`);
+      return file instanceof File && file.size > 0 ? file : null;
+    });
+
+    for (let i = 0; i < itemEvidenceFiles.length; i += 1) {
+      if (!itemEvidenceFiles[i]) {
+        return NextResponse.json(
+          { success: false, error: `Falta archivo de justificación para el item ${i + 1}` },
+          { status: 400 }
+        );
       }
     }
 
@@ -412,7 +418,7 @@ export async function POST(request: Request) {
         bank_account_id: bankAccountId,
         date: new Date().toISOString().split('T')[0],
         items: JSON.stringify(items),
-        justification: justification || null,
+        justification: null,
         subtotal,
         iva,
         total,
@@ -421,7 +427,7 @@ export async function POST(request: Request) {
         status: 'pending',
         is_urgent: isUrgent,
         urgency_justification: isUrgent ? urgencyJustification : null,
-        evidence_urls: null, // Se actualizará después de subir las evidencias
+        evidence_urls: null,
       })
       .select()
       .single();
@@ -434,22 +440,41 @@ export async function POST(request: Request) {
       );
     }
 
-    // Subir archivos de evidencia si existen
-    let evidenceUrls: string[] = [];
-    if (evidenceFiles.length > 0) {
-      try {
-        evidenceUrls = await uploadEvidenceFiles(evidenceFiles, needsListData.id.toString());
-        
-        if (evidenceUrls.length > 0) {
-          await supabaseAdmin
-            .from('needs_lists')
-            .update({ evidence_urls: evidenceUrls.join(',') })
-            .eq('id', needsListData.id);
-        }
-      } catch (uploadError) {
-        console.error('Error al subir evidencias:', uploadError);
-        // No fallar si las evidencias no se suben, la lista ya fue creada
-      }
+    const itemEvidenceUrls: string[] = [];
+    for (let i = 0; i < itemEvidenceFiles.length; i += 1) {
+      const file = itemEvidenceFiles[i];
+      if (!file) continue;
+      const uploadedUrl = await uploadItemEvidenceFile(file, needsListData.id.toString(), i);
+      itemEvidenceUrls.push(uploadedUrl);
+    }
+
+    const itemsWithEvidence = items.map((item, index) => {
+      const itemJustificacion = item.justificacion?.trim() ?? "";
+      return {
+        ...item,
+        justificacion: itemJustificacion,
+        evidencia_url: itemEvidenceUrls[index],
+      };
+    });
+
+    const { error: updateNeedsListError } = await supabaseAdmin
+      .from('needs_lists')
+      .update({
+        items: JSON.stringify(itemsWithEvidence),
+        evidence_urls: itemEvidenceUrls.join(','),
+      })
+      .eq('id', needsListData.id);
+
+    if (updateNeedsListError) {
+      await supabaseAdmin
+        .from('needs_lists')
+        .delete()
+        .eq('id', needsListData.id);
+
+      return NextResponse.json(
+        { success: false, error: "Error al guardar justificaciones por item" },
+        { status: 500 }
+      );
     }
 
     // Crear flujo de aprobaciones
@@ -488,7 +513,7 @@ export async function POST(request: Request) {
         id: needsListData.id,
         folio: needsListData.folio,
         status: user.is_department_head && !isUrgent ? 'in_progress' : 'pending',
-        evidenceUrls,
+        evidenceUrls: itemEvidenceUrls,
       },
     });
 

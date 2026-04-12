@@ -523,6 +523,8 @@ export interface NeedsListItem {
   precioUnitario: number;
   precioTotal?: number;
   descripcion?: string;
+  justificacion?: string;
+  evidencia_url?: string;
 }
 
 export interface NeedsList {
@@ -613,12 +615,10 @@ export interface CreateNeedsListRequest {
   store_id?: number;
   bank_account_id: string;
   items: NeedsListItem[];
-  justification?: string;
   currency?: Currency;
   iva_percentage?: number;
   is_urgent?: boolean;
   urgency_justification?: string;
-  evidenceUrls?: string[];
 }
 
 export interface UpdateNeedsListRequest {

@@ -11,6 +11,59 @@ interface NormalizedNeedsListItem {
   unit: string;
   unit_price: number;
   subtotal: number;
+  justificacion?: string;
+  evidencia_url?: string;
+}
+
+const BUCKET_NAME = "Coconsa";
+const ALLOWED_EVIDENCE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'application/pdf',
+]);
+const MAX_EVIDENCE_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+async function uploadItemEvidenceFile(
+  file: File,
+  needsListId: number,
+  itemIndex: number
+): Promise<string> {
+  if (!ALLOWED_EVIDENCE_MIME_TYPES.has(file.type)) {
+    throw new Error(`Tipo de archivo no permitido en item ${itemIndex + 1}: "${file.type}"`);
+  }
+
+  if (file.size > MAX_EVIDENCE_FILE_SIZE_BYTES) {
+    throw new Error(`El archivo del item ${itemIndex + 1} excede el límite de 10 MB.`);
+  }
+
+  const timestamp = Date.now();
+  const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const filePath = `needs-lists/${needsListId}/items/${itemIndex + 1}/${timestamp}_${sanitizedName}`;
+  const arrayBuffer = await file.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  const { error } = await supabaseAdmin.storage
+    .from(BUCKET_NAME)
+    .upload(filePath, buffer, {
+      contentType: file.type,
+      upsert: false,
+    });
+
+  if (error) {
+    throw new Error(`No se pudo subir evidencia del item ${itemIndex + 1}: ${error.message}`);
+  }
+
+  const { data: urlData } = supabaseAdmin.storage
+    .from(BUCKET_NAME)
+    .getPublicUrl(filePath);
+
+  if (!urlData?.publicUrl) {
+    throw new Error(`No se pudo obtener URL pública para evidencia del item ${itemIndex + 1}`);
+  }
+
+  return urlData.publicUrl;
 }
 
 function toSafeNumber(value: unknown): number {
@@ -48,6 +101,8 @@ function normalizeNeedsListItem(item: unknown, index: number): NormalizedNeedsLi
     unit: String(source.unit ?? source.unidad ?? '').trim(),
     unit_price: unitPrice,
     subtotal,
+    justificacion: typeof source.justificacion === 'string' ? source.justificacion : undefined,
+    evidencia_url: typeof source.evidencia_url === 'string' ? source.evidencia_url : undefined,
   };
 }
 
@@ -272,11 +327,6 @@ export async function GET(
       .eq('needs_list_id', needsListId)
       .order('approval_order');
 
-    // Parsear URLs de evidencia
-    const evidenceUrls = needsList.evidence_urls 
-      ? needsList.evidence_urls.split(',').filter((url: string) => url.trim() !== '')
-      : [];
-
     // Get current department name from pending approval
     const pendingApproval = (approvals || []).find((a: { status: string }) => a.status === 'pending');
     const currentDepartmentName = pendingApproval?.department?.name || null;
@@ -302,6 +352,8 @@ export async function GET(
         user_email: needsList.applicant?.email || '',
         total: needsList.total,
         status: needsList.status,
+        store_id: needsList.store_id,
+        store_name: needsList.store?.name || null,
         justification: needsList.justification,
         evidence_urls: needsList.evidence_urls,
         items: parsedItems,
@@ -401,51 +453,76 @@ export async function PUT(
       );
     }
 
-    // Parsear el body - soporta JSON y FormData
-    const contentType = request.headers.get('content-type') || '';
-    let body: {
+    type UpdateNeedsListBody = {
       items?: Array<{
-        description: string;
-        quantity: number;
-        unit: string;
-        unit_price: number;
+        nombre?: string;
+        description?: string;
+        cantidad?: number;
+        quantity?: number;
+        unidad?: string;
+        unit?: string;
+        precioUnitario?: number;
+        unit_price?: number;
+        justificacion?: string;
+        evidencia_url?: string;
       }>;
-      justification?: string;
       store_id?: string;
+      store_name?: string;
       bank_account_id?: string;
       currency?: string;
       iva_percentage?: number;
-      existing_evidence?: string[];
     };
-    let evidenceFiles: File[] = [];
+
+    // Parsear el body - soporta JSON y FormData
+    const contentType = request.headers.get('content-type') || '';
+    let body: UpdateNeedsListBody;
+    let formData: FormData | null = null;
 
     if (contentType.includes('multipart/form-data')) {
-      const formData = await request.formData();
-      const listDataString = formData.get('listData');
-      
-      if (typeof listDataString === 'string') {
-        body = JSON.parse(listDataString);
-      } else {
+      formData = await request.formData();
+      const itemsStr = formData.get('items') as string;
+
+      if (!itemsStr) {
         return NextResponse.json(
-          { success: false, error: 'Datos de lista inválidos' },
+          { success: false, error: 'Los items son requeridos' },
           { status: 400 }
         );
       }
-      
-      const evidenceEntries = formData.getAll('evidence');
-      evidenceFiles = evidenceEntries.filter((entry): entry is File => entry instanceof File);
+
+      let parsedItems: unknown;
+      try {
+        parsedItems = JSON.parse(itemsStr);
+      } catch {
+        return NextResponse.json(
+          { success: false, error: 'Formato inválido de items' },
+          { status: 400 }
+        );
+      }
+
+      body = {
+        items: Array.isArray(parsedItems) ? parsedItems as UpdateNeedsListBody['items'] : [],
+        store_id: (formData.get('store_id') as string) || undefined,
+        store_name: (formData.get('store_name') as string) || undefined,
+        bank_account_id: (formData.get('bank_account_id') as string) || undefined,
+        currency: (formData.get('currency') as string) || undefined,
+        iva_percentage: (() => {
+          const raw = formData?.get('iva_percentage') as string | null;
+          if (!raw) return undefined;
+          const parsed = Number(raw);
+          return Number.isFinite(parsed) ? parsed : undefined;
+        })(),
+      };
     } else {
       body = await request.json();
     }
 
     const { 
       items, 
-      justification, 
       store_id, 
+      store_name,
       bank_account_id,
       currency,
       iva_percentage,
-      existing_evidence = [],
     } = body;
 
     // Validar items si se proporcionan
@@ -458,15 +535,28 @@ export async function PUT(
       }
 
       for (const item of items) {
-        if (!item.description || !item.quantity || !item.unit || !item.unit_price) {
+        const description = (item.description ?? item.nombre ?? '').toString().trim();
+        const quantity = Number(item.quantity ?? item.cantidad);
+        const unit = (item.unit ?? item.unidad ?? '').toString().trim();
+        const unitPrice = Number(item.unit_price ?? item.precioUnitario);
+        const justificacion = (item.justificacion ?? '').toString().trim();
+
+        if (!description || !quantity || !unit || !unitPrice) {
           return NextResponse.json(
             { success: false, error: "Todos los items deben tener descripción, cantidad, unidad y precio unitario" },
             { status: 400 }
           );
         }
-        if (item.quantity <= 0 || item.unit_price <= 0) {
+        if (quantity <= 0 || unitPrice <= 0) {
           return NextResponse.json(
             { success: false, error: "Cantidad y precio deben ser mayores a 0" },
+            { status: 400 }
+          );
+        }
+
+        if (justificacion.length < 10) {
+          return NextResponse.json(
+            { success: false, error: `El item "${description}" debe incluir una justificación de al menos 10 caracteres` },
             { status: 400 }
           );
         }
@@ -479,17 +569,43 @@ export async function PUT(
     if (items) {
       // Calcular totales
       let subtotal = 0;
-      const processedItems = items.map(item => {
-        const itemTotal = item.quantity * item.unit_price;
+      const processedItems = [];
+      for (let index = 0; index < items.length; index += 1) {
+        const item = items[index];
+        const description = (item.description ?? item.nombre ?? '').toString().trim();
+        const quantity = Number(item.quantity ?? item.cantidad);
+        const unit = (item.unit ?? item.unidad ?? '').toString().trim();
+        const unitPrice = Number(item.unit_price ?? item.precioUnitario);
+        const itemJustificacion = (item.justificacion ?? '').toString().trim();
+        const existingEvidenceUrl = (item.evidencia_url ?? '').toString().trim();
+
+        let finalEvidenceUrl = existingEvidenceUrl;
+        if (formData) {
+          const uploadedFile = formData.get(`item_evidence_${index}`);
+          if (uploadedFile instanceof File && uploadedFile.size > 0) {
+            finalEvidenceUrl = await uploadItemEvidenceFile(uploadedFile, needsListId, index);
+          }
+        }
+
+        if (!finalEvidenceUrl) {
+          return NextResponse.json(
+            { success: false, error: `Falta archivo de justificación para el item ${index + 1}` },
+            { status: 400 }
+          );
+        }
+
+        const itemTotal = quantity * unitPrice;
         subtotal += itemTotal;
-        return {
-          description: item.description,
-          quantity: item.quantity,
-          unit: item.unit,
-          unit_price: item.unit_price,
+        processedItems.push({
+          description,
+          quantity,
+          unit,
+          unit_price: unitPrice,
           subtotal: Math.round(itemTotal * 100) / 100,
-        };
-      });
+          justificacion: itemJustificacion,
+          evidencia_url: finalEvidenceUrl,
+        });
+      }
       subtotal = Math.round(subtotal * 100) / 100;
 
       const ivaPerc = iva_percentage ?? existingList.iva_percentage ?? 16;
@@ -497,18 +613,36 @@ export async function PUT(
       const total = Math.round((subtotal + iva) * 100) / 100;
 
       updateData.items = JSON.stringify(processedItems);
+      updateData.evidence_urls = processedItems
+        .map((item) => item.evidencia_url)
+        .filter((url) => typeof url === 'string' && url.trim() !== '')
+        .join(',');
+      updateData.justification = null;
       updateData.subtotal = subtotal;
       updateData.iva = iva;
       updateData.total = total;
       updateData.iva_percentage = ivaPerc;
     }
 
-    if (justification !== undefined) {
-      updateData.justification = justification;
+    if (!store_id && !store_name) {
+      return NextResponse.json(
+        { success: false, error: "El centro de costos es requerido" },
+        { status: 400 }
+      );
     }
 
-    if (store_id !== undefined) {
-      updateData.store_id = store_id;
+    if (store_id !== undefined && store_id !== '') {
+      updateData.store_id = Number(store_id);
+    } else if (store_name !== undefined && store_name.trim() !== '') {
+      const { data: storeData } = await supabaseAdmin
+        .from('stores')
+        .select('id')
+        .ilike('name', store_name.trim())
+        .single();
+
+      if (storeData?.id) {
+        updateData.store_id = storeData.id;
+      }
     }
 
     if (bank_account_id !== undefined) {
@@ -533,43 +667,6 @@ export async function PUT(
 
     if (currency !== undefined) {
       updateData.currency = currency;
-    }
-
-    // Manejar archivos de evidencia
-    const finalEvidenceUrls = [...existing_evidence];
-    
-    if (evidenceFiles.length > 0) {
-      const BUCKET_NAME = "Coconsa";
-      
-      for (const file of evidenceFiles) {
-        const timestamp = Date.now();
-        const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const filePath = `needs-lists/${needsListId}/evidence/${timestamp}_${sanitizedName}`;
-        
-        const arrayBuffer = await file.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        
-        const { error: uploadError } = await supabaseAdmin.storage
-          .from(BUCKET_NAME)
-          .upload(filePath, buffer, {
-            contentType: file.type,
-            upsert: false
-          });
-        
-        if (!uploadError) {
-          const { data: urlData } = supabaseAdmin.storage
-            .from(BUCKET_NAME)
-            .getPublicUrl(filePath);
-          
-          if (urlData?.publicUrl) {
-            finalEvidenceUrls.push(urlData.publicUrl);
-          }
-        }
-      }
-    }
-
-    if (finalEvidenceUrls.length > 0) {
-      updateData.evidence_urls = finalEvidenceUrls.join(',');
     }
 
     // Cambiar estado a pending

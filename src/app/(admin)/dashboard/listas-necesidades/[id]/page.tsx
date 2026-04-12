@@ -18,6 +18,8 @@ interface NeedsListItem {
   unit: string;
   unit_price: number;
   subtotal: number;
+  justificacion?: string;
+  evidencia_url?: string;
 }
 
 interface BankAccount {
@@ -413,7 +415,7 @@ export default function ListaNecesidadesDetallePage() {
 
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl shadow-lg p-6 text-white">
+        <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center gap-2 mb-4">
             <Link
               href="/dashboard/listas-necesidades"
@@ -677,61 +679,6 @@ export default function ListaNecesidadesDetallePage() {
                   <p className="text-gray-900 font-medium">{needsList.department_name || 'N/A'}</p>
                 </div>
                 
-                <div className="space-y-1 sm:col-span-2">
-                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Justificacion</label>
-                  <p className="text-gray-900">{needsList.justification}</p>
-                </div>
-
-                {/* Evidencias */}
-                {needsList.evidence_urls && (
-                  <div className="sm:col-span-2 space-y-2">
-                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Evidencias</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {needsList.evidence_urls.split(',').map((url, index) => {
-                        const fileName = url.split('/').pop() || `Archivo ${index + 1}`;
-                        const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(url);
-                        const isPdf = /\.pdf$/i.test(url);
-                        
-                        return (
-                          <div key={index} className="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
-                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                              isImage ? 'bg-purple-100' : isPdf ? 'bg-red-100' : 'bg-gray-200'
-                            }`}>
-                              {isImage ? (
-                                <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                </svg>
-                              ) : isPdf ? (
-                                <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                                </svg>
-                              ) : (
-                                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                                </svg>
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm text-gray-900 truncate">{fileName}</p>
-                            </div>
-                            <div className="flex gap-1">
-                              <a
-                                href={url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                </svg>
-                              </a>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -759,6 +706,27 @@ export default function ListaNecesidadesDetallePage() {
                         <span className="text-gray-700 font-medium">Subtotal</span>
                         <span className="text-gray-900 font-bold">{formatCurrency(item.subtotal)}</span>
                       </div>
+                      {item.justificacion && (
+                        <div className="pt-2 border-t border-gray-200">
+                          <span className="text-xs text-gray-500 uppercase tracking-wide">Justificación</span>
+                          <p className="text-gray-900 mt-1">{item.justificacion}</p>
+                        </div>
+                      )}
+                      {item.evidencia_url && (
+                        <div className="pt-2">
+                          <a
+                            href={item.evidencia_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 text-red-600 hover:text-red-700 text-sm"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                            Ver evidencia
+                          </a>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -773,6 +741,7 @@ export default function ListaNecesidadesDetallePage() {
                       <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wide pb-3 px-4">Cantidad</th>
                       <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wide pb-3 px-4 whitespace-nowrap">P. Unitario</th>
                       <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wide pb-3 pl-4">Subtotal</th>
+                      <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wide pb-3 pl-4">Justificación / Evidencia</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -790,6 +759,28 @@ export default function ListaNecesidadesDetallePage() {
                         <td className="py-3 pl-4 text-right whitespace-nowrap">
                           <span className="font-medium text-gray-900">{formatCurrency(item.subtotal)}</span>
                         </td>
+                        <td className="py-3 pl-4">
+                          <div className="space-y-1">
+                            {item.justificacion ? (
+                              <p className="text-sm text-gray-700">{item.justificacion}</p>
+                            ) : (
+                              <p className="text-sm text-gray-400">Sin justificación</p>
+                            )}
+                            {item.evidencia_url && (
+                              <a
+                                href={item.evidencia_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 text-xs"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                                Ver evidencia
+                              </a>
+                            )}
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -804,9 +795,9 @@ export default function ListaNecesidadesDetallePage() {
             <div className="bg-white rounded-xl shadow p-5">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Cuenta Bancaria</h2>
               <div className="space-y-3">
-                <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
-                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg">
+                  <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                     </svg>
                   </div>
@@ -836,7 +827,7 @@ export default function ListaNecesidadesDetallePage() {
               <div className="space-y-3">
                 <div className="flex justify-between py-3 border-t border-gray-100">
                   <span className="text-base font-bold text-gray-900">Total</span>
-                  <span className="text-lg font-bold text-blue-600">{formatCurrency(needsList.total)}</span>
+                  <span className="text-lg font-bold text-red-600">{formatCurrency(needsList.total)}</span>
                 </div>
               </div>
             </div>
@@ -844,7 +835,7 @@ export default function ListaNecesidadesDetallePage() {
             <button
               onClick={handleDownloadPdf}
               disabled={downloadingPdf}
-              className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {downloadingPdf ? (
                 <>

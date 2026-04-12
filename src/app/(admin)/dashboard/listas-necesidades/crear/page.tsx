@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import BankAccountManager from '@/components/admin/BankAccountManager';
+import { useToast } from '@/components/ui/Toast';
 
 interface BankAccount {
   id: string;
@@ -20,11 +21,20 @@ interface NeedsListItem {
   unidad: string;
   precioUnitario: number;
   precioTotal?: number;
-  descripcion?: string;
+  justificacion: string;
+  evidenciaFile: File | null;
 }
+
+interface StoreOption {
+  id: number;
+  name: string;
+}
+
+const LEGACY_MACHINE_STORE_REGEX = /^(CG|M|C|V|AT)\d+[\.\s-]?/i;
 
 export default function CreateNeedsListPage() {
   const router = useRouter();
+  const toast = useToast();
   const [loading, setLoading] = useState(false);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(true);
@@ -33,18 +43,19 @@ export default function CreateNeedsListPage() {
   // Formulario
   const [bankAccountId, setBankAccountId] = useState('');
   const [storeName, setStoreName] = useState('');
-  const [justification, setJustification] = useState('');
+  const [storeId, setStoreId] = useState('');
+  const [availableStores, setAvailableStores] = useState<StoreOption[]>([]);
   const [currency, setCurrency] = useState('MXN');
   const [ivaPercentage, setIvaPercentage] = useState(16);
   const [isUrgent, setIsUrgent] = useState(false);
   const [urgencyJustification, setUrgencyJustification] = useState('');
   const [items, setItems] = useState<NeedsListItem[]>([
-    { nombre: '', cantidad: 1, unidad: 'pza', precioUnitario: 0 },
+    { nombre: '', cantidad: 1, unidad: 'pza', precioUnitario: 0, justificacion: '', evidenciaFile: null },
   ]);
-  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
 
   useEffect(() => {
     fetchBankAccounts();
+    fetchStores();
   }, []);
 
   const fetchBankAccounts = async () => {
@@ -68,8 +79,25 @@ export default function CreateNeedsListPage() {
     }
   };
 
+  const fetchStores = async () => {
+    try {
+      const response = await fetch('/api/v1/stores-suppliers');
+      const data = await response.json();
+      if (response.ok && data.stores && Array.isArray(data.stores)) {
+        const filteredStores = data.stores.filter((store: StoreOption) => {
+          const normalized = store.name.trim().toLowerCase();
+          if (normalized === 'maquinaria') return true;
+          return !LEGACY_MACHINE_STORE_REGEX.test(store.name);
+        });
+        setAvailableStores(filteredStores);
+      }
+    } catch (error) {
+      console.error('Error al cargar centros de costos:', error);
+    }
+  };
+
   const addItem = () => {
-    setItems([...items, { nombre: '', cantidad: 1, unidad: 'pza', precioUnitario: 0 }]);
+    setItems([...items, { nombre: '', cantidad: 1, unidad: 'pza', precioUnitario: 0, justificacion: '', evidenciaFile: null }]);
   };
 
   const removeItem = (index: number) => {
@@ -78,7 +106,7 @@ export default function CreateNeedsListPage() {
     }
   };
 
-  const updateItem = (index: number, field: keyof NeedsListItem, value: any) => {
+  const updateItem = (index: number, field: keyof NeedsListItem, value: string | number | File | null) => {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
     setItems(newItems);
@@ -97,17 +125,43 @@ export default function CreateNeedsListPage() {
     e.preventDefault();
     
     if (!bankAccountId) {
-      alert('Debes seleccionar una cuenta bancaria');
+      toast.warning('Cuenta bancaria requerida', 'Debes seleccionar una cuenta bancaria');
+      return;
+    }
+
+    if (!storeId) {
+      toast.warning('Centro de costos requerido', 'Debes seleccionar un centro de costos');
       return;
     }
 
     if (items.length === 0 || !items[0].nombre) {
-      alert('Debes agregar al menos un item');
+      toast.warning('Items requeridos', 'Debes agregar al menos un item');
       return;
     }
 
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index];
+      if (!item.justificacion || item.justificacion.trim().length < 10) {
+        toast.warning(
+          'Justificación inválida',
+          `La justificación del item #${index + 1} debe tener al menos 10 caracteres`
+        );
+        return;
+      }
+      if (!(item.evidenciaFile instanceof File)) {
+        toast.warning(
+          'Archivo requerido',
+          `Debes adjuntar un archivo de justificación para el item #${index + 1}`
+        );
+        return;
+      }
+    }
+
     if (isUrgent && (!urgencyJustification || urgencyJustification.length < 10)) {
-      alert('Las listas urgentes requieren una justificación de al menos 10 caracteres');
+      toast.warning(
+        'Justificación urgente requerida',
+        'Las listas urgentes requieren una justificación de al menos 10 caracteres'
+      );
       return;
     }
 
@@ -117,18 +171,25 @@ export default function CreateNeedsListPage() {
       const formData = new FormData();
       formData.append('bank_account_id', bankAccountId);
       formData.append('store_name', storeName);
-      formData.append('justification', justification);
+      formData.append('store_id', storeId);
       formData.append('currency', currency);
       formData.append('iva_percentage', ivaPercentage.toString());
       formData.append('is_urgent', isUrgent.toString());
       if (isUrgent) {
         formData.append('urgency_justification', urgencyJustification);
       }
-      formData.append('items', JSON.stringify(items));
+      formData.append('items', JSON.stringify(items.map((item) => ({
+        nombre: item.nombre,
+        cantidad: item.cantidad,
+        unidad: item.unidad,
+        precioUnitario: item.precioUnitario,
+        justificacion: item.justificacion,
+      }))));
 
-      // Agregar archivos de evidencia
-      evidenceFiles.forEach((file, index) => {
-        formData.append(`evidence_${index}`, file);
+      items.forEach((item, index) => {
+        if (item.evidenciaFile) {
+          formData.append(`item_evidence_${index}`, item.evidenciaFile);
+        }
       });
 
       const response = await fetch('/api/v1/needs-lists/create', {
@@ -139,14 +200,14 @@ export default function CreateNeedsListPage() {
       const data = await response.json();
 
       if (data.success) {
-        alert('Lista de necesidades creada exitosamente');
+        toast.success('Lista creada', 'Lista de necesidades creada exitosamente');
         router.push(`/dashboard/listas-necesidades/${data.data.id}`);
       } else {
-        alert(data.error || 'Error al crear la lista');
+        toast.error('Error al crear la lista', data.error || 'No se pudo crear la lista');
       }
     } catch (error) {
       console.error('Error:', error);
-      alert('Error al crear la lista de necesidades');
+      toast.error('Error al crear la lista', 'Error al crear la lista de necesidades');
     } finally {
       setLoading(false);
     }
@@ -242,18 +303,26 @@ export default function CreateNeedsListPage() {
               )}
             </div>
 
-            {/* Almacén/Obra */}
+            {/* Centro de costos */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Almacén/Obra
+                Centro de costos <span className="text-red-500">*</span>
               </label>
-              <input
-                type="text"
-                value={storeName}
-                onChange={(e) => setStoreName(e.target.value)}
-                placeholder="Nombre del almacén u obra"
+              <select
+                value={storeId}
+                onChange={(e) => {
+                  const selected = availableStores.find((store) => String(store.id) === e.target.value);
+                  setStoreId(e.target.value);
+                  setStoreName(selected?.name || '');
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
-              />
+                required
+              >
+                <option value="">Selecciona un centro de costos</option>
+                {availableStores.map((store) => (
+                  <option key={store.id} value={store.id}>{store.name}</option>
+                ))}
+              </select>
             </div>
 
             {/* Moneda */}
@@ -286,20 +355,6 @@ export default function CreateNeedsListPage() {
                 <option value="16">IVA Normal (16%)</option>
               </select>
             </div>
-          </div>
-
-          {/* Justificación */}
-          <div className="mt-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Justificación
-            </label>
-            <textarea
-              value={justification}
-              onChange={(e) => setJustification(e.target.value)}
-              rows={3}
-              placeholder="Describe el motivo de esta lista de necesidades"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
-            />
           </div>
 
           {/* Lista Urgente */}
@@ -429,37 +484,42 @@ export default function CreateNeedsListPage() {
                       {new Intl.NumberFormat('es-MX', { style: 'currency', currency }).format(item.cantidad * item.precioUnitario)}
                     </div>
                   </div>
+
+                  <div className="md:col-span-4">
+                    <label className="block text-sm text-gray-600 mb-1">
+                      Justificación del item <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={item.justificacion}
+                      onChange={(e) => updateItem(index, 'justificacion', e.target.value)}
+                      rows={2}
+                      required
+                      placeholder="Describe el motivo de este concepto (mínimo 10 caracteres)"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
+                    />
+                  </div>
+
+                  <div className="md:col-span-4">
+                    <label className="block text-sm text-gray-600 mb-1">
+                      Archivo de justificación del item <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      required
+                      onChange={(e) => updateItem(index, 'evidenciaFile', e.target.files?.[0] || null)}
+                      className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100"
+                    />
+                    {item.evidenciaFile && (
+                      <div className="mt-1 text-xs text-gray-500">
+                        {item.evidenciaFile.name}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
           </div>
-        </div>
-
-        {/* Evidencias */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Evidencias (Opcional)</h2>
-          <p className="text-sm text-gray-600 mb-4">
-            Puedes adjuntar hasta 5 archivos (imágenes o PDFs, máximo 10MB cada uno)
-          </p>
-          <input
-            type="file"
-            multiple
-            accept="image/*,application/pdf"
-            onChange={(e) => {
-              const files = Array.from(e.target.files || []);
-              if (files.length > 5) {
-                alert('Máximo 5 archivos');
-                return;
-              }
-              setEvidenceFiles(files);
-            }}
-            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100"
-          />
-          {evidenceFiles.length > 0 && (
-            <div className="mt-2 text-sm text-gray-600">
-              {evidenceFiles.length} archivo(s) seleccionado(s)
-            </div>
-          )}
         </div>
 
         {/* Resumen */}

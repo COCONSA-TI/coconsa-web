@@ -23,6 +23,8 @@ interface NeedsListItem {
   unit: string;
   unit_price: number;
   subtotal: number;
+  justificacion?: string;
+  evidencia_url?: string;
 }
 
 interface NeedsListDetail {
@@ -36,6 +38,8 @@ interface NeedsListDetail {
   justification: string;
   evidence_urls: string | null;
   items: NeedsListItem[];
+  store_id?: number | null;
+  store_name?: string | null;
   bank_account_id: string;
   bank_account: BankAccount;
   is_urgent: boolean;
@@ -49,7 +53,17 @@ interface FormItem {
   cantidad: string;
   unidad: string;
   precioUnitario: string;
+  justificacion: string;
+  evidenciaFile: File | null;
+  evidenciaUrlExistente: string;
 }
+
+interface StoreOption {
+  id: number;
+  name: string;
+}
+
+const LEGACY_MACHINE_STORE_REGEX = /^(CG|M|C|V|AT)\d+[\.\s-]?/i;
 
 export default function EditarListaNecesidadesPage() {
   const router = useRouter();
@@ -69,12 +83,21 @@ export default function EditarListaNecesidadesPage() {
 
   // Form state
   const [bankAccountId, setBankAccountId] = useState("");
-  const [justification, setJustification] = useState("");
+  const [storeId, setStoreId] = useState("");
+  const [storeName, setStoreName] = useState("");
+  const [availableStores, setAvailableStores] = useState<StoreOption[]>([]);
   const [items, setItems] = useState<FormItem[]>([
-    { id: "1", nombre: "", cantidad: "1", unidad: "pza", precioUnitario: "" },
+    {
+      id: "1",
+      nombre: "",
+      cantidad: "1",
+      unidad: "pza",
+      precioUnitario: "",
+      justificacion: "",
+      evidenciaFile: null,
+      evidenciaUrlExistente: "",
+    },
   ]);
-  const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
-  const [existingEvidence, setExistingEvidence] = useState<string[]>([]);
 
   const fetchBankAccounts = async () => {
     try {
@@ -85,6 +108,23 @@ export default function EditarListaNecesidadesPage() {
       }
     } catch (error) {
       console.error("Error al cargar cuentas bancarias:", error);
+    }
+  };
+
+  const fetchStores = async () => {
+    try {
+      const response = await fetch('/api/v1/stores-suppliers');
+      const data = await response.json();
+      if (response.ok && data.stores && Array.isArray(data.stores)) {
+        const filteredStores = data.stores.filter((store: StoreOption) => {
+          const normalized = store.name.trim().toLowerCase();
+          if (normalized === 'maquinaria') return true;
+          return !LEGACY_MACHINE_STORE_REGEX.test(store.name);
+        });
+        setAvailableStores(filteredStores);
+      }
+    } catch (fetchStoresError) {
+      console.error('Error al cargar centros de costos:', fetchStoresError);
     }
   };
 
@@ -122,14 +162,10 @@ export default function EditarListaNecesidadesPage() {
           return;
         }
 
-        // Load existing evidence
-        if (needsList.evidence_urls) {
-          setExistingEvidence(needsList.evidence_urls.split(","));
-        }
-
         // Pre-fill form
         setBankAccountId(needsList.bank_account_id);
-        setJustification(needsList.justification);
+        setStoreId(needsList.store_id ? String(needsList.store_id) : "");
+        setStoreName(needsList.store_name || "");
 
         // Pre-fill items
         if (needsList.items && needsList.items.length > 0) {
@@ -139,12 +175,16 @@ export default function EditarListaNecesidadesPage() {
             cantidad: item.quantity.toString(),
             unidad: item.unit,
             precioUnitario: item.unit_price.toString(),
+            justificacion: item.justificacion || "",
+            evidenciaFile: null,
+            evidenciaUrlExistente: item.evidencia_url || "",
           }));
           setItems(mappedItems);
         }
 
-        // Fetch bank accounts
+        // Fetch supporting data
         await fetchBankAccounts();
+        await fetchStores();
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Error al cargar la lista";
         setError(errorMessage);
@@ -158,7 +198,11 @@ export default function EditarListaNecesidadesPage() {
     }
   }, [listId, user]);
 
-  const handleItemChange = (id: string, field: keyof FormItem, value: string) => {
+  const handleItemChange = (
+    id: string,
+    field: keyof FormItem,
+    value: string | File | null
+  ) => {
     setItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
     );
@@ -168,7 +212,16 @@ export default function EditarListaNecesidadesPage() {
     const newId = (Math.max(...items.map((i) => parseInt(i.id))) + 1).toString();
     setItems((prev) => [
       ...prev,
-      { id: newId, nombre: "", cantidad: "1", unidad: "pza", precioUnitario: "" },
+      {
+        id: newId,
+        nombre: "",
+        cantidad: "1",
+        unidad: "pza",
+        precioUnitario: "",
+        justificacion: "",
+        evidenciaFile: null,
+        evidenciaUrlExistente: "",
+      },
     ]);
   };
 
@@ -193,85 +246,70 @@ export default function EditarListaNecesidadesPage() {
     }).format(amount);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const newFiles = Array.from(e.target.files);
-      setEvidenceFiles((prev) => [...prev, ...newFiles]);
-    }
-  };
-
-  const removeFile = (index: number) => {
-    setEvidenceFiles((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const removeExistingEvidence = (index: number) => {
-    setExistingEvidence((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     // Validations
     if (!bankAccountId) {
-      setError("Por favor selecciona una cuenta bancaria");
+      toast.warning("Cuenta bancaria requerida", "Por favor selecciona una cuenta bancaria");
       return;
     }
 
-    const validItems = items.filter(
-      (item) =>
-        item.nombre &&
-        item.cantidad &&
-        item.unidad &&
-        item.precioUnitario
-    );
-
-    if (validItems.length === 0) {
-      setError("Debes agregar al menos un concepto válido");
+    if (!storeId) {
+      toast.warning("Centro de costos requerido", "Debes seleccionar un centro de costos");
       return;
     }
 
-    if (!justification || justification.length < 10) {
-      setError("La justificación debe tener al menos 10 caracteres");
+    if (items.length === 0) {
+      toast.warning("Items requeridos", "Debes agregar al menos un concepto válido");
       return;
     }
 
-    // Verify evidence exists
-    if (existingEvidence.length === 0 && evidenceFiles.length === 0) {
-      setError("Debes tener al menos un archivo de evidencia");
-      return;
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index];
+      const nombre = item.nombre.trim();
+      const cantidad = parseFloat(item.cantidad);
+      const precio = parseFloat(item.precioUnitario);
+      const justificacion = item.justificacion.trim();
+
+      if (!nombre || !item.unidad || !Number.isFinite(cantidad) || !Number.isFinite(precio) || cantidad <= 0 || precio <= 0) {
+        toast.warning("Concepto inválido", `Revisa el item #${index + 1}: completa descripción, cantidad, unidad y precio válidos`);
+        return;
+      }
+
+      if (justificacion.length < 10) {
+        toast.warning("Justificación inválida", `La justificación del item #${index + 1} debe tener al menos 10 caracteres`);
+        return;
+      }
+
+      if (!(item.evidenciaFile instanceof File) && !item.evidenciaUrlExistente) {
+        toast.warning("Archivo requerido", `Debes adjuntar un archivo de justificación para el item #${index + 1}`);
+        return;
+      }
     }
 
     // Prepare data
-    const listData = {
-      bank_account_id: bankAccountId,
-      justification: justification,
-      items: validItems.map((item) => ({
-        description: item.nombre,
-        quantity: parseFloat(item.cantidad),
-        unit: item.unidad,
-        unit_price: parseFloat(item.precioUnitario),
-      })),
-      existing_evidence: existingEvidence,
-    };
-
     setSubmitting(true);
 
     try {
       const formDataToSend = new FormData();
-      formDataToSend.append("listData", JSON.stringify(listData));
+      formDataToSend.append("bank_account_id", bankAccountId);
+      formDataToSend.append("store_id", storeId);
+      formDataToSend.append("store_name", storeName);
+      formDataToSend.append("items", JSON.stringify(items.map((item) => ({
+        nombre: item.nombre,
+        cantidad: parseFloat(item.cantidad),
+        unidad: item.unidad,
+        precioUnitario: parseFloat(item.precioUnitario),
+        justificacion: item.justificacion,
+        evidencia_url: item.evidenciaUrlExistente || undefined,
+      }))));
 
-      // Add new evidence files
-      evidenceFiles.forEach((file) => {
-        formDataToSend.append("evidence", file);
+      items.forEach((item, index) => {
+        if (item.evidenciaFile) {
+          formDataToSend.append(`item_evidence_${index}`, item.evidenciaFile);
+        }
       });
 
       const response = await fetch(`/api/v1/needs-lists/${listId}`, {
@@ -290,6 +328,7 @@ export default function EditarListaNecesidadesPage() {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Error desconocido";
       setError(errorMessage);
+      toast.error("Error al actualizar la lista", errorMessage);
     } finally {
       setSubmitting(false);
     }
@@ -382,7 +421,7 @@ export default function EditarListaNecesidadesPage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Bank Account & Justification */}
+        {/* Bank Account & Cost Center */}
         <div className="bg-white rounded-xl shadow p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Información General</h2>
           
@@ -415,20 +454,28 @@ export default function EditarListaNecesidadesPage() {
               </button>
             </div>
 
-            <div></div>
-
-            {/* Justification */}
-            <div className="md:col-span-2">
+            {/* Cost Center */}
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Justificación <span className="text-red-500">*</span>
+                Centro de costos <span className="text-red-500">*</span>
               </label>
-              <textarea
-                value={justification}
-                onChange={(e) => setJustification(e.target.value)}
-                rows={3}
-                placeholder="Describe el motivo de esta lista de necesidades (mínimo 10 caracteres)"
+              <select
+                value={storeId}
+                onChange={(e) => {
+                  const selected = availableStores.find((store) => String(store.id) === e.target.value);
+                  setStoreId(e.target.value);
+                  setStoreName(selected?.name || "");
+                }}
+                required
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-              />
+              >
+                <option value="">Selecciona un centro de costos</option>
+                {availableStores.map((store) => (
+                  <option key={store.id} value={store.id}>
+                    {store.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
@@ -467,7 +514,7 @@ export default function EditarListaNecesidadesPage() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   <div className="sm:col-span-2 lg:col-span-4">
                     <label className="block text-xs font-medium text-gray-600 mb-1">Descripción</label>
                     <input
@@ -524,16 +571,60 @@ export default function EditarListaNecesidadesPage() {
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Subtotal</label>
-                    <div className="px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-gray-900 text-sm font-medium">
-                      {formatCurrency((parseFloat(item.cantidad) || 0) * (parseFloat(item.precioUnitario) || 0))}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Subtotal</label>
+                      <div className="px-3 py-2 bg-gray-100 border border-gray-200 rounded-lg text-gray-900 text-sm font-medium">
+                        {formatCurrency((parseFloat(item.cantidad) || 0) * (parseFloat(item.precioUnitario) || 0))}
+                      </div>
+                    </div>
+
+                    <div className="sm:col-span-2 lg:col-span-4">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Justificación del item <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        value={item.justificacion}
+                        onChange={(e) => handleItemChange(item.id, "justificacion", e.target.value)}
+                        rows={2}
+                        placeholder="Describe el motivo de este concepto (mínimo 10 caracteres)"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 text-sm"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2 lg:col-span-4">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Evidencia del item <span className="text-red-500">*</span>
+                      </label>
+                      {item.evidenciaUrlExistente && (
+                        <div className="mb-2 flex items-center justify-between rounded-lg bg-gray-100 px-3 py-2">
+                          <a
+                            href={item.evidenciaUrlExistente}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="truncate text-sm text-blue-700 hover:underline"
+                          >
+                            Evidencia actual
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => handleItemChange(item.id, "evidenciaUrlExistente", "")}
+                            className="ml-3 text-xs text-red-600 hover:text-red-700"
+                          >
+                            Quitar
+                          </button>
+                        </div>
+                      )}
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png,.webp,.gif"
+                        onChange={(e) => handleItemChange(item.id, "evidenciaFile", e.target.files?.[0] ?? null)}
+                        className="w-full text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:text-blue-700 hover:file:bg-blue-100"
+                      />
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
 
           {/* Total */}
           <div className="mt-6 flex justify-end">
@@ -542,99 +633,6 @@ export default function EditarListaNecesidadesPage() {
               <span className="text-lg font-bold text-blue-900">{formatCurrency(calculateTotal())}</span>
             </div>
           </div>
-        </div>
-
-        {/* Evidence */}
-        <div className="bg-white rounded-xl shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Evidencias</h2>
-
-          {/* Existing Evidence */}
-          {existingEvidence.length > 0 && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Archivos existentes</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {existingEvidence.map((url, index) => {
-                  const fileName = url.split("/").pop() || `Archivo ${index + 1}`;
-                  return (
-                    <div key={index} className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
-                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                        </svg>
-                        <span className="text-sm text-gray-700 truncate">{fileName}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeExistingEvidence(index)}
-                        className="ml-2 text-red-500 hover:text-red-700"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* New Files Upload */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Agregar nuevos archivos
-            </label>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-500 transition-colors">
-              <input
-                type="file"
-                multiple
-                accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx,.doc,.docx"
-                onChange={handleFileChange}
-                className="hidden"
-                id="evidence-upload"
-              />
-              <label
-                htmlFor="evidence-upload"
-                className="flex flex-col items-center cursor-pointer"
-              >
-                <svg className="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-                <span className="text-sm text-gray-600">Click para seleccionar archivos</span>
-                <span className="text-xs text-gray-500 mt-1">PDF, imágenes, Excel, Word</span>
-              </label>
-            </div>
-
-            {/* New files list */}
-            {evidenceFiles.length > 0 && (
-              <div className="mt-3 space-y-2">
-                {evidenceFiles.map((file, index) => (
-                  <div key={index} className="flex items-center justify-between p-2 bg-blue-50 rounded-lg">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      <span className="text-sm text-gray-700 truncate">{file.name}</span>
-                      <span className="text-xs text-gray-500">({formatFileSize(file.size)})</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeFile(index)}
-                      className="ml-2 text-red-500 hover:text-red-700"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <p className="text-xs text-gray-500 mt-2">
-            * Se requiere al menos un archivo de evidencia
-          </p>
         </div>
 
         {/* Actions */}
