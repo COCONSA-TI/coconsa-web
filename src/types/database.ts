@@ -493,3 +493,140 @@ export interface OrderApprovalForPdf extends OrderApproval {
   department?: Department | null;
   approver?: ApprovalApprover | null;
 }
+
+// ============================================
+// NEEDS LIST RELATED (Listas de Necesidades)
+// ============================================
+
+export type AccountType = 'ahorro' | 'cheques' | 'inversion';
+export type NeedsListStatus = 'pending' | 'in_progress' | 'approved' | 'rejected' | 'paid' | 'completed';
+
+export interface UserBankAccount {
+  id: string;
+  user_id: string;
+  bank_name: string;
+  account_number: string;
+  clabe: string | null;
+  account_type: AccountType;
+  is_primary: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
+export interface NeedsListItem {
+  nombre: string;
+  cantidad: number;
+  unidad: string;
+  precioUnitario: number;
+  precioTotal?: number;
+  descripcion?: string;
+}
+
+export interface NeedsList {
+  id: number;
+  applicant_id: string;
+  store_id: number | null;
+  bank_account_id: string;
+  date: string;
+  folio: string | null;
+  items: string; // JSON stringified NeedsListItem[]
+  justification: string | null;
+  evidence_urls: string | null; // URLs separadas por comas
+  subtotal: number;
+  iva: number;
+  total: number;
+  currency: Currency;
+  iva_percentage: number;
+  status: NeedsListStatus;
+  is_urgent: boolean;
+  urgency_justification: string | null;
+  is_definitive_rejection: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NeedsListApproval {
+  id: string;
+  needs_list_id: number;
+  department_id: string;
+  approver_id: string | null;
+  status: ApprovalStatus;
+  comments: string | null;
+  approved_at: string | null;
+  approval_order: number; // 1: Gerencia, 2: Contabilidad, 3: Contraloría
+  created_at: string;
+}
+
+export interface NeedsListAttachment {
+  id: string;
+  needs_list_id: number;
+  uploaded_by: string;
+  file_name: string;
+  file_size: number;
+  file_type: string;
+  file_url: string;
+  storage_path: string;
+  description: string | null;
+  created_at: string;
+}
+
+// ============================================
+// NEEDS LIST WITH RELATIONS
+// ============================================
+
+export interface NeedsListApplicant {
+  full_name: string | null;
+  email: string | null;
+}
+
+export interface NeedsListStore {
+  name: string;
+}
+
+export interface NeedsListBankAccount {
+  bank_name: string;
+  account_number: string;
+  clabe: string | null;
+}
+
+export interface NeedsListWithRelations extends NeedsList {
+  applicant?: NeedsListApplicant | null;
+  store?: NeedsListStore | null;
+  bank_account?: NeedsListBankAccount | null;
+}
+
+export interface NeedsListApprovalWithRelations extends NeedsListApproval {
+  department?: Department;
+  approver?: ApprovalApprover | null;
+}
+
+// ============================================
+// API REQUEST TYPES FOR NEEDS LISTS
+// ============================================
+
+export interface CreateNeedsListRequest {
+  applicant_id?: string; // Se obtiene de la sesión, no del body
+  store_name?: string;
+  store_id?: number;
+  bank_account_id: string;
+  items: NeedsListItem[];
+  justification?: string;
+  currency?: Currency;
+  iva_percentage?: number;
+  is_urgent?: boolean;
+  urgency_justification?: string;
+  evidenceUrls?: string[];
+}
+
+export interface UpdateNeedsListRequest {
+  store_name?: string;
+  store_id?: number;
+  bank_account_id?: string;
+  items?: NeedsListItem[];
+  justification?: string;
+  currency?: Currency;
+  iva_percentage?: number;
+  evidenceUrls?: string[];
+}

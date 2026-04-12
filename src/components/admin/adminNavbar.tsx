@@ -59,7 +59,7 @@ export default function AdminNavbar({ onMenuClick }: AdminNavbarProps) {
           </div>
 
           {/* Navegación (oculta en móvil, visible en desktop) */}
-          {/* TEMPORAL: Solo Dashboard y Órdenes de Compra durante el desarrollo */}
+          {/* TEMPORAL: Solo Dashboard, Órdenes de Compra y Listas de Necesidades durante el desarrollo */}
           <nav className="hidden lg:flex items-center space-x-1">
             <Link 
               href="/dashboard" 
@@ -72,6 +72,12 @@ export default function AdminNavbar({ onMenuClick }: AdminNavbarProps) {
               className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-all"
             >
               Órdenes de Compra
+            </Link>
+            <Link 
+              href="/dashboard/listas-necesidades" 
+              className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-all"
+            >
+              Listas de Necesidades
             </Link>
             {/* TODO: Descomentar cuando las demás secciones estén listas
             {isAdmin && (
