@@ -88,6 +88,7 @@ export default function ListaNecesidadesDetallePage() {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectDefinitive, setRejectDefinitive] = useState(false);
   const [processingAction, setProcessingAction] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   
   // Approval modal states
   const [approveComments, setApproveComments] = useState('');
@@ -197,6 +198,32 @@ export default function ListaNecesidadesDetallePage() {
       toast.error('Error', errorMessage);
     } finally {
       setProcessingAction(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    try {
+      setDownloadingPdf(true);
+      const response = await fetch(`/api/v1/needs-lists/${listId}/pdf`);
+
+      if (!response.ok) {
+        throw new Error('Error al generar el PDF');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lista-necesidades-${needsList?.folio || listId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success('PDF descargado', 'El archivo se ha descargado correctamente');
+    } catch {
+      toast.error('Error', 'No se pudo descargar el PDF. Por favor, intenta nuevamente.');
+    } finally {
+      setDownloadingPdf(false);
     }
   };
 
@@ -813,6 +840,29 @@ export default function ListaNecesidadesDetallePage() {
                 </div>
               </div>
             </div>
+
+            <button
+              onClick={handleDownloadPdf}
+              disabled={downloadingPdf}
+              className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {downloadingPdf ? (
+                <>
+                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                  </svg>
+                  Generando PDF...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M5 20h14" />
+                  </svg>
+                  Descargar PDF
+                </>
+              )}
+            </button>
 
             {/* Botones de Accion */}
             {canApproveList && needsList.status !== 'approved' && needsList.status !== 'rejected' && (
