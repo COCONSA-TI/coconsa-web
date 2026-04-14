@@ -352,39 +352,15 @@ export async function PUT(
       );
     }
 
-    // Procesar el body
-    const contentType = request.headers.get('content-type') || '';
-    let body: {
-      items: OrderItem[];
-      justification?: string;
-      store_name?: string;
-      currency?: string;
-      retention?: string;
-      payment_type?: string;
-      tax_type?: string;
-      iva_percentage?: number;
-      evidenceUrls?: string[];
-    };
-    let evidenceFiles: File[] = [];
-
-    if (contentType.includes('multipart/form-data')) {
-      const formData = await request.formData();
-      const orderDataString = formData.get('orderData');
-      
-      if (typeof orderDataString === 'string') {
-        body = JSON.parse(orderDataString);
-      } else {
-        return NextResponse.json(
-          { error: 'Datos de orden inválidos' },
-          { status: 400 }
-        );
-      }
-      
-      const evidenceEntries = formData.getAll('evidence');
-      evidenceFiles = evidenceEntries.filter((entry): entry is File => entry instanceof File);
-    } else {
-      body = await request.json();
+    // Procesar el body (JSON-only con presigned URLs)
+    if (!request.headers.get('content-type')?.includes('application/json')) {
+      return NextResponse.json(
+        { error: 'El cuerpo debe ser JSON con evidenceUrls (presigned URLs)' },
+        { status: 400 }
+      );
     }
+
+    const body = await request.json();
 
     const { items, justification, store_name, currency = 'MXN', retention, payment_type, tax_type, iva_percentage, evidenceUrls = [] } = body;
 
@@ -522,40 +498,9 @@ export async function PUT(
       updateData.retention = retention;
     }
 
-    // Manejar archivos de evidencia de FormData (fallback) y URLs presignadas
-    const finalEvidenceUrls = [...evidenceUrls];
-    if (evidenceFiles.length > 0) {
-      const BUCKET_NAME = "Coconsa";
-      
-      for (const file of evidenceFiles) {
-        const timestamp = Date.now();
-        const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const filePath = `orders/${orderId}/evidence/${timestamp}_${sanitizedName}`;
-        
-        const arrayBuffer = await file.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        
-        const { error: uploadError } = await supabaseAdmin.storage
-          .from(BUCKET_NAME)
-          .upload(filePath, buffer, {
-            contentType: file.type,
-            upsert: false
-          });
-        
-        if (!uploadError) {
-          const { data: urlData } = supabaseAdmin.storage
-            .from(BUCKET_NAME)
-            .getPublicUrl(filePath);
-          
-          if (urlData?.publicUrl) {
-            finalEvidenceUrls.push(urlData.publicUrl);
-          }
-        }
-      }
-    }
-    
-    if (finalEvidenceUrls.length > 0) {
-      updateData.justification_prove = finalEvidenceUrls.join(',');
+    // Las URLs de evidencia ya vienen del frontend (presigned URLs)
+    if (evidenceUrls.length > 0) {
+      updateData.justification_prove = evidenceUrls.join(',');
     }
 
     // Actualizar la orden

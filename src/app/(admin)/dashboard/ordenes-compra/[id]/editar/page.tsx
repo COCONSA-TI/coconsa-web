@@ -457,17 +457,51 @@ export default function EditarOrdenPage() {
     setUploadingFiles(evidenceFiles.length > 0);
 
     try {
-      const formDataToSend = new FormData();
-      formDataToSend.append("orderData", JSON.stringify(orderData));
+      // 1. Subir archivos de evidencia usando Presigned URLs directamente a Supabase
+      const uploadedUrls: string[] = [];
+      
+      if (evidenceFiles.length > 0) {
+        for (const file of evidenceFiles) {
+          try {
+            // Obtener presigned URL
+            const urlRes = await fetch('/api/v1/storage/signed-url', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                fileName: file.name, 
+                contentType: file.type 
+              })
+            });
+            
+            if (!urlRes.ok) throw new Error(`Error obteniendo permiso para subir archivo: ${file.name}`);
+            const urlData = await urlRes.json();
 
-      // Agregar archivos de evidencia nuevos
-      evidenceFiles.forEach((file) => {
-        formDataToSend.append("evidence", file);
-      });
+            // Subir archivo directamente a Supabase
+            const uploadRes = await fetch(urlData.signedUrl, {
+              method: 'PUT',
+              headers: { 'Content-Type': file.type },
+              body: file
+            });
+
+            if (!uploadRes.ok) throw new Error(`Error subiendo el archivo: ${file.name}`);
+
+            uploadedUrls.push(urlData.publicUrl);
+          } catch (fileError) {
+            throw new Error(`Error procesando archivo ${file.name}: ${fileError instanceof Error ? fileError.message : 'desconocido'}`);
+          }
+        }
+      }
+
+      // 2. Actualizar la orden (como JSON ligero con presigned URLs)
+      const orderDataToSend = {
+        ...orderData,
+        evidenceUrls: uploadedUrls
+      };
 
       const response = await fetch(`/api/v1/orders/${orderId}`, {
         method: "PUT",
-        body: formDataToSend,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderDataToSend),
       });
 
       const data = await response.json();

@@ -24,29 +24,11 @@ export async function POST(
 
     const orderId = resolvedParams.id;
     
-    // Parsear request - puede ser JSON o FormData
-    let comments = '';
-    const files: File[] = [];
-    let filesInfo: Array<{ name: string, size: number, type: string, url: string, path: string }> = [];
-    
-    const contentType = request.headers.get('content-type');
-    if (contentType?.includes('multipart/form-data')) {
-      // Manejar FormData (con archivos)
-      const formData = await request.formData();
-      comments = formData.get('comments') as string || '';
-      
-      // Extraer archivos
-      for (const [key, value] of formData) {
-        if (key.startsWith('file_') && value instanceof File) {
-          files.push(value);
-        }
-      }
-    } else {
-      // Manejar JSON
-      const body = await request.json();
-      comments = body.comments || '';
-      filesInfo = body.filesInfo || [];
-    }
+    // Solo aceptar JSON request con presigned URLs (evita payload gigante de Vercel)
+    // Los archivos ya se subieron directamente a Supabase vía presigned URLs
+    const body = await request.json();
+    const comments = body.comments || '';
+    const filesInfo: Array<{ name: string, size: number, type: string, url: string, path: string }> = body.filesInfo || [];
 
     // 1. Obtener usuario con departamento (usar admin client para queries)
     const { data: user, error: userError } = await supabaseAdmin
@@ -118,106 +100,10 @@ export async function POST(
       );
     }
 
-    // 5. Subir archivos a Supabase Storage si existen
+    // Las URLs de evidencia ya vienen del frontend (se subieron vía presigned URLs directamente a Supabase)
     const uploadedFileIds: string[] = [];
-    if (files.length > 0) {
-      for (const file of files) {
-        try {
-          // Validar tamaño (máx 10MB)
-          if (file.size > 10 * 1024 * 1024) {
-            return NextResponse.json(
-              { success: false, error: `Archivo ${file.name} excede el límite de 10MB` },
-              { status: 400 }
-            );
-          }
-
-          // Validar tipo MIME
-          const allowedMimes = [
-            'application/pdf',
-            'image/jpeg',
-            'image/png',
-            'image/jpg',
-            'application/vnd.ms-excel',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-          ];
-          
-          if (!allowedMimes.includes(file.type)) {
-            return NextResponse.json(
-              { success: false, error: `Tipo de archivo no permitido: ${file.type}` },
-              { status: 400 }
-            );
-          }
-
-          // Convertir File a Buffer
-          const buffer = await file.arrayBuffer();
-          const uint8Array = new Uint8Array(buffer);
-          
-          // Crear ruta: orders/{orderId}/attachments/{timestamp}_{filename}
-          const timestamp = Date.now();
-          const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-          const storagePath = `orders/${orderId}/attachments/${timestamp}_${sanitizedName}`;
-          
-          // Subir a Storage
-          const { error: uploadError } = await supabaseAdmin
-            .storage
-            .from(ORDER_ATTACHMENTS_BUCKET)
-            .upload(storagePath, uint8Array, {
-              contentType: file.type,
-              upsert: false,
-            });
-
-          if (uploadError) {
-            console.error('Storage upload error:', uploadError);
-            return NextResponse.json(
-              { success: false, error: `Error al subir archivo ${file.name}: ${uploadError.message}` },
-              { status: 500 }
-            );
-          }
-
-          // Obtener URL pública del archivo
-          const { data: { publicUrl } } = supabaseAdmin
-            .storage
-            .from(ORDER_ATTACHMENTS_BUCKET)
-            .getPublicUrl(storagePath);
-
-          // Guardar metadata en order_attachments
-          const { data: attachmentData, error: insertError } = await supabaseAdmin
-            .from('order_attachments')
-            .insert({
-              order_id: orderId,
-              uploaded_by: session.userId,
-              file_name: file.name,
-              file_size: file.size,
-              file_type: file.type,
-              file_url: publicUrl,
-              storage_path: storagePath,
-              description: null,
-            })
-            .select('id')
-            .single();
-
-          if (insertError) {
-            console.error('Database insert error:', insertError);
-            return NextResponse.json(
-              { success: false, error: `Error al registrar archivo ${file.name}` },
-              { status: 500 }
-            );
-          }
-
-          uploadedFileIds.push(attachmentData.id);
-        } catch (error) {
-          console.error('Error processing file:', error);
-          return NextResponse.json(
-            { success: false, error: `Error procesando archivo ${file.name}` },
-            { status: 500 }
-          );
-        }
-      }
-    }
-
-    // 5.1 Registrar metadata de archivos subidos por el cliente (Presigned URLs limit bypass)
+    
+    // Procesar filesInfo (presigned URLs) - registrar metadata en BD
     if (filesInfo.length > 0) {
       for (const file of filesInfo) {
         try {
