@@ -107,6 +107,57 @@ export async function requireDepartmentHead() {
 }
 
 /**
+ * Permite ver el catálogo de proveedores a cualquier usuario con acceso al dashboard.
+ */
+export async function requireSupplierCatalogAccess() {
+  return requirePermission('dashboard', 'access');
+}
+
+/**
+ * Permite gestionar proveedores solo a:
+ * - Administradores del sistema
+ * - Jefes de departamento de Dirección
+ */
+export async function requireSupplierManagement() {
+  const { error, session } = await requireAuth();
+
+  if (error) {
+    return { error, session: null };
+  }
+
+  if (session!.role === 'admin') {
+    return { error: null, session };
+  }
+
+  const { data: userData, error: userError } = await supabaseAdmin
+    .from('users')
+    .select(`
+      is_department_head,
+      department:departments(code, name)
+    `)
+    .eq('id', session!.userId)
+    .single();
+
+  const department = Array.isArray(userData?.department) ? userData?.department[0] : userData?.department;
+  const departmentCode = (department?.code || '').toLowerCase();
+  const departmentName = (department?.name || '').toLowerCase();
+  const isDirectionDepartment = departmentCode === 'direccion' || departmentName.includes('direccion');
+  const isDirectionManagement = Boolean(userData?.is_department_head) && isDirectionDepartment;
+
+  if (userError || !isDirectionManagement) {
+    return {
+      error: NextResponse.json(
+        { error: 'Esta acción solo está disponible para administradores y gerencias de Dirección' },
+        { status: 403 }
+      ),
+      session: null,
+    };
+  }
+
+  return { error: null, session };
+}
+
+/**
  * Helper para obtener usuario con verificación de autenticación
  */
 export async function getAuthenticatedUser() {

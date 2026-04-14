@@ -16,20 +16,18 @@ interface Supplier {
 }
 
 export default function ProveedoresPage() {
-  const { user, loading, isDepartmentHead } = useRequireAuth();
+  const { user, loading } = useRequireAuth();
   const { success, error: toastError } = useToast();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const canManageSuppliers = Boolean(user?.can_manage_suppliers);
 
   useEffect(() => {
-    if (user && isDepartmentHead) {
+    if (user) {
       fetchSuppliers();
-    } else if (user && !isDepartmentHead) {
-      // Si no es admin y ya cargó, redirigir o mostrar error
-      setLoadingData(false);
     }
-  }, [user, isDepartmentHead]);
+  }, [user]);
 
   const fetchSuppliers = async (search?: string) => {
     try {
@@ -86,21 +84,6 @@ export default function ProveedoresPage() {
     );
   }
 
-  if (!isDepartmentHead) {
-    return (
-      <div className="p-6 flex flex-col items-center justify-center h-[60vh] text-center">
-        <svg className="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-        </svg>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Acceso Denegado</h2>
-        <p className="text-gray-500">Solo los jefes de departamento pueden ver esta sección.</p>
-        <Link href="/dashboard" className="mt-6 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
-          Volver al Inicio
-        </Link>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
@@ -109,15 +92,17 @@ export default function ProveedoresPage() {
           <h1 className="text-2xl font-bold text-gray-900">Directorio de Proveedores</h1>
           <p className="text-sm text-gray-500">Gestiona los proveedores autorizados del sistema</p>
         </div>
-        <Link
-          href="/dashboard/proveedores/crear"
-          className="inline-flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors shadow-sm font-medium"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Nuevo Proveedor
-        </Link>
+        {canManageSuppliers && (
+          <Link
+            href="/dashboard/proveedores/crear"
+            className="inline-flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors shadow-sm font-medium"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Nuevo Proveedor
+          </Link>
+        )}
       </div>
 
       {/* Buscador y Tabla */}
@@ -139,7 +124,7 @@ export default function ProveedoresPage() {
             </div>
             <button 
               type="submit"
-              className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors font-medium shadow-sm transition"
+              className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors font-medium shadow-sm"
             >
               Buscar
             </button>
@@ -190,9 +175,11 @@ export default function ProveedoresPage() {
                   <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     Contacto
                   </th>
-                  <th scope="col" className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Acciones
-                  </th>
+                  {canManageSuppliers && (
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Acciones
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -221,32 +208,34 @@ export default function ProveedoresPage() {
                       <div>{supplier.contact || 'Sin contacto directo'}</div>
                       <div className="text-xs">{supplier.phone}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end gap-3">
-                        {/* 
-                          Botón de edición deshabilitado temporalmente si no hacemos la vista, 
-                          pero podemos hacerla pronto.
-                        */}
-                        <Link 
-                          href={`/dashboard/proveedores/${supplier.id}/editar`}
-                          className="text-gray-400 hover:text-blue-600 transition-colors"
-                          title="Editar"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </Link>
-                        <button
-                          onClick={() => handleDelete(supplier.id, supplier.commercial_name)}
-                          className="text-gray-400 hover:text-red-600 transition-colors"
-                          title="Eliminar"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
+                    {canManageSuppliers && (
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        <div className="flex items-center justify-end gap-3">
+                          {/* 
+                            Botón de edición deshabilitado temporalmente si no hacemos la vista, 
+                            pero podemos hacerla pronto.
+                          */}
+                          <Link 
+                            href={`/dashboard/proveedores/${supplier.id}/editar`}
+                            className="text-gray-400 hover:text-blue-600 transition-colors"
+                            title="Editar"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </Link>
+                          <button
+                            onClick={() => handleDelete(supplier.id, supplier.commercial_name)}
+                            className="text-gray-400 hover:text-red-600 transition-colors"
+                            title="Eliminar"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

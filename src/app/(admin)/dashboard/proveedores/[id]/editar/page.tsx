@@ -153,17 +153,17 @@ export default function EditarProveedorPage({
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Categoría *</label>
-              <input type="text" {...register('category')} className={`w-full px-4 py-2 rounded-lg border focus:ring-2 outline-none ${errors.category ? 'border-red-300' : 'border-gray-300 focus:border-red-500'}`} />
+              <input type="text" {...register('category')} className={`w-full px-4 py-2 text-gray-900 rounded-lg border focus:ring-2 outline-none ${errors.category ? 'border-red-300' : 'border-gray-300 focus:border-red-500'}`} />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Banco *</label>
-              <input type="text" {...register('bank')} className={`w-full px-4 py-2 rounded-lg border focus:ring-2 outline-none ${errors.bank ? 'border-red-300' : 'border-gray-300 focus:border-red-500'}`} />
+              <input type="text" {...register('bank')} className={`w-full px-4 py-2 text-gray-900 rounded-lg border focus:ring-2 outline-none ${errors.bank ? 'border-red-300' : 'border-gray-300 focus:border-red-500'}`} />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">CLABE Interbancaria *</label>
-              <input type="text" maxLength={18} {...register('clabe')} className={`w-full px-4 py-2 rounded-lg border focus:ring-2 outline-none ${errors.clabe ? 'border-red-300' : 'border-gray-300 focus:border-red-500'}`} />
+              <input type="text" maxLength={18} {...register('clabe')} className={`w-full px-4 py-2 text-gray-900 rounded-lg border focus:ring-2 outline-none ${errors.clabe ? 'border-red-300' : 'border-gray-300 focus:border-red-500'}`} />
             </div>
 
             <div>

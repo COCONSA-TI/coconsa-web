@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireDepartmentHead } from '@/lib/api-auth';
+import { requireSupplierCatalogAccess, requireSupplierManagement } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { z } from 'zod';
 
@@ -17,7 +17,7 @@ const supplierSchema = z.object({
 });
 
 export async function GET(request: Request) {
-  const { error: authError } = await requireDepartmentHead();
+  const { error: authError } = await requireSupplierCatalogAccess();
   if (authError) return authError;
 
   const { searchParams } = new URL(request.url);
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { error: authError } = await requireDepartmentHead();
+  const { error: authError } = await requireSupplierManagement();
   if (authError) return authError;
 
   try {
