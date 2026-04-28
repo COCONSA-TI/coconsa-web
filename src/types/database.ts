@@ -274,6 +274,7 @@ export interface Order {
   is_urgent: boolean;
   urgency_justification: string | null;
   is_definitive_rejection: boolean;
+  payment_proof_url: string | null;
 }
 
 export interface OrderApproval {
