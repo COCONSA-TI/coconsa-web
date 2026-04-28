@@ -89,15 +89,13 @@ async function createNeedsListApprovalsServer(
 
   const approvalsToCreate = [];
 
-  // Buscar departamentos por código (sin filtrar por approval_order, 
-  // ya que esos valores corresponden al flujo de órdenes de compra, no al de listas)
-  const contabilidad = departments.find((d: Department) => d.code === 'contabilidad');
-  const contraloria = departments.find((d: Department) => d.code === 'contraloria');
-
   if (isUrgent && isApplicantDeptHead) {
     // LISTA URGENTE: Solo jefes de departamento pueden crear urgentes
     // Flujo urgente: Contabilidad (2) → Contraloría (3)
     // Se salta: Gerencia (1)
+    
+    const contabilidad = departments.find((d: Department) => d.code === 'contabilidad' && d.approval_order === 2);
+    const contraloria = departments.find((d: Department) => d.code === 'contraloria' && d.approval_order === 3);
 
     if (contabilidad) {
       approvalsToCreate.push({
@@ -119,28 +117,30 @@ async function createNeedsListApprovalsServer(
   } else {
     // LISTA NORMAL: Flujo completo Gerencia → Contabilidad → Contraloría
     const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
+    const applicantApprovalOrder = applicantDept?.approval_order ?? 0;
 
-    // Determinar si el solicitante es de una Gerencia (approval_order = 1 en la DB)
-    const isFromGerencia = applicantDept && applicantDept.approval_order === 1;
-
-    if (isFromGerencia) {
-      // El solicitante es de una Gerencia
+    if (applicantApprovalOrder === 1) {
+      // El solicitante es de una Gerencia (approval_order = 1)
       // Flujo: Gerencia (1) → Contabilidad (2) → Contraloría (3)
 
       // 1. Aprobación del departamento del solicitante (gerencia)
-      approvalsToCreate.push({
-        needs_list_id: needsListId,
-        department_id: applicantDept.id,
-        status: isApplicantDeptHead ? 'approved' : 'pending',
-        approval_order: 1,
-        ...(isApplicantDeptHead && {
-          approver_id: applicantId,
-          approved_at: new Date().toISOString(),
-          comments: 'Auto-aprobado por jefe de departamento',
-        }),
-      });
+      if (applicantDept) {
+        // Si el solicitante ES el jefe de su departamento, auto-aprobar su nivel
+        approvalsToCreate.push({
+          needs_list_id: needsListId,
+          department_id: applicantDept.id,
+          status: isApplicantDeptHead ? 'approved' : 'pending',
+          approval_order: 1,
+          ...(isApplicantDeptHead && {
+            approver_id: applicantId,
+            approved_at: new Date().toISOString(),
+            comments: 'Auto-aprobado por jefe de departamento',
+          }),
+        });
+      }
 
-      // 2. Contabilidad (needs list order = 2)
+      // 2. Contabilidad (order=2)
+      const contabilidad = departments.find((d: Department) => d.code === 'contabilidad' && d.approval_order === 2);
       if (contabilidad) {
         approvalsToCreate.push({
           needs_list_id: needsListId,
@@ -150,7 +150,8 @@ async function createNeedsListApprovalsServer(
         });
       }
 
-      // 3. Contraloría (needs list order = 3)
+      // 3. Contraloría (order=3)
+      const contraloria = departments.find((d: Department) => d.code === 'contraloria' && d.approval_order === 3);
       if (contraloria) {
         approvalsToCreate.push({
           needs_list_id: needsListId,
@@ -160,11 +161,14 @@ async function createNeedsListApprovalsServer(
         });
       }
     } else {
-      // El solicitante NO es de una Gerencia (ej: Contabilidad, Contraloría, otro)
-      // Solo agregar los pasos que están "arriba" del solicitante en el flujo de necesidades
+      // El solicitante es de Contabilidad, Contraloría u otro departamento
+      // Flujo simplificado según el departamento
       
-      // Si el solicitante NO es de Contabilidad, agregar Contabilidad
-      if (contabilidad && applicantDept?.id !== contabilidad.id) {
+      const contabilidad = departments.find((d: Department) => d.code === 'contabilidad' && d.approval_order === 2);
+      const contraloria = departments.find((d: Department) => d.code === 'contraloria' && d.approval_order === 3);
+
+      // Agregar departamentos superiores al del solicitante
+      if (applicantApprovalOrder < 2 && contabilidad) {
         approvalsToCreate.push({
           needs_list_id: needsListId,
           department_id: contabilidad.id,
@@ -173,8 +177,7 @@ async function createNeedsListApprovalsServer(
         });
       }
 
-      // Si el solicitante NO es de Contraloría, agregar Contraloría
-      if (contraloria && applicantDept?.id !== contraloria.id) {
+      if (applicantApprovalOrder < 3 && contraloria) {
         approvalsToCreate.push({
           needs_list_id: needsListId,
           department_id: contraloria.id,

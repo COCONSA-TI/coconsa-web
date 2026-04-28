@@ -145,13 +145,10 @@ async function recreateNeedsListApprovals(
 
   const approvalsToCreate = [];
 
-  // Buscar departamentos por código (sin filtrar por approval_order,
-  // ya que esos valores corresponden al flujo de órdenes de compra, no al de listas)
-  const contabilidad = departments.find((d: Department) => d.code === 'contabilidad');
-  const contraloria = departments.find((d: Department) => d.code === 'contraloria');
-
   if (isUrgent && isApplicantDeptHead) {
     // LISTA URGENTE: Contabilidad (2) → Contraloría (3)
+    const contabilidad = departments.find((d: Department) => d.code === 'contabilidad' && d.approval_order === 2);
+    const contraloria = departments.find((d: Department) => d.code === 'contraloria' && d.approval_order === 3);
 
     if (contabilidad) {
       approvalsToCreate.push({
@@ -173,21 +170,24 @@ async function recreateNeedsListApprovals(
   } else {
     // LISTA NORMAL: Gerencia (1) → Contabilidad (2) → Contraloría (3)
     const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
-    const isFromGerencia = applicantDept && applicantDept.approval_order === 1;
+    const applicantApprovalOrder = applicantDept?.approval_order ?? 0;
 
-    if (isFromGerencia) {
+    if (applicantApprovalOrder === 1) {
       // Gerencia
-      approvalsToCreate.push({
-        needs_list_id: needsListId,
-        department_id: applicantDept.id,
-        status: isApplicantDeptHead ? 'approved' : 'pending',
-        approval_order: 1,
-        approver_id: isApplicantDeptHead ? applicantId : null,
-        approved_at: isApplicantDeptHead ? new Date().toISOString() : null,
-        comments: isApplicantDeptHead ? 'Auto-aprobado (solicitante es jefe de departamento)' : null,
-      });
+      if (applicantDept) {
+        approvalsToCreate.push({
+          needs_list_id: needsListId,
+          department_id: applicantDept.id,
+          status: isApplicantDeptHead ? 'approved' : 'pending',
+          approval_order: 1,
+          approver_id: isApplicantDeptHead ? applicantId : null,
+          approved_at: isApplicantDeptHead ? new Date().toISOString() : null,
+          comments: isApplicantDeptHead ? 'Auto-aprobado (solicitante es jefe de departamento)' : null,
+        });
+      }
 
       // Contabilidad
+      const contabilidad = departments.find((d: Department) => d.code === 'contabilidad' && d.approval_order === 2);
       if (contabilidad) {
         approvalsToCreate.push({
           needs_list_id: needsListId,
@@ -198,6 +198,7 @@ async function recreateNeedsListApprovals(
       }
 
       // Contraloría
+      const contraloria = departments.find((d: Department) => d.code === 'contraloria' && d.approval_order === 3);
       if (contraloria) {
         approvalsToCreate.push({
           needs_list_id: needsListId,
@@ -207,8 +208,11 @@ async function recreateNeedsListApprovals(
         });
       }
     } else {
-      // Solicitante NO es de Gerencia
-      if (contabilidad && applicantDept?.id !== contabilidad.id) {
+      // Solicitante de Contabilidad, Contraloría u otros
+      const contabilidad = departments.find((d: Department) => d.code === 'contabilidad' && d.approval_order === 2);
+      const contraloria = departments.find((d: Department) => d.code === 'contraloria' && d.approval_order === 3);
+
+      if (applicantApprovalOrder < 2 && contabilidad) {
         approvalsToCreate.push({
           needs_list_id: needsListId,
           department_id: contabilidad.id,
@@ -217,7 +221,7 @@ async function recreateNeedsListApprovals(
         });
       }
 
-      if (contraloria && applicantDept?.id !== contraloria.id) {
+      if (applicantApprovalOrder < 3 && contraloria) {
         approvalsToCreate.push({
           needs_list_id: needsListId,
           department_id: contraloria.id,
