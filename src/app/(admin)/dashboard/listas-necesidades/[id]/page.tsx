@@ -538,20 +538,15 @@ export default function ListaNecesidadesDetallePage() {
         )}
 
         {/* Flujo de Aprobaciones */}
-        {approvals.length > 0 && (
+        {needsList.status !== 'rejected' && approvals.length > 0 && (
           <div className="bg-white rounded-xl shadow p-5">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-semibold text-gray-900">Flujo de Aprobaciones</h2>
-              <span className="text-xs text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full">
-                {approvals.filter(a => a.status === 'approved').length} de {approvals.length} aprobaciones
-              </span>
-            </div>
+            <h2 className="text-lg font-semibold text-gray-900 mb-5">Flujo de Aprobaciones</h2>
             
             <div className="relative">
-              {/* Progress line - Desktop */}
+              {/* Linea de progreso - Desktop */}
               <div className="hidden sm:block absolute top-5 left-8 right-8 h-0.5 bg-gray-200"></div>
               <div 
-                className="hidden sm:block absolute top-5 left-8 h-0.5 bg-red-500 transition-all duration-700 ease-out"
+                className="hidden sm:block absolute top-5 left-8 h-0.5 bg-blue-500 transition-all duration-500"
                 style={{ 
                   width: approvals.length > 1
                     ? `calc(${(Math.min(currentApprovalStep, approvals.length - 1) / (approvals.length - 1)) * 100}% - 64px)`
@@ -570,15 +565,15 @@ export default function ListaNecesidadesDetallePage() {
 
                   return (
                     <div key={approval.id} className="flex sm:flex-col items-center sm:items-center gap-3 sm:gap-0 sm:flex-1 relative z-10">
-                      {/* Step circle */}
+                      {/* Circulo del step */}
                       <div
                         className={`
                           w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0
-                          transition-all duration-300 shadow-sm
-                          ${isCompleted ? 'bg-green-500 text-white shadow-green-200' : ''}
-                          ${isRejected ? 'bg-red-500 text-white shadow-red-200' : ''}
-                          ${isActive && isPending ? 'bg-red-600 text-white ring-4 ring-red-100 shadow-red-200' : ''}
-                          ${isPending && !isActive ? 'bg-gray-100 text-gray-400 border-2 border-gray-200' : ''}
+                          transition-all duration-300
+                          ${isCompleted ? 'bg-green-500 text-white' : ''}
+                          ${isRejected ? 'bg-red-500 text-white' : ''}
+                          ${isActive && isPending ? 'bg-blue-600 text-white ring-4 ring-blue-100' : ''}
+                          ${isPending && !isActive ? 'bg-gray-200 text-gray-400' : ''}
                         `}
                       >
                         {renderApprovalIcon(iconType)}
@@ -586,27 +581,27 @@ export default function ListaNecesidadesDetallePage() {
                       
                       {/* Info */}
                       <div className="sm:mt-3 sm:text-center flex-1 sm:flex-initial">
-                        <span className={`text-sm font-medium block ${isCompleted ? 'text-green-700' : isActive ? 'text-red-700' : 'text-gray-400'}`}>
+                        <span className={`text-sm font-medium block ${isCompleted || isActive ? 'text-gray-900' : 'text-gray-400'}`}>
                           {approval.department?.name || 'Departamento'}
                         </span>
                         
                         {isCompleted && approval.approver && (
-                          <div className="text-xs text-green-600 mt-0.5">
-                            <span className="font-medium">{approval.approver.full_name}</span>
-                            <span className="hidden sm:inline"> · </span>
-                            <span className="block sm:inline text-gray-400">{new Date(approval.approved_at!).toLocaleDateString('es-MX')}</span>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            <span>{approval.approver.full_name}</span>
+                            <span className="hidden sm:inline"> - </span>
+                            <span className="block sm:inline">{new Date(approval.approved_at!).toLocaleDateString('es-MX')}</span>
                           </div>
                         )}
                         
                         {isRejected && approval.approver && (
-                          <div className="text-xs text-red-600 mt-0.5 font-medium">
-                            Rechazado por {approval.approver.full_name}
+                          <div className="text-xs text-red-600 mt-0.5">
+                            <span>Rechazado por {approval.approver.full_name}</span>
                           </div>
                         )}
                         
                         {isActive && isPending && (
-                          <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium mt-0.5">
-                            <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
+                          <span className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium mt-0.5">
+                            <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></span>
                             En espera
                           </span>
                         )}
