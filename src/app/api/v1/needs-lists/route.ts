@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/api-auth";
+import { requireAuth } from "@/lib/api-auth";
 import { getSession } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
@@ -10,7 +10,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 export async function GET(request: Request) {
   try {
     // Verificar autenticación
-    const { error: authError } = await requireAdmin();
+    const { error: authError } = await requireAuth();
     if (authError) return authError;
 
     const session = await getSession();
