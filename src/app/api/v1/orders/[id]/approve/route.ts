@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase/server';
 import { getSession } from '@/lib/auth';
 import { OrderApprovalWithRelations, ApprovalStatus } from '@/types/database';
 
-const ORDER_ATTACHMENTS_BUCKET = 'order-attachments';
+const ORDER_ATTACHMENTS_BUCKET = 'order-attachment';
 
 export async function POST(
   request: Request,
