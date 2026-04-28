@@ -161,22 +161,24 @@ export default function NeedsListsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Listas de Necesidades</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Gestiona tus solicitudes de reembolsos y anticipos
-          </p>
+      <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-xl shadow-lg p-6 text-white">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold">Listas de Necesidades</h1>
+            <p className="text-red-100 text-sm mt-1">
+              Gestiona las listas de necesidades
+            </p>
+          </div>
+          <Link
+            href="/dashboard/listas-necesidades/crear"
+            className="inline-flex items-center justify-center gap-2 bg-white text-red-600 px-5 py-2.5 rounded-lg font-medium hover:bg-red-50 transition-colors shadow-sm"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span>Nueva Lista</span>
+          </Link>
         </div>
-        <Link
-          href="/dashboard/listas-necesidades/crear"
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-all shadow-sm hover:shadow font-medium"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Nueva Lista
-        </Link>
       </div>
 
       {/* Stats Cards */}
