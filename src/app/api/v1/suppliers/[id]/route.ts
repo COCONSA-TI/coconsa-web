@@ -13,6 +13,7 @@ const supplierSchema = z.object({
   bank: z.string().min(2, 'El nombre del banco es requerido'),
   contact: z.string().nullable().optional(),
   category: z.string().min(2, 'La categoría es requerida'),
+  cover_image_url: z.string().nullable().optional(),
 });
 
 export async function GET(

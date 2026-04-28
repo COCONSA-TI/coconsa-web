@@ -26,9 +26,11 @@ type SupplierFormData = z.infer<typeof supplierSchema>;
 
 export default function CrearProveedorPage() {
   const { isDepartmentHead, loading } = useRequireAuth();
-  const { success, error: toastError } = useToast();
+  const { success, error: toastError, warning } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
 
   const {
     register,
@@ -49,15 +51,63 @@ export default function CrearProveedorPage() {
     }
   });
 
+  const handleCoverFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (file.size > 10 * 1024 * 1024) {
+      warning('Archivo muy grande', 'La carátula no puede exceder 10MB');
+      return;
+    }
+
+    setCoverFile(file);
+    // Preview
+    const reader = new FileReader();
+    reader.onloadend = () => setCoverPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
   const onSubmit = async (data: SupplierFormData) => {
+    if (!coverFile) {
+      toastError('Campo requerido', 'Debes adjuntar la carátula del proveedor');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
-      
+
+      // 1. Upload cover via presigned URL
+      const urlRes = await fetch('/api/v1/storage/signed-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: coverFile.name,
+          contentType: coverFile.type,
+          bucket: 'Coconsa',
+          folder: 'suppliers/covers',
+        }),
+      });
+
+      if (!urlRes.ok) throw new Error('Error obteniendo URL de subida');
+      const urlData = await urlRes.json();
+
+      const uploadRes = await fetch(urlData.signedUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': coverFile.type },
+        body: coverFile,
+      });
+
+      if (!uploadRes.ok) throw new Error('Error subiendo la carátula');
+
+      // 2. Create supplier with cover_image_url
       const response = await fetch('/api/v1/suppliers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Enviamos formato normalizado, asegurando RFC mayúsculas
-        body: JSON.stringify({ ...data, rfc: data.rfc.toUpperCase() }),
+        body: JSON.stringify({ 
+          ...data, 
+          rfc: data.rfc.toUpperCase(),
+          cover_image_url: urlData.publicUrl,
+        }),
       });
 
       const result = await response.json();
@@ -65,7 +115,7 @@ export default function CrearProveedorPage() {
       if (response.ok) {
         success('Éxito', result.message || 'Proveedor guardado correctamente');
         router.push('/dashboard/proveedores');
-        router.refresh(); // Forzar actualización de listado
+        router.refresh();
       } else {
         if (result.details) {
           toastError('Error', result.details.join(', '));
@@ -74,7 +124,7 @@ export default function CrearProveedorPage() {
         }
       }
     } catch (error) {
-      toastError('Error', 'Ocurrió un error inesperado de conexión');
+      toastError('Error', error instanceof Error ? error.message : 'Ocurrió un error inesperado');
     } finally {
       setIsSubmitting(false);
     }
@@ -91,6 +141,11 @@ export default function CrearProveedorPage() {
       </div>
     );
   }
+
+  const inputClass = (hasError: boolean) =>
+    `w-full px-4 py-2 text-gray-900 bg-white rounded-lg border focus:ring-2 outline-none transition-all ${
+      hasError ? 'border-red-300 focus:ring-red-200' : 'border-gray-300 focus:ring-red-100 focus:border-red-500'
+    }`;
 
   return (
     <div className="max-w-4xl mx-auto p-6">
@@ -109,6 +164,58 @@ export default function CrearProveedorPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-6">
           
+          {/* Carátula */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Carátula del Proveedor *</label>
+            <div className={`border-2 border-dashed rounded-xl p-6 transition-colors ${
+              coverPreview ? 'border-green-300 bg-green-50' : 'border-gray-300 hover:border-red-400'
+            }`}>
+              <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={handleCoverFileChange}
+                className="hidden"
+                id="cover-upload"
+              />
+              {coverPreview ? (
+                <div className="flex items-center gap-4">
+                  {coverFile?.type.startsWith('image/') ? (
+                    <img src={coverPreview} alt="Carátula" className="w-20 h-20 object-cover rounded-lg border border-gray-200" />
+                  ) : (
+                    <div className="w-20 h-20 rounded-lg bg-red-100 flex items-center justify-center">
+                      <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{coverFile?.name}</p>
+                    <p className="text-xs text-gray-500">{((coverFile?.size || 0) / 1024).toFixed(1)} KB</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setCoverFile(null); setCoverPreview(null); }}
+                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ) : (
+                <label htmlFor="cover-upload" className="flex flex-col items-center cursor-pointer">
+                  <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-3">
+                    <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                  </div>
+                  <span className="text-sm font-medium text-gray-700">Haz clic para subir la carátula</span>
+                  <span className="text-xs text-gray-500 mt-1">PDF o imágenes · Máx. 10MB</span>
+                </label>
+              )}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
             {/* Nombre Comercial */}
@@ -118,7 +225,7 @@ export default function CrearProveedorPage() {
                 type="text" 
                 {...register('commercial_name')}
                 placeholder="Ej. Comercializadora Estrella"
-                className={`w-full px-4 py-2 text-gray-900 bg-white rounded-lg border focus:ring-2 outline-none transition-all ${errors.commercial_name ? 'border-red-300 focus:ring-red-200' : 'border-gray-300 focus:ring-red-100 focus:border-red-500'}`}
+                className={inputClass(!!errors.commercial_name)}
               />
               {errors.commercial_name && <p className="mt-1 text-sm text-red-600">{errors.commercial_name.message}</p>}
             </div>
@@ -130,7 +237,7 @@ export default function CrearProveedorPage() {
                 type="text" 
                 {...register('social_reason')}
                 placeholder="Ej. Comercializadora S.A. de C.V."
-                className={`w-full px-4 py-2 text-gray-900 bg-white rounded-lg border focus:ring-2 outline-none transition-all ${errors.social_reason ? 'border-red-300 focus:ring-red-200' : 'border-gray-300 focus:ring-red-100 focus:border-red-500'}`}
+                className={inputClass(!!errors.social_reason)}
               />
               {errors.social_reason && <p className="mt-1 text-sm text-red-600">{errors.social_reason.message}</p>}
             </div>
@@ -142,7 +249,7 @@ export default function CrearProveedorPage() {
                 type="text" 
                 {...register('rfc')}
                 placeholder="Ej. XAXX010101000"
-                className={`w-full px-4 py-2 text-gray-900 bg-white rounded-lg border focus:ring-2 outline-none transition-all ${errors.rfc ? 'border-red-300 focus:ring-red-200' : 'border-gray-300 focus:ring-red-100 focus:border-red-500'} uppercase`}
+                className={`${inputClass(!!errors.rfc)} uppercase`}
               />
               <p className="mt-1 text-xs text-gray-500">Nota: Si el RFC ya existe, este formulario actualizará los datos.</p>
               {errors.rfc && <p className="mt-1 text-sm text-red-600">{errors.rfc.message}</p>}
@@ -155,7 +262,7 @@ export default function CrearProveedorPage() {
                 type="text" 
                 {...register('category')}
                 placeholder="Ej. Materiales, Mantenimiento..."
-                className={`w-full px-4 py-2 text-gray-900 bg-white rounded-lg border focus:ring-2 outline-none transition-all ${errors.category ? 'border-red-300 focus:ring-red-200' : 'border-gray-300 focus:ring-red-100 focus:border-red-500'}`}
+                className={inputClass(!!errors.category)}
               />
               {errors.category && <p className="mt-1 text-sm text-red-600">{errors.category.message}</p>}
             </div>
@@ -167,7 +274,7 @@ export default function CrearProveedorPage() {
                 type="text" 
                 {...register('bank')}
                 placeholder="Ej. BBVA"
-                className={`w-full px-4 py-2 text-gray-900 bg-white rounded-lg border focus:ring-2 outline-none transition-all ${errors.bank ? 'border-red-300 focus:ring-red-200' : 'border-gray-300 focus:ring-red-100 focus:border-red-500'}`}
+                className={inputClass(!!errors.bank)}
               />
               {errors.bank && <p className="mt-1 text-sm text-red-600">{errors.bank.message}</p>}
             </div>
@@ -180,7 +287,7 @@ export default function CrearProveedorPage() {
                 maxLength={18}
                 {...register('clabe')}
                 placeholder="18 dígitos"
-                className={`w-full px-4 py-2 text-gray-900 bg-white rounded-lg border focus:ring-2 outline-none transition-all ${errors.clabe ? 'border-red-300 focus:ring-red-200' : 'border-gray-300 focus:ring-red-100 focus:border-red-500'}`}
+                className={inputClass(!!errors.clabe)}
               />
               {errors.clabe && <p className="mt-1 text-sm text-red-600">{errors.clabe.message}</p>}
             </div>
@@ -192,7 +299,7 @@ export default function CrearProveedorPage() {
                 type="text" 
                 {...register('phone')}
                 placeholder="Ej. 55 1234 5678"
-                className="w-full px-4 py-2 text-gray-900 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-red-100 focus:border-red-500 outline-none transition-all"
+                className={inputClass(false)}
               />
             </div>
 
@@ -203,7 +310,7 @@ export default function CrearProveedorPage() {
                 type="text" 
                 {...register('contact')}
                 placeholder="Ej. Juan Pérez"
-                className="w-full px-4 py-2 text-gray-900 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-red-100 focus:border-red-500 outline-none transition-all"
+                className={inputClass(false)}
               />
             </div>
             
@@ -214,7 +321,7 @@ export default function CrearProveedorPage() {
                 {...register('address')}
                 rows={3}
                 placeholder="Ej. Calle Principal #123, Colonia Centro..."
-                className="w-full px-4 py-2 text-gray-900 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-red-100 focus:border-red-500 outline-none transition-all"
+                className={inputClass(false)}
               />
             </div>
 
