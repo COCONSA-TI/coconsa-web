@@ -35,6 +35,7 @@ type DBOrderDetail = {
   is_urgent: boolean;
   urgency_justification: string | null;
   is_definitive_rejection: boolean;
+  payment_proof_url: string | null;
 };
 
 // Función para recrear aprobaciones
@@ -174,7 +175,7 @@ export async function GET(
     // Obtener detalles de la orden
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
-      .select('id, created_at, store_id, supplier_id, total, currency, status, applicant_id, justification, justification_prove, retention, payment_type, tax_type, iva_percentage, iva, subtotal, items, is_urgent, urgency_justification, is_definitive_rejection')
+      .select('*')
       .eq('id', orderId)
       .single();
 
@@ -185,7 +186,7 @@ export async function GET(
       );
     }
 
-    const typedOrder = order as DBOrderDetail;
+    const typedOrder = order as DBOrderDetail & { payment_proof_url?: string | null };
 
     // Obtener datos relacionados
     const { data: store } = await supabaseAdmin
@@ -275,6 +276,7 @@ export async function GET(
       is_urgent: typedOrder.is_urgent || false,
       urgency_justification: typedOrder.urgency_justification,
       is_definitive_rejection: typedOrder.is_definitive_rejection || false,
+      payment_proof_url: typedOrder.payment_proof_url || null,
       current_department_name: currentDepartmentName,
       items: itemsArray.map((item, index: number) => ({
         id: `${typedOrder.id}-${index}`,
