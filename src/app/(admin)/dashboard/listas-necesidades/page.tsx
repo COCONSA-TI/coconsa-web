@@ -16,6 +16,7 @@ interface NeedsList {
   currentDepartment: string | null;
   canApprove: boolean;
   isOwnList: boolean;
+  my_department_status: string | null;
   applicant: {
     full_name: string;
   };
@@ -189,6 +190,26 @@ export default function NeedsListsPage() {
           >
             Aprobadas
           </button>
+          <button
+            onClick={() => setFilterStatus('in_progress')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              filterStatus === 'in_progress'
+                ? 'bg-red-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            En Proceso
+          </button>
+          <button
+            onClick={() => setFilterStatus('rejected')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              filterStatus === 'rejected'
+                ? 'bg-red-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Rechazadas
+          </button>
         </div>
       </div>
 
@@ -240,7 +261,9 @@ export default function NeedsListsPage() {
                         STATUS_COLORS[list.status as keyof typeof STATUS_COLORS] || STATUS_COLORS.pending
                       }`}
                     >
-                      {STATUS_LABELS[list.status as keyof typeof STATUS_LABELS] || list.status}
+                      {(list.status === 'pending' || list.status === 'in_progress') && list.currentDepartment
+                        ? `${STATUS_LABELS[list.status as keyof typeof STATUS_LABELS] || list.status} | ${list.currentDepartment}`
+                        : STATUS_LABELS[list.status as keyof typeof STATUS_LABELS] || list.status}
                     </span>
                   </div>
 
@@ -280,8 +303,25 @@ export default function NeedsListsPage() {
                       {formatCurrency(list.total, list.currency)}
                     </p>
                     {list.canApprove && (
-                      <span className="inline-block mt-1 px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded">
-                        Pendiente de tu aprobación
+                      <span className="inline-flex items-center gap-1 mt-1 px-2 py-1 bg-orange-100 text-orange-700 text-xs font-medium rounded">
+                        <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse"></span>
+                        Requiere tu aprobación
+                      </span>
+                    )}
+                    {!list.canApprove && list.my_department_status === 'approved' && (
+                      <span className="inline-flex items-center gap-1 mt-1 px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Ya aprobaste
+                      </span>
+                    )}
+                    {!list.canApprove && list.my_department_status === 'rejected' && (
+                      <span className="inline-flex items-center gap-1 mt-1 px-2 py-1 bg-red-100 text-red-700 text-xs font-medium rounded">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                        Ya rechazaste
                       </span>
                     )}
                   </div>
