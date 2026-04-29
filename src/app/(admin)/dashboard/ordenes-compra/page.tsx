@@ -22,6 +22,7 @@ interface Order {
   is_definitive_rejection: boolean;
   my_department_status?: 'pending' | 'approved' | 'rejected' | null;
   current_department_name?: string | null;
+  machine_name?: string | null;
 }
 
 const statusConfig: Record<OrderStatus, { label: string; className: string; iconBg: string }> = {
@@ -171,7 +172,8 @@ function OrdenesCompraContent() {
         const matchesId = order.id.toString().toLowerCase().includes(search);
         const matchesApplicant = order.applicant_name.toLowerCase().includes(search);
         const matchesStore = order.store_name.toLowerCase().includes(search);
-        if (!matchesId && !matchesApplicant && !matchesStore) {
+        const matchesMachine = order.machine_name ? order.machine_name.toLowerCase().includes(search) : false;
+        if (!matchesId && !matchesApplicant && !matchesStore && !matchesMachine) {
           return false;
         }
       }
@@ -391,7 +393,7 @@ function OrdenesCompraContent() {
             </svg>
             <input
               type="text"
-              placeholder="Buscar por ID, solicitante o almacén..."
+              placeholder="Buscar por ID, solicitante o centro de costos..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
@@ -448,17 +450,17 @@ function OrdenesCompraContent() {
                 </select>
               </div>
 
-              {/* Almacén Filter */}
+              {/* Centro de Costos Filter */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
-                  Almacén
+                  Centro de Costos
                 </label>
                 <select
                   value={storeFilter}
                   onChange={(e) => setStoreFilter(e.target.value)}
                   className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-red-500 focus:border-transparent"
                 >
-                  <option value="all">Todos los almacenes</option>
+                  <option value="all">Todos los centros de costos</option>
                   {stores.map(store => (
                     <option key={store} value={store}>{store}</option>
                   ))}
@@ -570,7 +572,7 @@ function OrdenesCompraContent() {
           
           {storeFilter !== "all" && (
             <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
-              Almacén: {storeFilter}
+              Centro de Costos: {storeFilter}
               <button onClick={() => setStoreFilter("all")} className="hover:opacity-70">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -795,7 +797,12 @@ function OrdenesCompraContent() {
                           <span className="text-sm text-gray-900">{order.applicant_name}</span>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-sm text-gray-900">{order.store_name}</span>
+                          <span className="text-sm text-gray-900 block">{order.store_name}</span>
+                          {order.machine_name && (
+                            <span className="text-xs text-gray-500 block mt-0.5">
+                              M: {order.machine_name}
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col">

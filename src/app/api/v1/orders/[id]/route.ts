@@ -186,7 +186,7 @@ export async function GET(
       );
     }
 
-    const typedOrder = order as DBOrderDetail & { payment_proof_url?: string | null };
+    const typedOrder = order as DBOrderDetail & { payment_proof_url?: string | null, machine_id?: number | null };
 
     // Obtener datos relacionados
     const { data: store } = await supabaseAdmin
@@ -206,6 +206,16 @@ export async function GET(
       .select('commercial_name')
       .eq('id', typedOrder.supplier_id)
       .single();
+
+    let machineName: string | null = null;
+    if (typedOrder.machine_id) {
+      const { data: machine } = await supabaseAdmin
+        .from('machines')
+        .select('name')
+        .eq('id', typedOrder.machine_id)
+        .single();
+      machineName = machine?.name || null;
+    }
 
     // Obtener las aprobaciones pendientes para saber en qué departamento está la orden (la de menor approval_order)
     const { data: pendingApprovals } = await supabaseAdmin
@@ -277,6 +287,8 @@ export async function GET(
       urgency_justification: typedOrder.urgency_justification,
       is_definitive_rejection: typedOrder.is_definitive_rejection || false,
       payment_proof_url: typedOrder.payment_proof_url || null,
+      machine_id: typedOrder.machine_id || null,
+      machine_name: machineName,
       current_department_name: currentDepartmentName,
       items: itemsArray.map((item, index: number) => ({
         id: `${typedOrder.id}-${index}`,

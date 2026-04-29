@@ -92,9 +92,8 @@ function SearchableSupplierSelect({
             setIsOpen(true);
             setTimeout(() => inputRef.current?.focus(), 0);
           }}
-          className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-left flex items-center justify-between ${ringColor} focus:ring-2 focus:border-transparent ${
-            value ? "text-gray-900" : "text-gray-500"
-          }`}
+          className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-left flex items-center justify-between ${ringColor} focus:ring-2 focus:border-transparent ${value ? "text-gray-900" : "text-gray-500"
+            }`}
         >
           <span className="truncate">{value || "Selecciona proveedor"}</span>
           <div className="flex items-center gap-1 flex-shrink-0">
@@ -145,9 +144,8 @@ function SearchableSupplierSelect({
                 key={supplier}
                 type="button"
                 onClick={() => handleSelect(supplier)}
-                className={`w-full px-3 py-2 text-left text-sm hover:bg-blue-50 transition-colors ${
-                  supplier === value ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-900"
-                }`}
+                className={`w-full px-3 py-2 text-left text-sm hover:bg-blue-50 transition-colors ${supplier === value ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-900"
+                  }`}
               >
                 {supplier}
               </button>
@@ -160,7 +158,7 @@ function SearchableSupplierSelect({
 }
 
 export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) {
-  const [currentUser, setCurrentUser] = useState<{name: string, email: string, isDepartmentHead: boolean} | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ name: string, email: string, isDepartmentHead: boolean } | null>(null);
   const [availableStores, setAvailableStores] = useState<string[]>([]);
   const [availableSuppliers, setAvailableSuppliers] = useState<string[]>([]);
   const [availableMachines, setAvailableMachines] = useState<MachineOption[]>([]);
@@ -389,44 +387,44 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     setLoading(true);
     setUploadingFiles(evidenceFiles.length > 0);
 
-      try {
-        const uploadedUrls: string[] = [];
+    try {
+      const uploadedUrls: string[] = [];
 
-        // 1. Subir archivos de evidencia usando Presigned URLs directamente a Supabase (salta límite de 4.5MB Vercel)
-        if (evidenceFiles.length > 0) {
-          for (const file of evidenceFiles) {
-            const urlRes = await fetch('/api/v1/storage/signed-url', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ fileName: file.name, contentType: file.type })
-            });
-            
-            if (!urlRes.ok) throw new Error(`Error obteniendo permiso para subir archivo: ${file.name}`);
-            const urlData = await urlRes.json();
+      // 1. Subir archivos de evidencia usando Presigned URLs directamente a Supabase (salta límite de 4.5MB Vercel)
+      if (evidenceFiles.length > 0) {
+        for (const file of evidenceFiles) {
+          const urlRes = await fetch('/api/v1/storage/signed-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileName: file.name, contentType: file.type })
+          });
 
-            const uploadRes = await fetch(urlData.signedUrl, {
-              method: 'PUT',
-              headers: { 'Content-Type': file.type },
-              body: file
-            });
+          if (!urlRes.ok) throw new Error(`Error obteniendo permiso para subir archivo: ${file.name}`);
+          const urlData = await urlRes.json();
 
-            if (!uploadRes.ok) throw new Error(`Error subiendo el archivo: ${file.name}`);
+          const uploadRes = await fetch(urlData.signedUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type },
+            body: file
+          });
 
-            uploadedUrls.push(urlData.publicUrl);
-          }
+          if (!uploadRes.ok) throw new Error(`Error subiendo el archivo: ${file.name}`);
+
+          uploadedUrls.push(urlData.publicUrl);
         }
+      }
 
-        // 2. Crear la orden (como JSON ligero)
-        const finalOrderPayload = {
-          ...orderData,
-          evidenceUrls: uploadedUrls
-        };
+      // 2. Crear la orden (como JSON ligero)
+      const finalOrderPayload = {
+        ...orderData,
+        evidenceUrls: uploadedUrls
+      };
 
-        const response = await fetch("/api/v1/orders/create", {
-          method: "POST",
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(finalOrderPayload),
-        });
+      const response = await fetch("/api/v1/orders/create", {
+        method: "POST",
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(finalOrderPayload),
+      });
 
       const data = await response.json();
 
@@ -455,7 +453,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
       if (onSubmit) {
         onSubmit(data);
       }
-      
+
       setTimeout(() => setSuccess(false), 5000);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
@@ -798,7 +796,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                 <span className="text-xs text-gray-500 mt-1">Imágenes, PDF, Word, Excel (máx. 50MB por archivo)</span>
               </label>
             </div>
-            
+
             {/* Lista de archivos seleccionados */}
             {evidenceFiles.length > 0 && (
               <div className="mt-3 space-y-2">
@@ -807,10 +805,10 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                   <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded-lg border border-gray-200">
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                       <span className="text-lg">
-                        {file.type.startsWith('image/') ? '🖼️' : 
-                         file.type === 'application/pdf' ? '📄' : 
-                         file.type.includes('word') ? '📝' : 
-                         file.type.includes('excel') || file.type.includes('spreadsheet') ? '📊' : '📎'}
+                        {file.type.startsWith('image/') ? '🖼️' :
+                          file.type === 'application/pdf' ? '📄' :
+                            file.type.includes('word') ? '📝' :
+                              file.type.includes('excel') || file.type.includes('spreadsheet') ? '📊' : '📎'}
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm text-gray-700 truncate">{file.name}</p>
@@ -998,15 +996,14 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
         <button
           type="submit"
           disabled={loading}
-          className={`px-8 py-3 text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-semibold ${
-            formData.is_urgent
+          className={`px-8 py-3 text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-semibold ${formData.is_urgent
               ? 'bg-orange-600 hover:bg-orange-700'
               : 'bg-blue-600 hover:bg-blue-700'
-          }`}
+            }`}
         >
-          {loading 
-            ? (uploadingFiles ? "Subiendo archivos..." : "Creando...") 
-            : formData.is_urgent 
+          {loading
+            ? (uploadingFiles ? "Subiendo archivos..." : "Creando...")
+            : formData.is_urgent
               ? "Crear Orden Urgente"
               : "Crear Orden de Compra"
           }
