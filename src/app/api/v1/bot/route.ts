@@ -152,11 +152,13 @@ export async function POST(request: Request) {
       { data: userData, error: userError },
       { data: stores },
       { data: suppliers },
+      { data: machines },
       body,
     ] = await Promise.all([
       supabaseAdmin.from('users').select('id, full_name').eq('id', session.userId).single(),
       supabaseAdmin.from('stores').select('id, name').order('name'),
       supabaseAdmin.from('suppliers').select('id, commercial_name').order('commercial_name'),
+      supabaseAdmin.from('machines').select('id, name').order('name'),
       request.json(),
     ]);
 
@@ -210,7 +212,8 @@ export async function POST(request: Request) {
         message,
         userData,
         (stores || []) as Store[],
-        (suppliers || []) as Supplier[]
+        (suppliers || []) as Supplier[],
+        (machines || []) as any[]
       );
       botMessage = sanitizeBotResponse(combinedResult.reply ?? "");
       extractedData = combinedResult;
@@ -269,7 +272,8 @@ async function extractOrderDataWithAI(
   userMessage: string,
   userData: UserData,
   stores: Store[],
-  suppliers: Supplier[]
+  suppliers: Supplier[],
+  machines: any[]
 ) {
   try {
     const extractionModel = genAI.getGenerativeModel({ 
@@ -304,12 +308,14 @@ async function extractOrderDataWithAI(
 
       INFORMACIÓN DE CONTEXTO:
       - Solicitante: ${userData.full_name} (ID: ${userData.id})
-      - Almacenes disponibles: ${JSON.stringify(stores.map(s => ({ id: s.id, name: s.name })))}
+      - Almacenes (Centros de Costos) disponibles: ${JSON.stringify(stores.map(s => ({ id: s.id, name: s.name })))}
+      - Máquinas disponibles: ${JSON.stringify(machines.map(m => ({ id: m.id, name: m.name })))}
       - Proveedores disponibles: ${JSON.stringify(suppliers.map(s => ({ id: s.id, commercial_name: s.commercial_name })))}
 
       INSTRUCCIONES DE EXTRACCIÓN:
-      1. Extrae el nombre del almacén/obra. Intenta coincidir con la lista de disponibles. Si encuentras coincidencia, incluye el ID.
-      2. Extrae UN SOLO proveedor para toda la orden (NO uno por artículo). La orden completa va con un solo proveedor. Intenta coincidir con la lista. Si encuentras coincidencia exacta o muy cercana, incluye el ID.
+      1. Extrae el nombre del almacén/obra (ahora llamado Centro de Costos). Si encuentras coincidencia, incluye el ID.
+      2. Si el almacén es "Maquinaria" (o el usuario menciona que es para una máquina específica), extrae también el nombre de la máquina (machine_name). Intenta coincidir con la lista de Máquinas disponibles y si coincide, incluye el machine_id. Si el usuario menciona una máquina pero NO menciona explícitamente "Maquinaria" como almacén, asigna automáticamente "Maquinaria" como store_name.
+      3. Extrae UN SOLO proveedor para toda la orden (NO uno por artículo). La orden completa va con un solo proveedor. Intenta coincidir con la lista. Si encuentras coincidencia exacta o muy cercana, incluye el ID.
       3. Extrae la lista de artículos (items). Para cada uno: nombre, cantidad (número), unidad y precio unitario (número). NO incluyas proveedor por artículo.
       4. Extrae la justificación de la compra. Este campo es OBLIGATORIO. Si el usuario no la ha proporcionado explícitamente, justification DEBE ser null.
       5. Extrae la moneda (MXN/USD).
@@ -335,6 +341,8 @@ async function extractOrderDataWithAI(
         "reply": "Respuesta conversacional al usuario (Tarea 1)",
         "store_name": "Nombre extraído o null",
         "store_id": "UUID coincidente o null",
+        "machine_name": "Nombre de la máquina o null",
+        "machine_id": "ID de la máquina o null",
         "supplier_name": "Nombre del proveedor unico o null",
         "supplier_id": "UUID coincidente o null",
         "items": [

@@ -216,6 +216,7 @@ export async function POST(request: Request) {
       applicant_id: _applicant_id_ignored, // ignorado: siempre se usa la sesión del servidor
       store_name,
       machine_name,
+      machine_id,
       store_id, // ID opcional desde el chatbot
       supplier_name, // Proveedor único para toda la orden (desde chatbot)
       supplier_id, // ID opcional del proveedor (desde chatbot)
@@ -248,6 +249,19 @@ export async function POST(request: Request) {
         { error: 'Debes seleccionar una máquina cuando el centro de costos es Maquinaria.' },
         { status: 400 }
       );
+    }
+
+    let finalMachineId: number | undefined | null = machine_id;
+    if (!finalMachineId && machine_name && store_name.trim().toLowerCase() === 'maquinaria') {
+      const { data: machineData } = await supabaseAdmin
+        .from('machines')
+        .select('id')
+        .ilike('name', `%${machine_name}%`)
+        .limit(1)
+        .single();
+      if (machineData) {
+        finalMachineId = machineData.id;
+      }
     }
 
     // Validar que si es urgente, tenga justificación de urgencia
@@ -403,6 +417,7 @@ export async function POST(request: Request) {
     const orderData = {
       applicant_id: userId,
       store_id: storeIdToUse,
+      machine_id: finalMachineId || null,
       date: new Date().toISOString().split('T')[0],
       supplier_id: finalSupplierId,
       items: JSON.stringify(itemsWithTotal),

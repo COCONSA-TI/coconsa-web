@@ -385,6 +385,7 @@ export interface CreateOrderRequest {
   applicant_id?: string;
   store_name: string;
   machine_name?: string;
+  machine_id?: number;
   store_id?: number;
   supplier_name?: string;
   supplier_id?: string | number;
