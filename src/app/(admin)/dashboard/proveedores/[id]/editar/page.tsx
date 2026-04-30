@@ -29,7 +29,7 @@ export default function EditarProveedorPage({
   params: Promise<{ id: string }> 
 }) {
   const { id } = use(params);
-  const { isAdmin, isDepartmentHead, loading } = useRequireAuth();
+  const { user, isAdmin, isDepartmentHead, loading } = useRequireAuth();
   const { success, error: toastError, warning } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -48,7 +48,7 @@ export default function EditarProveedorPage({
   });
 
   useEffect(() => {
-    if (user && isDepartmentHead) {
+    if (user && (isAdmin || isDepartmentHead)) {
       const fetchSupplier = async () => {
         try {
           const response = await fetch(`/api/v1/suppliers/${id}`);
@@ -80,7 +80,7 @@ export default function EditarProveedorPage({
       
       fetchSupplier();
     }
-  }, [user, isDepartmentHead, id, setValue, router]);
+  }, [user, isAdmin, isDepartmentHead, id, setValue, router]);
 
   const handleCoverFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
