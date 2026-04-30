@@ -107,9 +107,9 @@ export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarPr
     if (item.href === '/dashboard/ordenes-compra' || item.href === '/dashboard/listas-necesidades') {
       return true;
     }
-    // Proveedores: solo jefes de departamento y admin
+    // Proveedores: todos pueden ver
     if (item.href === '/dashboard/proveedores') {
-      return isDepartmentHead || isAdmin;
+      return true;
     }
     // Configuración: solo admin
     if (item.href === '/dashboard/configuracion') {
