@@ -82,7 +82,7 @@ function MultiSelectDropdown({
 
   return (
     <div className="relative">
-      <div 
+      <div
         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 cursor-pointer flex justify-between items-center"
         onClick={() => setIsOpen(!isOpen)}
       >
@@ -91,7 +91,7 @@ function MultiSelectDropdown({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </div>
-      
+
       {isOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)}></div>
@@ -128,7 +128,12 @@ function OrdenesCompraContent() {
   const { hasPermission, loading: authLoading } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
+  const [tab, setTab] = useState<"active" | "history">("active");
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportDateFrom, setReportDateFrom] = useState("");
+  const [reportDateTo, setReportDateTo] = useState("");
+
   // Filtros
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
   const [searchTerm, setSearchTerm] = useState("");
@@ -186,23 +191,52 @@ function OrdenesCompraContent() {
 
   useEffect(() => {
     if (!authLoading) {
-      fetchOrders();
+      fetchOrders(tab);
     }
-  }, [authLoading]);
+  }, [authLoading, tab]);
 
-  const fetchOrders = async () => {
+  const fetchOrders = async (currentTab = tab) => {
     try {
       setLoading(true);
-      const response = await fetch('/api/v1/orders');
+      const response = await fetch(`/api/v1/orders?tab=${currentTab}`);
       const data = await response.json();
-      
+
       if (!data.success) {
         throw new Error(data.error || 'Error al cargar órdenes');
       }
-      
+
       setOrders(data.orders);
     } catch (error) {
       console.error('Error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    try {
+      setLoading(true);
+      // Construct URL with report parameters
+      const url = new URL('/api/v1/orders/report', window.location.origin);
+      if (reportDateFrom) url.searchParams.append('from', reportDateFrom);
+      if (reportDateTo) url.searchParams.append('to', reportDateTo);
+
+      const response = await fetch(url.toString());
+      if (!response.ok) throw new Error('Error al generar reporte');
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `reporte_ordenes_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.body.removeChild(a);
+      setShowReportModal(false);
+    } catch (error) {
+      console.error(error);
+      alert('Hubo un error al generar el reporte.');
     } finally {
       setLoading(false);
     }
@@ -331,118 +365,194 @@ function OrdenesCompraContent() {
               Gestiona y revisa todas las solicitudes
             </p>
           </div>
-          
+
           {hasPermission('orders', 'create') && (
-            <Link
-              href="/dashboard/ordenes-compra/crear"
-              className="inline-flex items-center justify-center gap-2 bg-white text-red-600 px-5 py-2.5 rounded-lg font-medium hover:bg-red-50 transition-colors shadow-sm"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              <span>Nueva Orden</span>
-            </Link>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowReportModal(true)}
+                className="inline-flex items-center justify-center gap-2 bg-red-700 text-white border border-red-500 px-4 py-2 rounded-lg font-medium hover:bg-red-800 transition-colors shadow-sm"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="hidden sm:inline">Reporte</span>
+              </button>
+              <Link
+                href="/dashboard/ordenes-compra/crear"
+                className="inline-flex items-center justify-center gap-2 bg-white text-red-600 px-5 py-2.5 rounded-lg font-medium hover:bg-red-50 transition-colors shadow-sm"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span>Nueva Orden</span>
+              </Link>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <button
-          onClick={() => setStatusFilter("pending")}
-          className={`bg-white rounded-xl shadow p-4 text-left transition-all ${
-            statusFilter === "pending" ? "ring-2 ring-yellow-500 ring-offset-2" : "hover:shadow-md"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">Nuevas</p>
-              <p className="text-2xl font-bold text-yellow-600 mt-1">{stats.pending}</p>
+      {/* Report Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Generar Reporte de Órdenes</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Desde</label>
+                <input
+                  type="date"
+                  value={reportDateFrom}
+                  onChange={(e) => setReportDateFrom(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Hasta</label>
+                <input
+                  type="date"
+                  value={reportDateTo}
+                  onChange={(e) => setReportDateTo(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                />
+              </div>
             </div>
-            <div className="bg-yellow-100 rounded-full p-2.5">
-              <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleGenerateReport}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium disabled:opacity-50"
+                disabled={loading}
+              >
+                {loading ? 'Generando...' : 'Descargar Excel / CSV'}
+              </button>
             </div>
           </div>
-        </button>
+        </div>
+      )}
 
-        <button
-          onClick={() => setStatusFilter("in_progress")}
-          className={`bg-white rounded-xl shadow p-4 text-left transition-all ${
-            statusFilter === "in_progress" ? "ring-2 ring-blue-500 ring-offset-2" : "hover:shadow-md"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">En Proceso</p>
-              <p className="text-2xl font-bold text-blue-600 mt-1">{stats.in_progress}</p>
-            </div>
-            <div className="bg-blue-100 rounded-full p-2.5">
-              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </div>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setStatusFilter("approved")}
-          className={`bg-white rounded-xl shadow p-4 text-left transition-all ${
-            statusFilter === "approved" ? "ring-2 ring-green-500 ring-offset-2" : "hover:shadow-md"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">Aprobadas</p>
-              <p className="text-2xl font-bold text-green-600 mt-1">{stats.approved}</p>
-            </div>
-            <div className="bg-green-100 rounded-full p-2.5">
-              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setStatusFilter("rejected")}
-          className={`bg-white rounded-xl shadow p-4 text-left transition-all ${
-            statusFilter === "rejected" ? "ring-2 ring-red-500 ring-offset-2" : "hover:shadow-md"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">Rechazadas</p>
-              <p className="text-2xl font-bold text-red-600 mt-1">{stats.rejected}</p>
-            </div>
-            <div className="bg-red-100 rounded-full p-2.5">
-              <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
-        </button>
-
-        <button
-          onClick={() => setStatusFilter("all")}
-          className={`bg-white rounded-xl shadow p-4 text-left transition-all ${
-            statusFilter === "all" ? "ring-2 ring-gray-900 ring-offset-2" : "hover:shadow-md"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">Total</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{stats.total}</p>
-            </div>
-            <div className="bg-gray-100 rounded-full p-2.5">
-              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-          </div>
-        </button>
+      {/* Tabs */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8">
+          <button
+            onClick={() => setTab("active")}
+            className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${tab === "active"
+              ? "border-red-500 text-red-600"
+              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+          >
+            Activas
+          </button>
+          <button
+            onClick={() => setTab("history")}
+            className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${tab === "history"
+              ? "border-red-500 text-red-600"
+              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+          >
+            Histórico (Completadas)
+          </button>
+        </nav>
       </div>
+
+      {/* Stats Grid */}
+      {tab === "active" && (
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          <button
+            onClick={() => setStatusFilter("pending")}
+            className={`bg-white rounded-xl shadow p-4 text-left transition-all ${statusFilter === "pending" ? "ring-2 ring-yellow-500 ring-offset-2" : "hover:shadow-md"
+              }`}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">Nuevas</p>
+                <p className="text-2xl font-bold text-yellow-600 mt-1">{stats.pending}</p>
+              </div>
+              <div className="bg-yellow-100 rounded-full p-2.5">
+                <svg className="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => setStatusFilter("in_progress")}
+            className={`bg-white rounded-xl shadow p-4 text-left transition-all ${statusFilter === "in_progress" ? "ring-2 ring-blue-500 ring-offset-2" : "hover:shadow-md"
+              }`}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">En Proceso</p>
+                <p className="text-2xl font-bold text-blue-600 mt-1">{stats.in_progress}</p>
+              </div>
+              <div className="bg-blue-100 rounded-full p-2.5">
+                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => setStatusFilter("approved")}
+            className={`bg-white rounded-xl shadow p-4 text-left transition-all ${statusFilter === "approved" ? "ring-2 ring-green-500 ring-offset-2" : "hover:shadow-md"
+              }`}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">Aprobadas</p>
+                <p className="text-2xl font-bold text-green-600 mt-1">{stats.approved}</p>
+              </div>
+              <div className="bg-green-100 rounded-full p-2.5">
+                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => setStatusFilter("rejected")}
+            className={`bg-white rounded-xl shadow p-4 text-left transition-all ${statusFilter === "rejected" ? "ring-2 ring-red-500 ring-offset-2" : "hover:shadow-md"
+              }`}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">Rechazadas</p>
+                <p className="text-2xl font-bold text-red-600 mt-1">{stats.rejected}</p>
+              </div>
+              <div className="bg-red-100 rounded-full p-2.5">
+                <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => setStatusFilter("all")}
+            className={`bg-white rounded-xl shadow p-4 text-left transition-all ${statusFilter === "all" ? "ring-2 ring-gray-900 ring-offset-2" : "hover:shadow-md"
+              }`}
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">Total</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">{stats.total}</p>
+              </div>
+              <div className="bg-gray-100 rounded-full p-2.5">
+                <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+            </div>
+          </button>
+        </div>
+      )}
 
       {/* Search and Filters */}
       <div className="bg-white rounded-xl shadow p-4">
@@ -474,11 +584,10 @@ function OrdenesCompraContent() {
           {/* Filter Toggle Button */}
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-              showFilters || hasActiveFilters
-                ? "bg-red-100 text-red-700"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
+            className={`inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${showFilters || hasActiveFilters
+              ? "bg-red-100 text-red-700"
+              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
@@ -583,7 +692,7 @@ function OrdenesCompraContent() {
       {(statusFilter !== "all" || hasActiveFilters) && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-gray-500">Filtros activos:</span>
-          
+
           {statusFilter !== "all" && (
             <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${statusConfig[statusFilter].className}`}>
               {statusConfig[statusFilter].label}
@@ -594,7 +703,7 @@ function OrdenesCompraContent() {
               </button>
             </span>
           )}
-          
+
           {myApprovalFilters.length > 0 && (
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
               Mi Aprobación: {myApprovalFilters.map(f => f === "pending" ? "Pendiente" : f === "approved" ? "Aprobada" : "Rechazada").join(", ")}
@@ -605,7 +714,7 @@ function OrdenesCompraContent() {
               </button>
             </span>
           )}
-          
+
           {searchTerm && (
             <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
               Búsqueda: {searchTerm}
@@ -616,7 +725,7 @@ function OrdenesCompraContent() {
               </button>
             </span>
           )}
-          
+
           {storeFilters.length > 0 && (
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
               Centro de Costos: {storeFilters.join(", ")}
@@ -627,7 +736,7 @@ function OrdenesCompraContent() {
               </button>
             </span>
           )}
-          
+
           {applicantFilters.length > 0 && (
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
               Solicitante: {applicantFilters.join(", ")}
@@ -638,7 +747,7 @@ function OrdenesCompraContent() {
               </button>
             </span>
           )}
-          
+
           {(dateFrom || dateTo) && (
             <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
               Fecha: {dateFrom || '...'} - {dateTo || '...'}
@@ -694,7 +803,7 @@ function OrdenesCompraContent() {
               {filteredOrders.map((order) => {
                 const status = statusConfig[order.status] || statusConfig.pending;
                 const dateInfo = formatDate(order.created_at);
-                
+
                 return (
                   <Link
                     key={order.id}
@@ -730,7 +839,7 @@ function OrdenesCompraContent() {
                         )}
                       </div>
                     </div>
-                    
+
                     <div className="ml-5 space-y-1.5">
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-500">Solicitante</span>
@@ -811,7 +920,7 @@ function OrdenesCompraContent() {
                       Estado
                     </th>
                     <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-4">
-                      
+
                     </th>
                   </tr>
                 </thead>
@@ -819,7 +928,7 @@ function OrdenesCompraContent() {
                   {filteredOrders.map((order) => {
                     const status = statusConfig[order.status] || statusConfig.pending;
                     const dateInfo = formatDate(order.created_at);
-                    
+
                     return (
                       <tr key={order.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4">

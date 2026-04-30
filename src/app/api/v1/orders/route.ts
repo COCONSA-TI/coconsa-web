@@ -35,8 +35,7 @@ export async function GET(request: Request) {
     if (authError) return authError;
 
     const { searchParams } = new URL(request.url);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _status = searchParams.get('status'); // Reserved for future filtering
+    const tab = searchParams.get('tab') || 'active';
 
     // Obtener información del usuario actual para determinar si es jefe de departamento
     const { data: currentUserData } = await supabaseAdmin
@@ -68,6 +67,12 @@ export async function GET(request: Request) {
       } else {
         query = query.eq('applicant_id', session!.userId);
       }
+    }
+
+    if (tab === 'active') {
+      query = query.neq('status', 'completed');
+    } else if (tab === 'history') {
+      query = query.eq('status', 'completed');
     }
 
     query = query.order('created_at', { ascending: false });
