@@ -77,7 +77,7 @@ export default function AdminNavbar({ onMenuClick }: AdminNavbarProps) {
             >
               Listas de Necesidades
             </Link>
-            {isDepartmentHead && (
+            {(isDepartmentHead || isAdmin) && (
               <Link 
                 href="/dashboard/proveedores" 
                 className="px-4 py-2 text-sm font-semibold text-gray-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-all"
