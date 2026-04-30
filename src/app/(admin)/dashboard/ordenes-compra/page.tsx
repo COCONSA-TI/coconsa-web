@@ -62,6 +62,67 @@ function formatDate(dateString: string): { date: string; time: string; relative:
   };
 }
 
+function MultiSelectDropdown({
+  options,
+  selected,
+  onChange,
+  placeholder
+}: {
+  options: { value: string; label: string }[];
+  selected: string[];
+  onChange: (val: string[]) => void;
+  placeholder: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  // Close when clicking outside could be implemented, but for simplicity a simple toggle is used
+  const displayValue = selected.length === 0
+    ? placeholder
+    : selected.map(s => options.find(o => o.value === s)?.label || s).join(', ');
+
+  return (
+    <div className="relative">
+      <div 
+        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 cursor-pointer flex justify-between items-center"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <span className="truncate pr-2">{displayValue}</span>
+        <svg className={`w-4 h-4 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+      
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)}></div>
+          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+            {options.map(option => (
+              <label key={option.value} className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(option.value)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      onChange([...selected, option.value]);
+                    } else {
+                      onChange(selected.filter(v => v !== option.value));
+                    }
+                  }}
+                  className="rounded border-gray-300 text-red-600 focus:ring-red-500 mr-2"
+                />
+                <span className="text-sm text-gray-700 truncate">{option.label}</span>
+              </label>
+            ))}
+            {options.length === 0 && (
+              <div className="px-3 py-2 text-sm text-gray-400 italic">No hay opciones</div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function OrdenesCompraContent() {
   const searchParams = useSearchParams();
   const { hasPermission, loading: authLoading } = useAuth();
@@ -71,11 +132,11 @@ function OrdenesCompraContent() {
   // Filtros
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [storeFilter, setStoreFilter] = useState<string>("all");
-  const [applicantFilter, setApplicantFilter] = useState<string>("all");
+  const [storeFilters, setStoreFilters] = useState<string[]>([]);
+  const [applicantFilters, setApplicantFilters] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
-  const [myApprovalFilter, setMyApprovalFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
+  const [myApprovalFilters, setMyApprovalFilters] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
 
   // Leer filtro de URL al cargar (para compartir enlaces)
@@ -94,11 +155,11 @@ function OrdenesCompraContent() {
         const filters = JSON.parse(savedFilters);
         setStatusFilter(filters.statusFilter || "all");
         setSearchTerm(filters.searchTerm || "");
-        setStoreFilter(filters.storeFilter || "all");
-        setApplicantFilter(filters.applicantFilter || "all");
+        setStoreFilters(filters.storeFilters || (filters.storeFilter && filters.storeFilter !== "all" ? [filters.storeFilter] : []));
+        setApplicantFilters(filters.applicantFilters || (filters.applicantFilter && filters.applicantFilter !== "all" ? [filters.applicantFilter] : []));
         setDateFrom(filters.dateFrom || "");
         setDateTo(filters.dateTo || "");
-        setMyApprovalFilter(filters.myApprovalFilter || "all");
+        setMyApprovalFilters(filters.myApprovalFilters || (filters.myApprovalFilter && filters.myApprovalFilter !== "all" ? [filters.myApprovalFilter] : []));
         setShowFilters(filters.showFilters || false);
         // Limpiar sessionStorage después de restaurar
         sessionStorage.removeItem('orderFilters');
@@ -113,11 +174,11 @@ function OrdenesCompraContent() {
     const filters = {
       statusFilter,
       searchTerm,
-      storeFilter,
-      applicantFilter,
+      storeFilters,
+      applicantFilters,
       dateFrom,
       dateTo,
-      myApprovalFilter,
+      myApprovalFilters,
       showFilters,
     };
     sessionStorage.setItem('orderFilters', JSON.stringify(filters));
@@ -179,12 +240,12 @@ function OrdenesCompraContent() {
       }
 
       // Filtro por almacén
-      if (storeFilter !== "all" && order.store_name !== storeFilter) {
+      if (storeFilters.length > 0 && !storeFilters.includes(order.store_name)) {
         return false;
       }
 
       // Filtro por solicitante
-      if (applicantFilter !== "all" && order.applicant_name !== applicantFilter) {
+      if (applicantFilters.length > 0 && !applicantFilters.includes(order.applicant_name)) {
         return false;
       }
 
@@ -209,15 +270,15 @@ function OrdenesCompraContent() {
       }
 
       // Filtro por mi estado de aprobación
-      if (myApprovalFilter !== "all") {
-        if (order.my_department_status !== myApprovalFilter) {
+      if (myApprovalFilters.length > 0) {
+        if (!order.my_department_status || !myApprovalFilters.includes(order.my_department_status)) {
           return false;
         }
       }
 
       return true;
     });
-  }, [orders, statusFilter, searchTerm, storeFilter, applicantFilter, dateFrom, dateTo, myApprovalFilter]);
+  }, [orders, statusFilter, searchTerm, storeFilters, applicantFilters, dateFrom, dateTo, myApprovalFilters]);
 
   const stats = {
     total: orders.length,
@@ -227,16 +288,16 @@ function OrdenesCompraContent() {
     rejected: orders.filter(o => o.status === "rejected").length,
   };
 
-  const hasActiveFilters = searchTerm || storeFilter !== "all" || applicantFilter !== "all" || dateFrom || dateTo || myApprovalFilter !== "all";
+  const hasActiveFilters = searchTerm || storeFilters.length > 0 || applicantFilters.length > 0 || dateFrom || dateTo || myApprovalFilters.length > 0;
 
   const clearAllFilters = () => {
     setStatusFilter("all");
     setSearchTerm("");
-    setStoreFilter("all");
-    setApplicantFilter("all");
+    setStoreFilters([]);
+    setApplicantFilters([]);
     setDateFrom("");
     setDateTo("");
-    setMyApprovalFilter("all");
+    setMyApprovalFilters([]);
   };
 
   if (authLoading || loading) {
@@ -438,33 +499,29 @@ function OrdenesCompraContent() {
                 <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
                   Mi Aprobación
                 </label>
-                <select
-                  value={myApprovalFilter}
-                  onChange={(e) => setMyApprovalFilter(e.target.value as "all" | "pending" | "approved" | "rejected")}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                >
-                  <option value="all">Todas</option>
-                  <option value="pending">Requieren mi aprobación</option>
-                  <option value="approved">Ya aprobé</option>
-                  <option value="rejected">Ya rechacé</option>
-                </select>
+                <MultiSelectDropdown
+                  options={[
+                    { value: "pending", label: "Requieren mi aprobación" },
+                    { value: "approved", label: "Ya aprobé" },
+                    { value: "rejected", label: "Ya rechacé" }
+                  ]}
+                  selected={myApprovalFilters}
+                  onChange={setMyApprovalFilters}
+                  placeholder="Todas"
+                />
               </div>
 
               {/* Centro de Costos Filter */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
-                  Centro de Costos
+                  Centros de Costos
                 </label>
-                <select
-                  value={storeFilter}
-                  onChange={(e) => setStoreFilter(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                >
-                  <option value="all">Todos los centros de costos</option>
-                  {stores.map(store => (
-                    <option key={store} value={store}>{store}</option>
-                  ))}
-                </select>
+                <MultiSelectDropdown
+                  options={stores.map(store => ({ value: store, label: store }))}
+                  selected={storeFilters}
+                  onChange={setStoreFilters}
+                  placeholder="Todos los centros de costos"
+                />
               </div>
 
               {/* Solicitante Filter */}
@@ -472,16 +529,12 @@ function OrdenesCompraContent() {
                 <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
                   Solicitante
                 </label>
-                <select
-                  value={applicantFilter}
-                  onChange={(e) => setApplicantFilter(e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                >
-                  <option value="all">Todos los solicitantes</option>
-                  {applicants.map(applicant => (
-                    <option key={applicant} value={applicant}>{applicant}</option>
-                  ))}
-                </select>
+                <MultiSelectDropdown
+                  options={applicants.map(applicant => ({ value: applicant, label: applicant }))}
+                  selected={applicantFilters}
+                  onChange={setApplicantFilters}
+                  placeholder="Todos los solicitantes"
+                />
               </div>
 
               {/* Date From */}
@@ -542,16 +595,10 @@ function OrdenesCompraContent() {
             </span>
           )}
           
-          {myApprovalFilter !== "all" && (
-            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${
-              myApprovalFilter === "pending" ? "bg-orange-100 text-orange-700" :
-              myApprovalFilter === "approved" ? "bg-green-100 text-green-700" :
-              "bg-red-100 text-red-700"
-            }`}>
-              {myApprovalFilter === "pending" && "Requieren mi aprobación"}
-              {myApprovalFilter === "approved" && "Ya aprobé"}
-              {myApprovalFilter === "rejected" && "Ya rechacé"}
-              <button onClick={() => setMyApprovalFilter("all")} className="hover:opacity-70">
+          {myApprovalFilters.length > 0 && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+              Mi Aprobación: {myApprovalFilters.map(f => f === "pending" ? "Pendiente" : f === "approved" ? "Aprobada" : "Rechazada").join(", ")}
+              <button onClick={() => setMyApprovalFilters([])} className="hover:opacity-70">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -570,10 +617,10 @@ function OrdenesCompraContent() {
             </span>
           )}
           
-          {storeFilter !== "all" && (
-            <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
-              Centro de Costos: {storeFilter}
-              <button onClick={() => setStoreFilter("all")} className="hover:opacity-70">
+          {storeFilters.length > 0 && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+              Centro de Costos: {storeFilters.join(", ")}
+              <button onClick={() => setStoreFilters([])} className="hover:opacity-70">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -581,10 +628,10 @@ function OrdenesCompraContent() {
             </span>
           )}
           
-          {applicantFilter !== "all" && (
-            <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
-              Solicitante: {applicantFilter}
-              <button onClick={() => setApplicantFilter("all")} className="hover:opacity-70">
+          {applicantFilters.length > 0 && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+              Solicitante: {applicantFilters.join(", ")}
+              <button onClick={() => setApplicantFilters([])} className="hover:opacity-70">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
