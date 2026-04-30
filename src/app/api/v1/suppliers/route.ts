@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireSupplierCatalogAccess, requireSupplierManagement } from '@/lib/api-auth';
+import { requireSupplierCatalogAccess, requireSupplierCreation } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { z } from 'zod';
 
@@ -48,7 +48,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { error: authError } = await requireSupplierManagement();
+  const { error: authError } = await requireSupplierCreation();
   if (authError) return authError;
 
   try {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireSupplierCatalogAccess, requireSupplierManagement } from '@/lib/api-auth';
+import { requireSupplierCatalogAccess, requireSupplierEdit } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { z } from 'zod';
 
@@ -46,7 +46,7 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { error: authError } = await requireSupplierManagement();
+  const { error: authError } = await requireSupplierEdit();
   if (authError) return authError;
 
   const { id } = await params;
@@ -83,7 +83,7 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { error: authError } = await requireSupplierManagement();
+  const { error: authError } = await requireSupplierEdit();
   if (authError) return authError;
 
   const { id } = await params;

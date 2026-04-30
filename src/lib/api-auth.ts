@@ -114,11 +114,11 @@ export async function requireSupplierCatalogAccess() {
 }
 
 /**
- * Permite gestionar proveedores solo a:
+ * Permite crear proveedores a:
  * - Administradores del sistema
- * - Jefes de departamento de Dirección
+ * - Jefes de departamento
  */
-export async function requireSupplierManagement() {
+export async function requireSupplierCreation() {
   const { error, session } = await requireAuth();
 
   if (error) {
@@ -131,23 +131,49 @@ export async function requireSupplierManagement() {
 
   const { data: userData, error: userError } = await supabaseAdmin
     .from('users')
-    .select(`
-      is_department_head,
-      department:departments(code, name)
-    `)
+    .select('is_department_head')
     .eq('id', session!.userId)
     .single();
 
-  const department = Array.isArray(userData?.department) ? userData?.department[0] : userData?.department;
-  const departmentCode = (department?.code || '').toLowerCase();
-  const departmentName = (department?.name || '').toLowerCase();
-  const isDirectionDepartment = departmentCode === 'direccion' || departmentName.includes('direccion');
-  const isDirectionManagement = Boolean(userData?.is_department_head) && isDirectionDepartment;
-
-  if (userError || !isDirectionManagement) {
+  if (userError || !userData?.is_department_head) {
     return {
       error: NextResponse.json(
-        { error: 'Esta acción solo está disponible para administradores y gerencias de Dirección' },
+        { error: 'Esta acción solo está disponible para administradores y jefes de departamento' },
+        { status: 403 }
+      ),
+      session: null,
+    };
+  }
+
+  return { error: null, session };
+}
+
+/**
+ * Permite editar o eliminar proveedores solo a:
+ * - Administradores del sistema
+ * - Jefes de departamento
+ */
+export async function requireSupplierEdit() {
+  const { error, session } = await requireAuth();
+
+  if (error) {
+    return { error, session: null };
+  }
+
+  if (session!.role === 'admin') {
+    return { error: null, session };
+  }
+
+  const { data: userData, error: userError } = await supabaseAdmin
+    .from('users')
+    .select('is_department_head')
+    .eq('id', session!.userId)
+    .single();
+
+  if (userError || !userData?.is_department_head) {
+    return {
+      error: NextResponse.json(
+        { error: 'Esta acción solo está disponible para administradores y jefes de departamento' },
         { status: 403 }
       ),
       session: null,

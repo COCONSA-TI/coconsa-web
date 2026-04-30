@@ -29,7 +29,7 @@ export default function EditarProveedorPage({
   params: Promise<{ id: string }> 
 }) {
   const { id } = use(params);
-  const { user, isDepartmentHead, loading } = useRequireAuth();
+  const { isAdmin, isDepartmentHead, loading } = useRequireAuth();
   const { success, error: toastError, warning } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -168,11 +168,11 @@ export default function EditarProveedorPage({
 
   if (loading || isLoadingData) return <div className="p-6">Preparando editor...</div>;
 
-  if (!isDepartmentHead) {
+  if (!isAdmin && !isDepartmentHead) {
     return (
       <div className="p-6 text-center">
         <h2 className="text-2xl font-bold text-red-600 mb-2">Acceso Denegado</h2>
-        <p>Solo los jefes de departamento pueden editar proveedores.</p>
+        <p>Solo los administradores del sistema y jefes de departamento pueden editar proveedores.</p>
         <Link href="/dashboard" className="text-blue-600 mt-4 block">Regresar</Link>
       </div>
     );

@@ -17,12 +17,13 @@ interface Supplier {
 }
 
 export default function ProveedoresPage() {
-  const { user, loading } = useRequireAuth();
+  const { user, loading, isAdmin, isDepartmentHead } = useRequireAuth();
   const { success, error: toastError } = useToast();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const canManageSuppliers = Boolean(user?.can_manage_suppliers);
+  const canCreateSuppliers = isAdmin || isDepartmentHead;
+  const canEditSuppliers = isAdmin || isDepartmentHead;
   const [previewSupplier, setPreviewSupplier] = useState<Supplier | null>(null);
 
   useEffect(() => {
@@ -184,7 +185,7 @@ export default function ProveedoresPage() {
               <h1 className="text-2xl font-bold">Directorio de Proveedores</h1>
               <p className="text-red-100 text-sm mt-1">Gestiona los proveedores autorizados del sistema</p>
             </div>
-            {canManageSuppliers && (
+            {canCreateSuppliers && (
               <Link
                 href="/dashboard/proveedores/crear"
                 className="inline-flex items-center justify-center gap-2 bg-white text-red-600 px-5 py-2.5 rounded-lg font-medium hover:bg-red-50 transition-colors shadow-sm"
@@ -268,7 +269,7 @@ export default function ProveedoresPage() {
                     <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Contacto
                     </th>
-                    {canManageSuppliers && (
+                    {canEditSuppliers && (
                       <th scope="col" className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
                         Acciones
                       </th>
@@ -331,7 +332,7 @@ export default function ProveedoresPage() {
                         <div>{supplier.contact || 'Sin contacto directo'}</div>
                         <div className="text-xs">{supplier.phone}</div>
                       </td>
-                      {canManageSuppliers && (
+                      {canEditSuppliers && (
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex items-center justify-end gap-3">
                             <Link 

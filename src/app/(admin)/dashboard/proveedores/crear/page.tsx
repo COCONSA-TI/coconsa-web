@@ -25,7 +25,7 @@ const supplierSchema = z.object({
 type SupplierFormData = z.infer<typeof supplierSchema>;
 
 export default function CrearProveedorPage() {
-  const { isDepartmentHead, loading } = useRequireAuth();
+  const { isAdmin, isDepartmentHead, loading } = useRequireAuth();
   const { success, error: toastError, warning } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -132,7 +132,7 @@ export default function CrearProveedorPage() {
 
   if (loading) return <div className="p-6">Cargando...</div>;
 
-  if (!isDepartmentHead) {
+  if (!isAdmin && !isDepartmentHead) {
     return (
       <div className="p-6 text-center">
         <h2 className="text-2xl font-bold text-red-600 mb-2">Acceso Denegado</h2>
