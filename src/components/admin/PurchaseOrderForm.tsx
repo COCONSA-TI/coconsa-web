@@ -162,9 +162,11 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
   const [currentUser, setCurrentUser] = useState<{ name: string, email: string, isDepartmentHead: boolean } | null>(null);
   const [availableStores, setAvailableStores] = useState<string[]>([]);
   const [availableSuppliers, setAvailableSuppliers] = useState<string[]>([]);
+  const [availableMachines, setAvailableMachines] = useState<{id: string, name: string}[]>([]);
   const [formData, setFormData] = useState({
     applicant_name: "",
     store_name: "",
+    machine_name: "",
     supplier_name: "",
     justification: "",
     currency: "MXN",
@@ -231,6 +233,9 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
           }
           if (data.suppliers && Array.isArray(data.suppliers)) {
             setAvailableSuppliers(data.suppliers.map((supplier: { commercial_name: string }) => supplier.commercial_name));
+          }
+          if (data.machines && Array.isArray(data.machines)) {
+            setAvailableMachines(data.machines);
           }
         }
       } catch {
@@ -367,6 +372,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     const orderData = {
       applicant_name: formData.applicant_name,
       store_name: formData.store_name,
+      machine_name: formData.store_name.toLowerCase() === 'maquinaria' ? formData.machine_name : undefined,
       supplier_name: formData.supplier_name,
       justification: formData.justification,
       currency: formData.currency,
@@ -438,6 +444,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
       setFormData({
         applicant_name: currentUser?.name || "",
         store_name: "",
+        machine_name: "",
         supplier_name: "",
         justification: "",
         currency: "MXN",
@@ -528,6 +535,25 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
               ))}
             </select>
           </div>
+          {formData.store_name.toLowerCase() === 'maquinaria' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Máquina <span className="text-red-500">*</span>
+              </label>
+              <select
+                name="machine_name"
+                value={formData.machine_name || ""}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                required={formData.store_name.toLowerCase() === 'maquinaria'}
+              >
+                <option value="">Selecciona una máquina</option>
+                {availableMachines.map((machine) => (
+                  <option key={machine.id} value={machine.name}>{machine.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Proveedor <span className="text-red-500">*</span>
@@ -963,6 +989,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
             setFormData({
               applicant_name: currentUser?.name || "",
               store_name: "",
+              machine_name: "",
               supplier_name: "",
               justification: "",
               currency: "MXN",
