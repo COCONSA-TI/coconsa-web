@@ -207,38 +207,16 @@ export async function POST(request: Request) {
     // nunca desde el body del request (previene suplantación de identidad)
     const authenticatedUserId = session!.userId;
 
-    // Detectar tipo de contenido para manejar FormData o JSON
-    const contentType = request.headers.get('content-type') || '';
-    let body: CreateOrderRequest;
-    let evidenceFiles: File[] = [];
-
-    if (contentType.includes('multipart/form-data')) {
-      // Procesar FormData (desde el formulario manual)
-      const formData = await request.formData();
-      const orderDataString = formData.get('orderData');
-      
-      if (typeof orderDataString === 'string') {
-        body = JSON.parse(orderDataString);
-      } else {
-        return NextResponse.json(
-          { error: 'Datos de orden inválidos' },
-          { status: 400 }
-        );
-      }
-      
-      // Obtener archivos de evidencia
-      const evidenceEntries = formData.getAll('evidence');
-      evidenceFiles = evidenceEntries.filter((entry): entry is File => entry instanceof File);
-      
-    } else {
-      // Procesar JSON (desde el chatbot u otras fuentes)
-      body = await request.json();
-    }
+    // Solo aceptar JSON request con presigned URLs (evita payload gigante de Vercel)
+    // Los archivos ya se subieron directamente a Supabase vía presigned URLs
+    const body: CreateOrderRequest = await request.json();
 
     const {
       applicant_name,
       applicant_id: _applicant_id_ignored, // ignorado: siempre se usa la sesión del servidor
       store_name,
+      machine_name,
+      machine_id,
       store_id, // ID opcional desde el chatbot
       supplier_name, // Proveedor único para toda la orden (desde chatbot)
       supplier_id, // ID opcional del proveedor (desde chatbot)
@@ -264,6 +242,26 @@ export async function POST(request: Request) {
         { error: `Faltan datos requeridos: ${missing.join(', ')}` },
         { status: 400 }
       );
+    }
+
+    if (store_name.trim().toLowerCase() === 'maquinaria' && (!machine_name || !machine_name.trim())) {
+      return NextResponse.json(
+        { error: 'Debes seleccionar una máquina cuando el centro de costos es Maquinaria.' },
+        { status: 400 }
+      );
+    }
+
+    let finalMachineId: number | undefined | null = machine_id;
+    if (!finalMachineId && machine_name && store_name.trim().toLowerCase() === 'maquinaria') {
+      const { data: machineData } = await supabaseAdmin
+        .from('machines')
+        .select('id')
+        .ilike('name', `%${machine_name}%`)
+        .limit(1)
+        .single();
+      if (machineData) {
+        finalMachineId = machineData.id;
+      }
     }
 
     // Validar que si es urgente, tenga justificación de urgencia
@@ -419,6 +417,7 @@ export async function POST(request: Request) {
     const orderData = {
       applicant_id: userId,
       store_id: storeIdToUse,
+      machine_id: finalMachineId || null,
       date: new Date().toISOString().split('T')[0],
       supplier_id: finalSupplierId,
       items: JSON.stringify(itemsWithTotal),
@@ -454,22 +453,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Manejar archivos de evidencia de FormData (fallback) y URLs presignadas
-    let finalEvidenceUrls = [...evidenceUrls];
-    if (evidenceFiles.length > 0) {
-      try {
-        const uploadedUrls = await uploadEvidenceFiles(evidenceFiles, String(orderCreated.id));
-        finalEvidenceUrls = [...finalEvidenceUrls, ...uploadedUrls];
-      } catch (uploadError: unknown) {
-        // Si el error es de validación (tipo/tamaño), rechazar la orden con 400
-        const msg = uploadError instanceof Error ? uploadError.message : 'Error al subir archivos';
-        if (msg.includes('no permitido') || msg.includes('excede') || msg.includes('máximo')) {
-          return NextResponse.json({ error: msg }, { status: 400 });
-        }
-        console.error('[orders/create] Error uploading evidence files:', msg);
-      }
-    }
+    // Las URLs de evidencia ya vienen del frontend (se subieron vía presigned URLs directamente a Supabase)
+    const finalEvidenceUrls = body.evidenceUrls || [];
     
+    // Guardar URLs de evidencia en la orden
     if (finalEvidenceUrls.length > 0) {
       await supabaseAdmin
         .from('orders')

@@ -107,6 +107,83 @@ export async function requireDepartmentHead() {
 }
 
 /**
+ * Permite ver el catálogo de proveedores a cualquier usuario con acceso al dashboard.
+ */
+export async function requireSupplierCatalogAccess() {
+  return requirePermission('dashboard', 'access');
+}
+
+/**
+ * Permite crear proveedores a:
+ * - Administradores del sistema
+ * - Jefes de departamento
+ */
+export async function requireSupplierCreation() {
+  const { error, session } = await requireAuth();
+
+  if (error) {
+    return { error, session: null };
+  }
+
+  if (session!.role === 'admin') {
+    return { error: null, session };
+  }
+
+  const { data: userData, error: userError } = await supabaseAdmin
+    .from('users')
+    .select('is_department_head')
+    .eq('id', session!.userId)
+    .single();
+
+  if (userError || !userData?.is_department_head) {
+    return {
+      error: NextResponse.json(
+        { error: 'Esta acción solo está disponible para administradores y jefes de departamento' },
+        { status: 403 }
+      ),
+      session: null,
+    };
+  }
+
+  return { error: null, session };
+}
+
+/**
+ * Permite editar o eliminar proveedores solo a:
+ * - Administradores del sistema
+ * - Jefes de departamento
+ */
+export async function requireSupplierEdit() {
+  const { error, session } = await requireAuth();
+
+  if (error) {
+    return { error, session: null };
+  }
+
+  if (session!.role === 'admin') {
+    return { error: null, session };
+  }
+
+  const { data: userData, error: userError } = await supabaseAdmin
+    .from('users')
+    .select('is_department_head')
+    .eq('id', session!.userId)
+    .single();
+
+  if (userError || !userData?.is_department_head) {
+    return {
+      error: NextResponse.json(
+        { error: 'Esta acción solo está disponible para administradores y jefes de departamento' },
+        { status: 403 }
+      ),
+      session: null,
+    };
+  }
+
+  return { error: null, session };
+}
+
+/**
  * Helper para obtener usuario con verificación de autenticación
  */
 export async function getAuthenticatedUser() {

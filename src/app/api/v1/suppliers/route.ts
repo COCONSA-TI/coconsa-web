@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireDepartmentHead } from '@/lib/api-auth';
+import { requireSupplierCatalogAccess, requireSupplierCreation } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { z } from 'zod';
 
@@ -14,10 +14,11 @@ const supplierSchema = z.object({
   bank: z.string().min(2, 'El nombre del banco es requerido'),
   contact: z.string().nullable().optional(),
   category: z.string().min(2, 'La categoría es requerida'),
+  cover_image_url: z.string().nullable().optional(),
 });
 
 export async function GET(request: Request) {
-  const { error: authError } = await requireDepartmentHead();
+  const { error: authError } = await requireSupplierCatalogAccess();
   if (authError) return authError;
 
   const { searchParams } = new URL(request.url);
@@ -47,7 +48,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { error: authError } = await requireDepartmentHead();
+  const { error: authError } = await requireSupplierCreation();
   if (authError) return authError;
 
   try {

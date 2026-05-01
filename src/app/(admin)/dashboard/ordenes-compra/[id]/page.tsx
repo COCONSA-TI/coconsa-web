@@ -39,6 +39,8 @@ interface OrderDetail {
   id: string;
   created_at: string;
   store_name: string;
+  machine_id?: number | null;
+  machine_name?: string | null;
   supplier_name: string;
   total: number;
   currency: string;
@@ -57,6 +59,7 @@ interface OrderDetail {
   is_urgent: boolean;
   urgency_justification: string | null;
   is_definitive_rejection: boolean;
+  payment_proof_url: string | null;
   current_department_name?: string | null;
 }
 
@@ -90,7 +93,7 @@ export default function OrdenDetallesPage() {
   const orderId = params.id as string;
   const { isAdmin, user } = useAuth();
   const toast = useToast();
-  
+
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
@@ -108,19 +111,22 @@ export default function OrdenDetallesPage() {
   // Approval modal states
   const [approveComments, setApproveComments] = useState('');
   const [approveFiles, setApproveFiles] = useState<File[]>([]);
+  // Payment proof states
+  const [paymentProofFiles, setPaymentProofFiles] = useState<File[]>([]);
+  const [uploadingProof, setUploadingProof] = useState(false);
 
   const fetchOrderDetails = async () => {
     try {
       setLoading(true);
       const response = await fetch(`/api/v1/orders/${orderId}`);
       const data = await response.json();
-      
+
       if (!data.success) {
         throw new Error(data.error || 'Error al cargar la orden');
       }
-      
+
       setOrder(data.order);
-      
+
       const orderApprovals = await getOrderApprovals(orderId);
       // Filtrar solo aprobaciones del flujo principal (approval_order 1-5)
       // y ordenarlas por approval_order
@@ -128,7 +134,7 @@ export default function OrdenDetallesPage() {
         .filter(a => a.approval_order && a.approval_order >= 1 && a.approval_order <= 5)
         .sort((a, b) => (a.approval_order || 0) - (b.approval_order || 0));
       setApprovals(filteredApprovals);
-      
+
       // Cargar archivos adjuntos
       await fetchAttachments();
     } catch {
@@ -143,7 +149,7 @@ export default function OrdenDetallesPage() {
     try {
       const response = await fetch(`/api/v1/orders/${orderId}/attachments`);
       const data = await response.json();
-      
+
       if (data.success && data.attachments) {
         setAttachments(data.attachments);
       }
@@ -154,11 +160,11 @@ export default function OrdenDetallesPage() {
 
   const fetchUserDepartment = async () => {
     if (!user?.department_id) return;
-    
+
     try {
       const response = await fetch(`/api/v1/departments/${user.department_id}`);
       const data = await response.json();
-      
+
       if (data.success && data.department) {
         setUserDepartmentCode(data.department.code);
       }
@@ -169,7 +175,7 @@ export default function OrdenDetallesPage() {
 
   const checkUserCanApprove = async () => {
     if (!user?.id) return;
-    
+
     try {
       const result = await canUserApprove(user.id, orderId);
       setCanApproveOrder(result.canApprove);
@@ -196,33 +202,33 @@ export default function OrdenDetallesPage() {
     try {
       // Check if we need to send files (only for Contraloría)
       const isContraloria = userDepartmentCode === 'contraloria';
-      
+
       if (isContraloria && approveFiles.length > 0) {
         // 1. Obtener urls firmadas y subir a Supabase S3 directamente (bypass Vercel 4.5MB limit)
         const filesInfo = [];
         for (const file of approveFiles) {
           const urlRes = await fetch('/api/v1/storage/signed-url', {
-             method: 'POST',
-             headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                fileName: file.name, 
-                contentType: file.type, 
-                bucket: 'order-attachment', 
-                folder: `orders/${orderId}/attachments` 
-              })
-           });
-          
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileName: file.name,
+              contentType: file.type,
+              bucket: 'order-attachments',
+              folder: `orders/${orderId}/attachments`
+            })
+          });
+
           if (!urlRes.ok) throw new Error('Error obteniendo url de subida para ' + file.name);
           const urlData = await urlRes.json();
-          
+
           const uploadRes = await fetch(urlData.signedUrl, {
             method: 'PUT',
             headers: { 'Content-Type': file.type },
             body: file
           });
-          
+
           if (!uploadRes.ok) throw new Error('Error subiendo ' + file.name);
-          
+
           filesInfo.push({
             name: file.name,
             size: file.size,
@@ -231,7 +237,7 @@ export default function OrdenDetallesPage() {
             path: urlData.path
           });
         }
-        
+
         // 2. Registrar aprobacion con archivos via JSON Ligero
         const response = await fetch(`/api/v1/orders/${orderId}/approve`, {
           method: 'POST',
@@ -262,7 +268,7 @@ export default function OrdenDetallesPage() {
 
         toast.success('Orden aprobada', data.message);
       }
-      
+
       setShowApproveModal(false);
       setApproveComments('');
       setApproveFiles([]);
@@ -333,15 +339,84 @@ export default function OrdenDetallesPage() {
     }
   };
 
+  const handleUploadPaymentProof = async () => {
+    if (paymentProofFiles.length === 0) {
+      toast.warning('Archivos requeridos', 'Debes adjuntar al menos un comprobante de pago');
+      return;
+    }
+
+    setUploadingProof(true);
+    try {
+      // Upload files via presigned URLs
+      const filesInfo = [];
+      for (const file of paymentProofFiles) {
+        const urlRes = await fetch('/api/v1/storage/signed-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: file.name,
+            contentType: file.type,
+            bucket: 'order-attachments',
+            folder: `orders/${orderId}/payment-proof`,
+          }),
+        });
+
+        if (!urlRes.ok) throw new Error('Error obteniendo URL de subida para ' + file.name);
+        const urlData = await urlRes.json();
+
+        const uploadRes = await fetch(urlData.signedUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type },
+          body: file,
+        });
+
+        if (!uploadRes.ok) throw new Error('Error subiendo ' + file.name);
+
+        filesInfo.push({
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          url: urlData.publicUrl,
+          path: urlData.path,
+        });
+      }
+
+      // Register proof and complete order
+      const response = await fetch(`/api/v1/orders/${orderId}/payment-proof`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filesInfo }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Error al registrar comprobante');
+      }
+
+      toast.success('Comprobante registrado', data.message);
+      setPaymentProofFiles([]);
+      await fetchOrderDetails();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Error al subir comprobante';
+      toast.error('Error', msg);
+    } finally {
+      setUploadingProof(false);
+    }
+  };
+
+  const canUploadPaymentProof = userDepartmentCode === 'contabilidad' || userDepartmentCode === 'pagos';
+  const isOrderOwner = user?.email === order?.applicant_email;
+
   const handleDownloadPdf = async () => {
     try {
       setDownloadingPdf(true);
       const response = await fetch(`/api/v1/orders/${orderId}/pdf`);
-      
+
       if (!response.ok) {
         throw new Error('Error al generar el PDF');
       }
-      
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -459,7 +534,7 @@ export default function OrdenDetallesPage() {
           <p className="text-gray-600 mb-4">
             ¿Deseas agregar un comentario a esta aprobacion? (opcional)
           </p>
-          
+
           <textarea
             value={approveComments}
             onChange={(e) => setApproveComments(e.target.value)}
@@ -628,11 +703,10 @@ export default function OrdenDetallesPage() {
                 handleReject(reason, rejectDefinitive);
               }}
               disabled={processingAction}
-              className={`flex-1 px-4 py-2.5 text-white rounded-lg transition-colors font-medium disabled:opacity-50 ${
-                rejectDefinitive 
-                  ? 'bg-red-800 hover:bg-red-900' 
+              className={`flex-1 px-4 py-2.5 text-white rounded-lg transition-colors font-medium disabled:opacity-50 ${rejectDefinitive
+                  ? 'bg-red-800 hover:bg-red-900'
                   : 'bg-red-600 hover:bg-red-700'
-              }`}
+                }`}
             >
               {processingAction ? (
                 <span className="flex items-center justify-center gap-2">
@@ -676,7 +750,7 @@ export default function OrdenDetallesPage() {
               Volver a Ordenes
             </Link>
           </div>
-          
+
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <div className="flex flex-wrap items-center gap-3">
@@ -707,7 +781,7 @@ export default function OrdenDetallesPage() {
                 {dateInfo.full} - {dateInfo.time}
               </p>
             </div>
-            
+
             <button
               onClick={handleDownloadPdf}
               disabled={downloadingPdf}
@@ -757,11 +831,10 @@ export default function OrdenDetallesPage() {
 
         {/* Mensaje de orden rechazada */}
         {order.status === 'rejected' && (
-          <div className={`border rounded-xl p-5 ${
-            order.is_definitive_rejection 
-              ? 'bg-red-100 border-red-300' 
+          <div className={`border rounded-xl p-5 ${order.is_definitive_rejection
+              ? 'bg-red-100 border-red-300'
               : 'bg-red-50 border-red-200'
-          }`}>
+            }`}>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-start gap-4">
                 <div className="bg-red-100 rounded-full p-2">
@@ -810,13 +883,13 @@ export default function OrdenDetallesPage() {
         {order.status !== 'rejected' && approvals.length > 0 && (
           <div className="bg-white rounded-xl shadow p-5">
             <h2 className="text-lg font-semibold text-gray-900 mb-5">Flujo de Aprobaciones</h2>
-            
+
             <div className="relative">
               {/* Linea de progreso - Desktop */}
               <div className="hidden sm:block absolute top-5 left-8 right-8 h-0.5 bg-gray-200"></div>
-              <div 
+              <div
                 className="hidden sm:block absolute top-5 left-8 h-0.5 bg-red-500 transition-all duration-500"
-                style={{ 
+                style={{
                   width: approvals.length > 1
                     ? `calc(${(Math.min(currentApprovalStep, approvals.length - 1) / (approvals.length - 1)) * 100}% - 64px)`
                     : '0%'
@@ -847,13 +920,13 @@ export default function OrdenDetallesPage() {
                       >
                         {renderApprovalIcon(iconType)}
                       </div>
-                      
+
                       {/* Info */}
                       <div className="sm:mt-3 sm:text-center flex-1 sm:flex-initial">
                         <span className={`text-sm font-medium block ${isCompleted || isActive ? 'text-gray-900' : 'text-gray-400'}`}>
                           {approval.department?.name || 'Departamento'}
                         </span>
-                        
+
                         {isCompleted && approval.approver && (
                           <div className="text-xs text-gray-500 mt-0.5">
                             <span>{approval.approver.full_name}</span>
@@ -861,13 +934,13 @@ export default function OrdenDetallesPage() {
                             <span className="block sm:inline">{new Date(approval.approved_at!).toLocaleDateString('es-MX')}</span>
                           </div>
                         )}
-                        
+
                         {isRejected && approval.approver && (
                           <div className="text-xs text-red-600 mt-0.5">
                             <span>Rechazado por {approval.approver.full_name}</span>
                           </div>
                         )}
-                        
+
                         {isActive && isPending && (
                           <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium mt-0.5">
                             <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
@@ -892,9 +965,8 @@ export default function OrdenDetallesPage() {
                 .filter(a => a.comments)
                 .map(approval => (
                   <div key={approval.id} className="flex gap-3 p-4 bg-gray-50 rounded-lg">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                      approval.status === 'approved' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
-                    }`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${approval.status === 'approved' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+                      }`}>
                       {approval.status === 'approved' ? (
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -910,9 +982,8 @@ export default function OrdenDetallesPage() {
                         <span className="font-medium text-gray-900 text-sm">
                           {approval.department?.name}
                         </span>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          approval.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                        }`}>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${approval.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                          }`}>
                           {approval.status === 'approved' ? 'Aprobado' : 'Rechazado'}
                         </span>
                       </div>
@@ -970,30 +1041,199 @@ export default function OrdenDetallesPage() {
           </div>
         )}
 
+        {/* Comprobante de Pago Section */}
+        {(order.status === 'approved' || order.status === 'completed') && (
+          <div className={`rounded-xl shadow p-5 ${order.status === 'completed' ? 'bg-white' : 'bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200'
+            }`}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${order.status === 'completed' ? 'bg-green-100' : 'bg-emerald-100'
+                  }`}>
+                  {order.status === 'completed' ? (
+                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
+                    </svg>
+                  )}
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Comprobante de Pago</h2>
+                  <p className="text-sm text-gray-500">
+                    {order.status === 'completed'
+                      ? 'La orden ha sido completada con comprobante de pago'
+                      : 'Se requiere comprobante de pago para completar la orden'
+                    }
+                  </p>
+                </div>
+              </div>
+              {order.status === 'completed' && (
+                <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                  Completada
+                </span>
+              )}
+            </div>
+
+            {/* Show existing payment proofs */}
+            {order.payment_proof_url && (
+              <div className="mb-4">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Comprobantes adjuntados</p>
+                <div className="space-y-2">
+                  {order.payment_proof_url.split(',').map((url, idx) => (
+                    <a
+                      key={idx}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-green-300 hover:bg-green-50 transition-colors group"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <span className="text-sm text-gray-700 group-hover:text-green-700 truncate flex-1">
+                        Comprobante {idx + 1}
+                      </span>
+                      <svg className="w-4 h-4 text-gray-400 group-hover:text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Upload section - only for contabilidad/pagos when approved */}
+            {order.status === 'approved' && canUploadPaymentProof && (
+              <div className="space-y-4">
+                <div className="border-2 border-dashed border-emerald-300 rounded-xl p-6 hover:border-emerald-400 transition-colors bg-white">
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      const maxSize = 10 * 1024 * 1024;
+                      const validFiles = files.filter(file => {
+                        if (file.size > maxSize) {
+                          toast.warning('Archivo muy grande', `${file.name} excede el límite de 10MB`);
+                          return false;
+                        }
+                        return true;
+                      });
+                      setPaymentProofFiles(prev => [...prev, ...validFiles]);
+                    }}
+                    className="hidden"
+                    id="payment-proof-upload"
+                  />
+                  <label htmlFor="payment-proof-upload" className="flex flex-col items-center cursor-pointer">
+                    <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mb-3">
+                      <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                    </div>
+                    <span className="text-sm font-medium text-gray-700">Arrastra o haz clic para subir comprobantes</span>
+                    <span className="text-xs text-gray-500 mt-1">PDF, imágenes o Excel · Máx. 10MB por archivo</span>
+                  </label>
+                </div>
+
+                {/* Selected files list */}
+                {paymentProofFiles.length > 0 && (
+                  <div className="space-y-2">
+                    {paymentProofFiles.map((file, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                            <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                            <p className="text-xs text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setPaymentProofFiles(prev => prev.filter((_, i) => i !== idx))}
+                          className="ml-2 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+
+                    <button
+                      onClick={handleUploadPaymentProof}
+                      disabled={uploadingProof}
+                      className="w-full px-4 py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
+                    >
+                      {uploadingProof ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          Subiendo comprobantes...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Registrar Comprobante y Completar Orden
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Message for non-authorized users */}
+            {order.status === 'approved' && !canUploadPaymentProof && (isOrderOwner || isAdmin) && (
+              <div className="flex items-center gap-3 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                <svg className="w-5 h-5 text-yellow-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm text-yellow-700">
+                  Pendiente de comprobante de pago. Solo Contabilidad o Pagos pueden registrar el comprobante.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Informacion y Articulos */}
           <div className="lg:col-span-2 space-y-6">
             {/* Informacion General */}
             <div className="bg-white rounded-xl shadow p-5">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Informacion General</h2>
-              
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Solicitante</label>
                   <p className="text-gray-900 font-medium">{order.applicant_name}</p>
                   <p className="text-sm text-gray-500">{order.applicant_email}</p>
                 </div>
-                
+
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Almacen/Obra</label>
+                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Centro de Costos</label>
                   <p className="text-gray-900 font-medium">{order.store_name}</p>
+                  {order.machine_name && (
+                    <p className="text-sm text-gray-600 mt-1">
+                      <span className="text-gray-400">Máquina:</span> {order.machine_name}
+                    </p>
+                  )}
                 </div>
-                
+
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Proveedor</label>
                   <p className="text-gray-900 font-medium">{order.supplier_name}</p>
                 </div>
-                
+
                 <div className="space-y-1 sm:col-span-2">
                   <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Justificacion</label>
                   <p className="text-gray-900">{order.justification}</p>
@@ -1008,12 +1248,11 @@ export default function OrdenDetallesPage() {
                         const fileName = url.split('/').pop() || `Archivo ${index + 1}`;
                         const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(url);
                         const isPdf = /\.pdf$/i.test(url);
-                        
+
                         return (
                           <div key={index} className="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
-                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                              isImage ? 'bg-purple-100' : isPdf ? 'bg-red-100' : 'bg-gray-200'
-                            }`}>
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isImage ? 'bg-purple-100' : isPdf ? 'bg-red-100' : 'bg-gray-200'
+                              }`}>
                               {isImage ? (
                                 <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -1057,7 +1296,7 @@ export default function OrdenDetallesPage() {
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
                 Articulos <span className="text-gray-400 font-normal">({order.items.length})</span>
               </h2>
-              
+
               {/* Mobile Cards */}
               <div className="lg:hidden space-y-3">
                 {order.items.map((item) => (
@@ -1128,7 +1367,7 @@ export default function OrdenDetallesPage() {
             <div className="bg-white rounded-xl shadow p-5 lg:sticky lg:top-4 space-y-5">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">Resumen</h2>
-                
+
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-500">Tipo de Pago</span>
@@ -1152,7 +1391,7 @@ export default function OrdenDetallesPage() {
                       <span className="text-gray-500">Subtotal</span>
                       <span className="text-gray-900">{formatCurrency(subtotalItems, order.currency)}</span>
                     </div>
-                    
+
                     {(order.tax_type === 'con_iva' || order.tax_type === 'retencion') && order.iva != null && order.iva > 0 && (
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-500">IVA ({order.iva_percentage || 16}%)</span>
@@ -1172,7 +1411,7 @@ export default function OrdenDetallesPage() {
                       </>
                     )}
                   </div>
-                  
+
                   <div className="pt-3 border-t border-gray-200">
                     <div className="flex justify-between">
                       <span className="text-lg font-bold text-gray-900">Total</span>
@@ -1181,12 +1420,12 @@ export default function OrdenDetallesPage() {
                   </div>
                 </div>
               </div>
-              
+
               {/* Acciones de Aprobacion - Para usuarios con permiso */}
               {canApproveOrder && order.status !== 'completed' && order.status !== 'rejected' && (
                 <div className="pt-5 border-t border-gray-200">
                   <h3 className="text-sm font-semibold text-gray-900 mb-3">Acciones</h3>
-                  
+
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={() => setShowApproveModal(true)}
@@ -1194,7 +1433,7 @@ export default function OrdenDetallesPage() {
                     >
                       Aprobar
                     </button>
-                    
+
                     <button
                       onClick={() => setShowRejectModal(true)}
                       className="bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
@@ -1202,37 +1441,6 @@ export default function OrdenDetallesPage() {
                       Rechazar
                     </button>
                   </div>
-                </div>
-              )}
-
-              {/* Completar Orden - Solo Admin */}
-              {isAdmin && order.status === 'approved' && (
-                <div className="pt-5 border-t border-gray-200">
-                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Completar Orden</h3>
-                  
-                  <label className="flex items-start gap-3 cursor-pointer group mb-3">
-                    <input
-                      type="checkbox"
-                      checked={confirmComplete}
-                      onChange={(e) => setConfirmComplete(e.target.checked)}
-                      className="mt-0.5 w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
-                    />
-                    <span className="text-sm text-gray-600 group-hover:text-gray-900">
-                      Confirmo que se ha completado todo el proceso de esta orden
-                    </span>
-                  </label>
-                  
-                  <button
-                    onClick={() => setShowCompleteModal(true)}
-                    disabled={!confirmComplete}
-                    className={`w-full px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      confirmComplete
-                        ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    }`}
-                  >
-                    Marcar como Completada
-                  </button>
                 </div>
               )}
             </div>

@@ -178,17 +178,49 @@ export default function Chatbot({ onFormDataExtracted, onOrderCreated }: Chatbot
     setIsCreatingOrder(true);
 
     try {
-      const formData = new FormData();
-      formData.append('orderData', JSON.stringify(extractedData));
+      // 1. Subir archivos de evidencia usando Presigned URLs directamente a Supabase
+      const uploadedUrls: string[] = [];
       
-      // Agregar cada archivo de evidencia
-      attachedFiles.forEach((af) => {
-        formData.append('evidence', af.file);
-      });
-      
+      for (const af of attachedFiles) {
+        try {
+          // Obtener presigned URL
+          const urlRes = await fetch('/api/v1/storage/signed-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              fileName: af.file.name, 
+              contentType: af.file.type 
+            })
+          });
+          
+          if (!urlRes.ok) throw new Error(`Error obteniendo permiso para subir archivo: ${af.file.name}`);
+          const urlData = await urlRes.json();
+
+          // Subir archivo directamente a Supabase
+          const uploadRes = await fetch(urlData.signedUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': af.file.type },
+            body: af.file
+          });
+
+          if (!uploadRes.ok) throw new Error(`Error subiendo el archivo: ${af.file.name}`);
+
+          uploadedUrls.push(urlData.publicUrl);
+        } catch (fileError) {
+          throw new Error(`Error procesando archivo ${af.file.name}: ${fileError instanceof Error ? fileError.message : 'desconocido'}`);
+        }
+      }
+
+      // 2. Crear la orden (como JSON ligero con presigned URLs)
+      const finalOrderPayload = {
+        ...extractedData,
+        evidenceUrls: uploadedUrls
+      };
+
       const response = await fetch('/api/v1/orders/create', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(finalOrderPayload),
       });
 
       const data = await response.json();

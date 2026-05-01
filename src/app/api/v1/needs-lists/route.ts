@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/api-auth";
+import { requireAuth } from "@/lib/api-auth";
 import { getSession } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
@@ -10,7 +10,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 export async function GET(request: Request) {
   try {
     // Verificar autenticación
-    const { error: authError } = await requireAdmin();
+    const { error: authError } = await requireAuth();
     if (authError) return authError;
 
     const session = await getSession();
@@ -70,20 +70,19 @@ export async function GET(request: Request) {
     } else if (userData.is_department_head && userData.department_id) {
       // Jefe de departamento ve:
       // 1. Sus propias listas
-      // 2. Listas pendientes de aprobación en su departamento
+      // 2. Listas donde su departamento tiene una aprobación (pendiente, aprobada o rechazada)
       const { data: approvals } = await supabaseAdmin
         .from('needs_list_approvals')
         .select('needs_list_id')
-        .eq('department_id', userData.department_id)
-        .eq('status', 'pending');
+        .eq('department_id', userData.department_id);
 
       const needsListIds = approvals?.map(a => a.needs_list_id) || [];
 
-      // Filtrar por listas propias o pendientes en su departamento
+      // Filtrar por listas propias o con aprobación en su departamento
       if (needsListIds.length > 0) {
         query = query.or(`applicant_id.eq.${userData.id},id.in.(${needsListIds.join(',')})`);
       } else {
-        // Si no hay listas pendientes, solo mostrar las propias
+        // Si no hay listas con aprobaciones, solo mostrar las propias
         query = query.eq('applicant_id', userData.id);
       }
     } else {
@@ -143,6 +142,17 @@ export async function GET(request: Request) {
           }
         }
 
+        // Determinar el estado de aprobación del departamento del usuario
+        let myDepartmentStatus: string | null = null;
+        if (userData.department_id && approvals) {
+          const myApproval = approvals.find(
+            (a: { department_id: string }) => a.department_id === userData.department_id
+          );
+          if (myApproval) {
+            myDepartmentStatus = myApproval.status;
+          }
+        }
+
         return {
           ...needsList,
           items: parsedItems,
@@ -152,6 +162,7 @@ export async function GET(request: Request) {
           currentDepartment,
           canApprove,
           isOwnList: needsList.applicant_id === userData.id,
+          my_department_status: myDepartmentStatus,
         };
       })
     );

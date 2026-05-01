@@ -26,6 +26,7 @@ type SupabaseOrder = {
   payment_type: string | null;
   is_urgent: boolean;
   is_definitive_rejection: boolean;
+  machine_id: number | null;
 };
 
 export async function GET(request: Request) {
@@ -34,8 +35,7 @@ export async function GET(request: Request) {
     if (authError) return authError;
 
     const { searchParams } = new URL(request.url);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _status = searchParams.get('status'); // Reserved for future filtering
+    const tab = searchParams.get('tab') || 'active';
 
     // Obtener información del usuario actual para determinar si es jefe de departamento
     const { data: currentUserData } = await supabaseAdmin
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
 
     let query = supabaseAdmin
       .from('orders')
-      .select('id, created_at, store_id, total, currency, status, applicant_id, items, payment_type, is_urgent, is_definitive_rejection');
+      .select('id, created_at, store_id, machine_id, total, currency, status, applicant_id, items, payment_type, is_urgent, is_definitive_rejection');
 
     if (session!.role !== 'admin') {
       if (currentUserData?.is_department_head && currentUserData?.department_id) {
@@ -67,6 +67,12 @@ export async function GET(request: Request) {
       } else {
         query = query.eq('applicant_id', session!.userId);
       }
+    }
+
+    if (tab === 'active') {
+      query = query.neq('status', 'completed');
+    } else if (tab === 'history') {
+      query = query.eq('status', 'completed');
     }
 
     query = query.order('created_at', { ascending: false });
@@ -96,8 +102,15 @@ export async function GET(request: Request) {
       .select('id, full_name, department_id, is_department_head')
       .in('id', userIds);
 
+    const machineIds = [...new Set(orders.map((o: { machine_id: number | null }) => o.machine_id).filter(Boolean))];
+    const { data: machines } = await supabaseAdmin
+      .from('machines')
+      .select('id, name')
+      .in('id', machineIds);
+
     const storesMap = new Map(stores?.map(s => [s.id, s.name]) || []);
     const usersMap = new Map(users?.map(u => [u.id, u.full_name]) || []);
+    const machinesMap = new Map(machines?.map(m => [m.id, m.name]) || []);
 
     const orderIds = (orders as SupabaseOrder[]).map((o) => o.id);
 
@@ -183,6 +196,7 @@ export async function GET(request: Request) {
         is_definitive_rejection: order.is_definitive_rejection || false,
         my_department_status: userDeptApprovals.get(order.id) || null,
         current_department_name: currentDeptMap.get(order.id)?.name || null,
+        machine_name: order.machine_id ? machinesMap.get(order.machine_id) || null : null,
       };
     });
 

@@ -274,6 +274,7 @@ export interface Order {
   is_urgent: boolean;
   urgency_justification: string | null;
   is_definitive_rejection: boolean;
+  payment_proof_url: string | null;
 }
 
 export interface OrderApproval {
@@ -384,6 +385,7 @@ export interface CreateOrderRequest {
   applicant_id?: string;
   store_name: string;
   machine_name?: string;
+  machine_id?: number;
   store_id?: number;
   supplier_name?: string;
   supplier_id?: string | number;

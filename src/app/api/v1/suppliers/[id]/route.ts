@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireDepartmentHead } from '@/lib/api-auth';
+import { requireSupplierCatalogAccess, requireSupplierEdit } from '@/lib/api-auth';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { z } from 'zod';
 
@@ -13,13 +13,14 @@ const supplierSchema = z.object({
   bank: z.string().min(2, 'El nombre del banco es requerido'),
   contact: z.string().nullable().optional(),
   category: z.string().min(2, 'La categoría es requerida'),
+  cover_image_url: z.string().nullable().optional(),
 });
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { error: authError } = await requireDepartmentHead();
+  const { error: authError } = await requireSupplierCatalogAccess();
   if (authError) return authError;
 
   const { id } = await params;
@@ -45,7 +46,7 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { error: authError } = await requireDepartmentHead();
+  const { error: authError } = await requireSupplierEdit();
   if (authError) return authError;
 
   const { id } = await params;
@@ -82,7 +83,7 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { error: authError } = await requireDepartmentHead();
+  const { error: authError } = await requireSupplierEdit();
   if (authError) return authError;
 
   const { id } = await params;

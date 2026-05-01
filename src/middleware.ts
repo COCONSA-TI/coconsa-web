@@ -54,26 +54,6 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/dashboard?error=unauthorized', request.url));
     }
 
-    if (path.startsWith('/dashboard/proveedores')) {
-      if (!session.userId) {
-        return NextResponse.redirect(new URL('/dashboard?error=unauthorized', request.url));
-      }
-
-      const meResponse = await fetch(new URL('/api/v1/me', request.url), {
-        headers: {
-          cookie: request.headers.get('cookie') || '',
-        },
-      });
-
-      if (!meResponse.ok) {
-        return NextResponse.redirect(new URL('/dashboard?error=unauthorized', request.url));
-      }
-
-      const meData = await meResponse.json();
-      if (!meData?.user?.is_department_head) {
-        return NextResponse.redirect(new URL('/dashboard?error=unauthorized', request.url));
-      }
-    }
   }
 
   // Redirigir a dashboard si ya está logueado e intenta acceder a login

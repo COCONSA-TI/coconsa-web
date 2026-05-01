@@ -35,6 +35,7 @@ type DBOrderDetail = {
   is_urgent: boolean;
   urgency_justification: string | null;
   is_definitive_rejection: boolean;
+  payment_proof_url: string | null;
 };
 
 // Función para recrear aprobaciones
@@ -174,7 +175,7 @@ export async function GET(
     // Obtener detalles de la orden
     const { data: order, error: orderError } = await supabaseAdmin
       .from('orders')
-      .select('id, created_at, store_id, supplier_id, total, currency, status, applicant_id, justification, justification_prove, retention, payment_type, tax_type, iva_percentage, iva, subtotal, items, is_urgent, urgency_justification, is_definitive_rejection')
+      .select('*')
       .eq('id', orderId)
       .single();
 
@@ -185,7 +186,7 @@ export async function GET(
       );
     }
 
-    const typedOrder = order as DBOrderDetail;
+    const typedOrder = order as DBOrderDetail & { payment_proof_url?: string | null, machine_id?: number | null };
 
     // Obtener datos relacionados
     const { data: store } = await supabaseAdmin
@@ -205,6 +206,16 @@ export async function GET(
       .select('commercial_name')
       .eq('id', typedOrder.supplier_id)
       .single();
+
+    let machineName: string | null = null;
+    if (typedOrder.machine_id) {
+      const { data: machine } = await supabaseAdmin
+        .from('machines')
+        .select('name')
+        .eq('id', typedOrder.machine_id)
+        .single();
+      machineName = machine?.name || null;
+    }
 
     // Obtener las aprobaciones pendientes para saber en qué departamento está la orden (la de menor approval_order)
     const { data: pendingApprovals } = await supabaseAdmin
@@ -275,6 +286,9 @@ export async function GET(
       is_urgent: typedOrder.is_urgent || false,
       urgency_justification: typedOrder.urgency_justification,
       is_definitive_rejection: typedOrder.is_definitive_rejection || false,
+      payment_proof_url: typedOrder.payment_proof_url || null,
+      machine_id: typedOrder.machine_id || null,
+      machine_name: machineName,
       current_department_name: currentDepartmentName,
       items: itemsArray.map((item, index: number) => ({
         id: `${typedOrder.id}-${index}`,
@@ -352,39 +366,15 @@ export async function PUT(
       );
     }
 
-    // Procesar el body
-    const contentType = request.headers.get('content-type') || '';
-    let body: {
-      items: OrderItem[];
-      justification?: string;
-      store_name?: string;
-      currency?: string;
-      retention?: string;
-      payment_type?: string;
-      tax_type?: string;
-      iva_percentage?: number;
-      evidenceUrls?: string[];
-    };
-    let evidenceFiles: File[] = [];
-
-    if (contentType.includes('multipart/form-data')) {
-      const formData = await request.formData();
-      const orderDataString = formData.get('orderData');
-      
-      if (typeof orderDataString === 'string') {
-        body = JSON.parse(orderDataString);
-      } else {
-        return NextResponse.json(
-          { error: 'Datos de orden inválidos' },
-          { status: 400 }
-        );
-      }
-      
-      const evidenceEntries = formData.getAll('evidence');
-      evidenceFiles = evidenceEntries.filter((entry): entry is File => entry instanceof File);
-    } else {
-      body = await request.json();
+    // Procesar el body (JSON-only con presigned URLs)
+    if (!request.headers.get('content-type')?.includes('application/json')) {
+      return NextResponse.json(
+        { error: 'El cuerpo debe ser JSON con evidenceUrls (presigned URLs)' },
+        { status: 400 }
+      );
     }
+
+    const body = await request.json();
 
     const { items, justification, store_name, currency = 'MXN', retention, payment_type, tax_type, iva_percentage, evidenceUrls = [] } = body;
 
@@ -522,40 +512,9 @@ export async function PUT(
       updateData.retention = retention;
     }
 
-    // Manejar archivos de evidencia de FormData (fallback) y URLs presignadas
-    const finalEvidenceUrls = [...evidenceUrls];
-    if (evidenceFiles.length > 0) {
-      const BUCKET_NAME = "Coconsa";
-      
-      for (const file of evidenceFiles) {
-        const timestamp = Date.now();
-        const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-        const filePath = `orders/${orderId}/evidence/${timestamp}_${sanitizedName}`;
-        
-        const arrayBuffer = await file.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        
-        const { error: uploadError } = await supabaseAdmin.storage
-          .from(BUCKET_NAME)
-          .upload(filePath, buffer, {
-            contentType: file.type,
-            upsert: false
-          });
-        
-        if (!uploadError) {
-          const { data: urlData } = supabaseAdmin.storage
-            .from(BUCKET_NAME)
-            .getPublicUrl(filePath);
-          
-          if (urlData?.publicUrl) {
-            finalEvidenceUrls.push(urlData.publicUrl);
-          }
-        }
-      }
-    }
-    
-    if (finalEvidenceUrls.length > 0) {
-      updateData.justification_prove = finalEvidenceUrls.join(',');
+    // Las URLs de evidencia ya vienen del frontend (presigned URLs)
+    if (evidenceUrls.length > 0) {
+      updateData.justification_prove = evidenceUrls.join(',');
     }
 
     // Actualizar la orden

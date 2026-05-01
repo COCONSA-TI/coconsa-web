@@ -105,14 +105,11 @@ export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarPr
   const allowedItems = menuItems.filter(item => {
     // Solo mostrar estas secciones por ahora (las demás están en desarrollo)
     if (item.href === '/dashboard/ordenes-compra' || item.href === '/dashboard/listas-necesidades') {
-      if (item.href === '/dashboard/listas-necesidades') {
-        return isAdmin;
-      }
       return true;
     }
-    // Proveedores: solo jefes de departamento
+    // Proveedores: todos pueden ver
     if (item.href === '/dashboard/proveedores') {
-      return isDepartmentHead;
+      return true;
     }
     // Configuración: solo admin
     if (item.href === '/dashboard/configuracion') {

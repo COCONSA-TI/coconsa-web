@@ -64,6 +64,16 @@ export async function GET(
       );
     }
 
+    let machineName = null;
+    if (order.machine_id) {
+      const { data: machine } = await supabaseAdmin
+        .from('machines')
+        .select('name')
+        .eq('id', order.machine_id)
+        .single();
+      machineName = machine?.name || null;
+    }
+
     // Pre-construir Map de aprobaciones por approval_order para lookup O(1).
     // Antes: approvals.find(a => a.approval_order === pos.order) dentro del loop → O(N×A).
     // Ahora: approvalByOrder.get(pos.order) → O(1) por acceso. Construcción: O(A).
@@ -127,7 +137,11 @@ export async function GET(
     yPos += 8;
     doc.text(`Solicitante: ${order.applicant?.full_name || 'N/A'}`, 15, yPos);
     yPos += 6;
-    doc.text(`Almacén/Obra: ${order.store?.name || 'N/A'}`, 15, yPos);
+    doc.text(`Centro de Costos: ${order.store?.name || 'N/A'}`, 15, yPos);
+    if (machineName) {
+      yPos += 6;
+      doc.text(`Máquina: ${machineName}`, 15, yPos);
+    }
     yPos += 6;
     doc.text(`Estado: ${statusLabels[order.status] || order.status}`, 15, yPos);
     

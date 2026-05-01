@@ -51,6 +51,8 @@ export const PurchaseOrderExtractedDataSchema = z.object({
     applicant_id: z.string().nullable().optional(),
     store_name: z.string().nullable().optional(),
     store_id: z.number().nullable().optional(),
+    machine_name: z.string().nullable().optional(),
+    machine_id: z.number().nullable().optional(),
     supplier_name: z.string().nullable().optional(),
     supplier_id: z.union([z.string(), z.number()]).nullable().optional(),
     items: z.array(z.object({
