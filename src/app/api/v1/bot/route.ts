@@ -13,6 +13,15 @@ interface UserData {
 // Inicializa el cliente de Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
+const MACHINE_STORE_CODE_REGEX = /^(M|CG|AT|C|V)\s*0*(\d+)/i;
+const isMachineStore = (storeName: string) => {
+  if (!storeName) return false;
+  const trimmed = storeName.trim();
+  if (MACHINE_STORE_CODE_REGEX.test(trimmed)) return true;
+  const extraMachines = ["Mercedez Benz", "Dodge Journey", "Kia Sportage", "Hyundai Palisade"];
+  return extraMachines.some(m => trimmed.toLowerCase().includes(m.toLowerCase()));
+};
+
 const SYSTEM_PROMPT = `Eres el asistente de compras de COCONSA, una empresa de construcción.
 
 TU OBJETIVO: Ayudar a los usuarios a crear Órdenes de Compra recopilando toda la información necesaria.
@@ -204,6 +213,9 @@ export async function POST(request: Request) {
     // Antes: 2 llamadas secuenciales → O(2 × LLM_latency) ≈ 10-30 s
     // Ahora: 1 llamada con JSON envelope  → O(1 × LLM_latency) ≈ 5-15 s
     // Ahorro estimado: ~50 % del tiempo de respuesta y ~50 % de tokens facturados.
+    // Filter out machines from stores list
+    const filteredStores = (stores || []).filter(store => !isMachineStore(store.name));
+
     let botMessage: string;
     let extractedData: ReturnType<typeof JSON.parse>;
     try {
@@ -211,7 +223,7 @@ export async function POST(request: Request) {
         safeHistory,
         message,
         userData,
-        (stores || []) as Store[],
+        filteredStores as Store[],
         (suppliers || []) as Supplier[],
         (machines || []) as any[]
       );
@@ -238,7 +250,7 @@ export async function POST(request: Request) {
       success: true,
       message: botMessage,
       extractedData,
-      availableStores: stores || [],
+      availableStores: filteredStores,
       availableSuppliers: suppliers || [],
       conversationHistory: [
         ...safeHistory,

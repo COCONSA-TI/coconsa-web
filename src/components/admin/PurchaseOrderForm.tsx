@@ -29,7 +29,7 @@ interface PurchaseOrderFormProps {
   onSubmit?: (data: OrderData) => void;
 }
 
-const MACHINE_STORE_CODE_REGEX = /^(CG|AT|C|V)\s*0*(\d+)$/i;
+const MACHINE_STORE_CODE_REGEX = /^(M|CG|AT|C|V)\s*0*(\d+)/i;
 const MACHINE_PREFIX_ORDER: Record<string, number> = {
   C: 1,
   V: 2,
@@ -984,8 +984,8 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
           type="submit"
           disabled={loading}
           className={`px-8 py-3 text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-semibold ${formData.is_urgent
-              ? 'bg-orange-600 hover:bg-orange-700'
-              : 'bg-blue-600 hover:bg-blue-700'
+            ? 'bg-orange-600 hover:bg-orange-700'
+            : 'bg-blue-600 hover:bg-blue-700'
             }`}
         >
           {loading

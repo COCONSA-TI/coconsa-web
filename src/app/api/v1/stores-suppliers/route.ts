@@ -2,6 +2,15 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
+const MACHINE_STORE_CODE_REGEX = /^(M|CG|AT|C|V)\s*0*(\d+)/i;
+const isMachineStore = (storeName: string) => {
+  if (!storeName) return false;
+  const trimmed = storeName.trim();
+  if (MACHINE_STORE_CODE_REGEX.test(trimmed)) return true;
+  const extraMachines = ["Mercedez Benz", "Dodge Journey", "Kia Sportage", "Hyundai Palisade"];
+  return extraMachines.some(m => trimmed.toLowerCase().includes(m.toLowerCase()));
+};
+
 export async function GET() {
   try {
     const session = await getSession();
@@ -57,8 +66,10 @@ export async function GET() {
         .filter((machine): machine is { id: string | number; name: string } => machine !== null);
     }
 
+    const filteredStores = (stores || []).filter(store => !isMachineStore(store.name));
+
     return NextResponse.json({
-      stores: stores || [],
+      stores: filteredStores,
       suppliers: suppliers || [],
       machines,
     });
