@@ -300,7 +300,8 @@ export async function POST(request: Request) {
     }
 
     const isUrgent = isUrgentStr === 'true';
-    const ivaPercentage = parseFloat(ivaPercentageStr) || 16;
+    const parsedIva = parseFloat(ivaPercentageStr);
+    const ivaPercentage = Number.isFinite(parsedIva) ? parsedIva : 16;
 
     // Validar órdenes urgentes
     if (isUrgent) {

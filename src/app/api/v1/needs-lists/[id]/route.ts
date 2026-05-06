@@ -346,7 +346,11 @@ export async function GET(
         created_at: needsList.created_at,
         user_name: needsList.applicant?.full_name || 'Usuario desconocido',
         user_email: needsList.applicant?.email || '',
+        subtotal: needsList.subtotal,
+        iva: needsList.iva,
         total: needsList.total,
+        iva_percentage: needsList.iva_percentage,
+        currency: needsList.currency || 'MXN',
         status: needsList.status,
         store_id: needsList.store_id,
         store_name: needsList.store?.name || null,
@@ -604,7 +608,8 @@ export async function PUT(
       }
       subtotal = Math.round(subtotal * 100) / 100;
 
-      const ivaPerc = iva_percentage ?? existingList.iva_percentage ?? 16;
+      const rawIvaPerc = iva_percentage ?? existingList.iva_percentage;
+      const ivaPerc = Number.isFinite(rawIvaPerc) ? rawIvaPerc : 16;
       const iva = Math.round(subtotal * (ivaPerc / 100) * 100) / 100;
       const total = Math.round((subtotal + iva) * 100) / 100;
 
