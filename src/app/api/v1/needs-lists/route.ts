@@ -47,18 +47,25 @@ export async function GET(request: Request) {
     let query = supabaseAdmin
       .from('needs_lists')
       .select(`
-        *,
+        id,
+        folio,
+        created_at,
+        applicant_id,
+        store_id,
+        status,
+        total,
+        currency,
+        iva_percentage,
+        items,
+        is_urgent,
+        urgency_justification,
+        is_definitive_rejection,
         applicant:users!needs_lists_applicant_id_fkey (
           full_name,
           email
         ),
         store:stores (
           name
-        ),
-        bank_account:user_bank_accounts (
-          bank_name,
-          account_number,
-          clabe
         )
       `)
       .order('created_at', { ascending: false });
@@ -117,72 +124,102 @@ export async function GET(request: Request) {
       );
     }
 
-    // Para cada lista, obtener información adicional de aprobaciones
-    const enrichedData = await Promise.all(
-      (needsLists || []).map(async (needsList) => {
-        // Parsear items
-        let parsedItems: any[] = [];
-        try {
-          parsedItems = JSON.parse(needsList.items);
-        } catch {
-          parsedItems = [];
+    if (!needsLists || needsLists.length === 0) {
+      return NextResponse.json({
+        success: true,
+        data: [],
+        count: 0,
+      });
+    }
+
+    // Batch: obtener TODAS las aprobaciones de todas las listas en un solo query
+    const allListIds = needsLists.map(nl => nl.id);
+    const { data: allApprovals } = await supabaseAdmin
+      .from('needs_list_approvals')
+      .select(`
+        id,
+        needs_list_id,
+        department_id,
+        status,
+        approval_order,
+        comments,
+        approved_at,
+        department:departments (
+          name,
+          code
+        )
+      `)
+      .in('needs_list_id', allListIds)
+      .order('approval_order');
+
+    // Agrupar aprobaciones por needs_list_id
+    const approvalsByListId = new Map<number, typeof allApprovals>();
+    if (allApprovals) {
+      for (const approval of allApprovals) {
+        const listId = approval.needs_list_id;
+        if (!approvalsByListId.has(listId)) {
+          approvalsByListId.set(listId, []);
         }
+        approvalsByListId.get(listId)!.push(approval);
+      }
+    }
 
-        // Obtener aprobaciones
-        const { data: approvals } = await supabaseAdmin
-          .from('needs_list_approvals')
-          .select(`
-            *,
-            department:departments (
-              name,
-              code
-            )
-          `)
-          .eq('needs_list_id', needsList.id)
-          .order('approval_order');
+    // Enriquecer datos sin queries adicionales
+    const enrichedData = needsLists.map((needsList) => {
+      // Parsear items
+      let parsedItems: any[] = [];
+      try {
+        parsedItems = JSON.parse(needsList.items);
+      } catch {
+        parsedItems = [];
+      }
 
-        // Determinar en qué departamento está actualmente
-        const pendingApproval = approvals?.find(a => a.status === 'pending');
-        const currentDepartment = pendingApproval?.department?.name || null;
+      // Usar aprobaciones del batch
+      const listApprovals = approvalsByListId.get(needsList.id) || [];
 
-        // Verificar si el usuario puede aprobar esta lista
-        let canApprove = false;
-        if (userData.is_department_head && userData.department_id && pendingApproval) {
-          canApprove = pendingApproval.department_id === userData.department_id;
-          
-          // Verificar que todas las aprobaciones anteriores estén completadas
-          if (canApprove && approvals) {
-            const previousApprovals = approvals.filter(
-              a => a.approval_order < pendingApproval.approval_order
-            );
-            canApprove = previousApprovals.every(a => a.status === 'approved');
-          }
-        }
+      // Determinar en qué departamento está actualmente
+      const pendingApproval = listApprovals.find(a => a.status === 'pending');
+      const pendingDept = pendingApproval?.department as { name: string; code: string } | { name: string; code: string }[] | null | undefined;
+      const currentDepartment = (Array.isArray(pendingDept) ? pendingDept[0]?.name : pendingDept?.name) || null;
 
-        // Determinar el estado de aprobación del departamento del usuario
-        let myDepartmentStatus: string | null = null;
-        if (userData.department_id && approvals) {
-          const myApproval = approvals.find(
-            (a: { department_id: string }) => a.department_id === userData.department_id
+      // Verificar si el usuario puede aprobar esta lista
+      let canApprove = false;
+      if (userData.is_department_head && userData.department_id && pendingApproval) {
+        canApprove = pendingApproval.department_id === userData.department_id;
+
+        // Verificar que todas las aprobaciones anteriores estén completadas
+        if (canApprove) {
+          const previousApprovals = listApprovals.filter(
+            a => a.approval_order < pendingApproval.approval_order
           );
-          if (myApproval) {
-            myDepartmentStatus = myApproval.status;
-          }
+          canApprove = previousApprovals.every(a => a.status === 'approved');
         }
+      }
 
-        return {
-          ...needsList,
-          items: parsedItems,
-          itemCount: parsedItems.length,
-          firstItem: parsedItems[0] || null,
-          approvals: approvals || [],
-          currentDepartment,
-          canApprove,
-          isOwnList: needsList.applicant_id === userData.id,
-          my_department_status: myDepartmentStatus,
-        };
-      })
-    );
+      // Determinar el estado de aprobación del departamento del usuario
+      let myDepartmentStatus: string | null = null;
+      if (userData.department_id) {
+        const myApproval = listApprovals.find(
+          (a: { department_id: string }) => a.department_id === userData.department_id
+        );
+        if (myApproval) {
+          myDepartmentStatus = myApproval.status;
+        }
+      }
+
+      return {
+        ...needsList,
+        date: needsList.created_at,
+        items: parsedItems,
+        itemCount: parsedItems.length,
+        firstItem: parsedItems[0] || null,
+        approvals: listApprovals,
+        currentDepartment,
+        canApprove,
+        isOwnList: needsList.applicant_id === userData.id,
+        my_department_status: myDepartmentStatus,
+      };
+    });
 
     return NextResponse.json({
       success: true,

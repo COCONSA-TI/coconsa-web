@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
-import { getNeedsListApprovals, canUserApproveNeedsList, getApprovalIconType, type NeedsListApproval, type ApprovalIconType } from "@/lib/needsListApprovalFlow";
+import { type NeedsListApproval, type ApprovalIconType, getApprovalIconType } from "@/lib/needsListApprovalFlow";
 import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
 import { OrderDetailSkeleton } from "@/components/ui/Skeletons";
@@ -76,7 +76,6 @@ export default function ListaNecesidadesDetallePage() {
   const router = useRouter();
   const params = useParams();
   const listId = params.id as string;
-  const listIdNumber = parseInt(listId, 10);
   const { user } = useAuth();
   const toast = useToast();
   
@@ -107,12 +106,15 @@ export default function ListaNecesidadesDetallePage() {
       
       setNeedsList(data.needsList);
       
-      const listApprovals = await getNeedsListApprovals(listIdNumber);
-      // Filter only main flow approvals (approval_order 1-3) and sort
+      // Use approvals from the same GET response (no extra API call needed)
+      const listApprovals = (data.approvals || []) as NeedsListApproval[];
       const filteredApprovals = listApprovals
         .filter(a => a.approval_order && a.approval_order >= 1 && a.approval_order <= 3)
         .sort((a, b) => (a.approval_order || 0) - (b.approval_order || 0));
       setApprovals(filteredApprovals);
+      
+      // Use canApprove from the same GET response (no extra API call needed)
+      setCanApproveList(data.canApprove || false);
     } catch {
       toast.error('Error', 'No se pudo cargar la lista de necesidades');
       router.push('/dashboard/listas-necesidades');
@@ -121,28 +123,10 @@ export default function ListaNecesidadesDetallePage() {
     }
   };
 
-  const checkUserCanApprove = async () => {
-    if (!user?.id) return;
-    
-    try {
-      const result = await canUserApproveNeedsList(user.id, listIdNumber);
-      setCanApproveList(result.canApprove);
-    } catch {
-      // Error silencioso
-    }
-  };
-
   useEffect(() => {
     fetchNeedsListDetails();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listId]);
-
-  useEffect(() => {
-    if (needsList && user) {
-      checkUserCanApprove();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [needsList, user]);
 
   const handleApprove = async (comments?: string) => {
     setProcessingAction(true);

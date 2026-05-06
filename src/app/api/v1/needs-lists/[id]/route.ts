@@ -307,25 +307,51 @@ export async function GET(
     }
 
     // Obtener aprobaciones
-    const { data: approvals } = await supabaseAdmin
-      .from('needs_list_approvals')
-      .select(`
-        *,
-        department:departments (
-          name,
-          code
-        ),
-        approver:users!needs_list_approvals_approver_id_fkey (
-          full_name,
-          email
-        )
-      `)
-      .eq('needs_list_id', needsListId)
-      .order('approval_order');
+    // Get session for canApprove check
+    const session = await getSession();
+
+    // Run approvals and department name queries in parallel
+    const [{ data: approvals }, currentUser] = await Promise.all([
+      supabaseAdmin
+        .from('needs_list_approvals')
+        .select(`
+          *,
+          department:departments (
+            name,
+            code
+          ),
+          approver:users!needs_list_approvals_approver_id_fkey (
+            full_name,
+            email
+          )
+        `)
+        .eq('needs_list_id', needsListId)
+        .order('approval_order'),
+      session?.userId
+        ? supabaseAdmin
+            .from('users')
+            .select('id, department_id, is_department_head')
+            .eq('id', session.userId)
+            .single()
+            .then(r => r.data)
+        : Promise.resolve(null),
+    ]);
 
     // Get current department name from pending approval
     const pendingApproval = (approvals || []).find((a: { status: string }) => a.status === 'pending');
     const currentDepartmentName = pendingApproval?.department?.name || null;
+
+    // Compute canApprove server-side
+    let canApprove = false;
+    if (currentUser?.is_department_head && currentUser?.department_id && pendingApproval) {
+      canApprove = pendingApproval.department_id === currentUser.department_id;
+      if (canApprove && approvals) {
+        const previousApprovals = approvals.filter(
+          (a: { approval_order: number }) => a.approval_order < pendingApproval.approval_order
+        );
+        canApprove = previousApprovals.every((a: { status: string }) => a.status === 'approved');
+      }
+    }
 
     // Get applicant department name
     let departmentName = null;
@@ -372,6 +398,7 @@ export async function GET(
         department_name: departmentName,
       },
       approvals: approvals || [],
+      canApprove,
     });
 
   } catch (error) {
