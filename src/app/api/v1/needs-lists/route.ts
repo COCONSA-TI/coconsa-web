@@ -70,7 +70,17 @@ export async function GET(request: Request) {
     } else if (userData.is_department_head && userData.department_id) {
       // Jefe de departamento ve:
       // 1. Sus propias listas
-      // 2. Listas donde su departamento tiene una aprobación (pendiente, aprobada o rechazada)
+      // 2. Listas de otros usuarios del mismo departamento
+      // 3. Listas donde su departamento tiene una aprobación
+
+      // Obtener todos los usuarios del mismo departamento
+      const { data: deptUsers } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('department_id', userData.department_id);
+
+      const deptUserIds = deptUsers?.map(u => u.id).filter(Boolean) || [];
+
       const { data: approvals } = await supabaseAdmin
         .from('needs_list_approvals')
         .select('needs_list_id')
@@ -78,13 +88,20 @@ export async function GET(request: Request) {
 
       const needsListIds = approvals?.map(a => a.needs_list_id) || [];
 
-      // Filtrar por listas propias o con aprobación en su departamento
-      if (needsListIds.length > 0) {
-        query = query.or(`applicant_id.eq.${userData.id},id.in.(${needsListIds.join(',')})`);
+      // Construir filtro OR
+      const orFilters: string[] = [];
+
+      if (deptUserIds.length > 0) {
+        orFilters.push(`applicant_id.in.(${deptUserIds.join(',')})`);
       } else {
-        // Si no hay listas con aprobaciones, solo mostrar las propias
-        query = query.eq('applicant_id', userData.id);
+        orFilters.push(`applicant_id.eq.${userData.id}`);
       }
+
+      if (needsListIds.length > 0) {
+        orFilters.push(`id.in.(${needsListIds.join(',')})`);
+      }
+
+      query = query.or(orFilters.join(','));
     } else {
       // Usuario normal solo ve sus propias listas
       query = query.eq('applicant_id', userData.id);

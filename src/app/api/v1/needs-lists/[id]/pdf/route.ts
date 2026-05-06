@@ -219,10 +219,11 @@ export async function GET(
     doc.text('SUBTOTAL:', totalsX - 20, yPos);
     doc.setFont('helvetica', 'normal');
     doc.text(formatMoney(subtotal), totalsX + 10, yPos);
-    if (iva > 0) {
+    const ivaPercentage = Number.isFinite(needsList.iva_percentage) ? needsList.iva_percentage : 16;
+    if (iva > 0 || ivaPercentage > 0) {
       yPos += 6;
       doc.setFont('helvetica', 'bold');
-      doc.text(`IVA (${needsList.iva_percentage || 16}%):`, totalsX - 20, yPos);
+      doc.text(`IVA (${ivaPercentage}%):`, totalsX - 20, yPos);
       doc.setFont('helvetica', 'normal');
       doc.text(formatMoney(iva), totalsX + 10, yPos);
     }

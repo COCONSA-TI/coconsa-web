@@ -50,20 +50,41 @@ export async function GET(request: Request) {
 
     if (session!.role !== 'admin') {
       if (currentUserData?.is_department_head && currentUserData?.department_id) {
-        // Jefes de departamento ven: sus propias órdenes + órdenes que tienen aprobación pendiente en su departamento
+        // Jefes de departamento ven:
+        // 1. Sus propias órdenes
+        // 2. Órdenes de otros usuarios del mismo departamento
+        // 3. Órdenes que tienen aprobación en su departamento
+
+        // Obtener todos los usuarios del mismo departamento
+        const { data: deptUsers } = await supabaseAdmin
+          .from('users')
+          .select('id')
+          .eq('department_id', currentUserData.department_id);
+
+        const deptUserIds = deptUsers?.map(u => u.id).filter(Boolean) || [];
+
+        // Obtener órdenes que requieren aprobación de su departamento
         const { data: pendingApprovalOrderIds } = await supabaseAdmin
           .from('order_approvals')
           .select('order_id')
           .eq('department_id', currentUserData.department_id);
 
         const orderIdsFromApprovals = pendingApprovalOrderIds?.map(a => a.order_id).filter(Boolean) || [];
-        
-        if (orderIdsFromApprovals.length > 0) {
-          // Usar OR: órdenes propias O órdenes que requieren aprobación de su departamento
-          query = query.or(`applicant_id.eq.${session!.userId},id.in.(${orderIdsFromApprovals.join(',')})`);
+
+        // Construir filtro OR con: órdenes del departamento + órdenes de aprobación
+        const orFilters: string[] = [];
+
+        if (deptUserIds.length > 0) {
+          orFilters.push(`applicant_id.in.(${deptUserIds.join(',')})`);
         } else {
-          query = query.eq('applicant_id', session!.userId);
+          orFilters.push(`applicant_id.eq.${session!.userId}`);
         }
+
+        if (orderIdsFromApprovals.length > 0) {
+          orFilters.push(`id.in.(${orderIdsFromApprovals.join(',')})`);
+        }
+
+        query = query.or(orFilters.join(','));
       } else {
         query = query.eq('applicant_id', session!.userId);
       }
