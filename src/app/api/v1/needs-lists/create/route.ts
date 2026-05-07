@@ -4,57 +4,7 @@ import { getSession } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import type { Department, NeedsListItem } from "@/types/database";
 
-const BUCKET_NAME = "Coconsa";
 
-const ALLOWED_EVIDENCE_MIME_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/gif',
-  'application/pdf',
-]);
-const MAX_EVIDENCE_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
-
-async function uploadItemEvidenceFile(
-  file: File,
-  needsListId: string,
-  itemIndex: number
-): Promise<string> {
-  if (!ALLOWED_EVIDENCE_MIME_TYPES.has(file.type)) {
-    throw new Error(`Tipo de archivo no permitido en item ${itemIndex + 1}: "${file.type}"`);
-  }
-
-  if (file.size > MAX_EVIDENCE_FILE_SIZE_BYTES) {
-    throw new Error(`El archivo del item ${itemIndex + 1} excede el límite de 10 MB.`);
-  }
-
-  const timestamp = Date.now();
-  const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-  const filePath = `needs-lists/${needsListId}/items/${itemIndex + 1}/${timestamp}_${sanitizedName}`;
-  const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-
-  const { error } = await supabaseAdmin.storage
-    .from(BUCKET_NAME)
-    .upload(filePath, buffer, {
-      contentType: file.type,
-      upsert: false,
-    });
-
-  if (error) {
-    throw new Error(`No se pudo subir evidencia del item ${itemIndex + 1}: ${error.message}`);
-  }
-
-  const { data: urlData } = supabaseAdmin.storage
-    .from(BUCKET_NAME)
-    .getPublicUrl(filePath);
-
-  if (!urlData?.publicUrl) {
-    throw new Error(`No se pudo obtener URL pública para evidencia del item ${itemIndex + 1}`);
-  }
-
-  return urlData.publicUrl;
-}
 
 // Función para crear aprobaciones de lista de necesidades en el servidor
 async function createNeedsListApprovalsServer(
@@ -215,20 +165,19 @@ export async function POST(request: Request) {
       );
     }
 
-    await supabaseAdmin.storage.listBuckets();
+    // Solo aceptar JSON (los archivos ya se subieron vía presigned URLs desde el frontend)
+    const body = await request.json();
 
-    // Parsear FormData
-    const formData = await request.formData();
-    
-    // Extraer campos del formulario
-    const storeName = formData.get('store_name') as string;
-    const storeId = formData.get('store_id') as string;
-    const bankAccountId = formData.get('bank_account_id') as string;
-    const itemsStr = formData.get('items') as string;
-    const currency = (formData.get('currency') as string) || 'MXN';
-    const ivaPercentageStr = formData.get('iva_percentage') as string;
-    const isUrgentStr = formData.get('is_urgent') as string;
-    const urgencyJustification = formData.get('urgency_justification') as string;
+    const {
+      bank_account_id: bankAccountId,
+      store_name: storeName,
+      store_id: storeId,
+      currency = 'MXN',
+      iva_percentage: ivaPercentageRaw,
+      is_urgent: isUrgent = false,
+      urgency_justification: urgencyJustification,
+      items: rawItems,
+    } = body;
 
     // Validar campos requeridos
     if (!bankAccountId) {
@@ -238,31 +187,15 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!itemsStr) {
-      return NextResponse.json(
-        { success: false, error: "Los items son requeridos" },
-        { status: 400 }
-      );
-    }
-
-    // Parsear items
-    let items: NeedsListItem[];
-    try {
-      items = JSON.parse(itemsStr);
-    } catch {
-      return NextResponse.json(
-        { success: false, error: "Formato inválido de items" },
-        { status: 400 }
-      );
-    }
-
-    // Validar items
-    if (!Array.isArray(items) || items.length === 0) {
+    if (!rawItems || !Array.isArray(rawItems) || rawItems.length === 0) {
       return NextResponse.json(
         { success: false, error: "Debe incluir al menos un item" },
         { status: 400 }
       );
     }
+
+    // Parsear items
+    const items: NeedsListItem[] = rawItems;
 
     // Validar estructura de cada item
     for (const item of items) {
@@ -297,10 +230,16 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
+
+      if (!item.evidencia_url) {
+        return NextResponse.json(
+          { success: false, error: `El item "${item.nombre}" debe incluir un archivo de evidencia` },
+          { status: 400 }
+        );
+      }
     }
 
-    const isUrgent = isUrgentStr === 'true';
-    const parsedIva = parseFloat(ivaPercentageStr);
+    const parsedIva = parseFloat(String(ivaPercentageRaw));
     const ivaPercentage = Number.isFinite(parsedIva) ? parsedIva : 16;
 
     // Validar órdenes urgentes
@@ -392,20 +331,18 @@ export async function POST(request: Request) {
     const iva = Math.round(subtotal * (ivaPercentage / 100) * 100) / 100;
     const total = Math.round((subtotal + iva) * 100) / 100;
 
-    // Procesar evidencia por item (obligatoria)
-    const itemEvidenceFiles = items.map((_, index) => {
-      const file = formData.get(`item_evidence_${index}`);
-      return file instanceof File && file.size > 0 ? file : null;
-    });
+    // Las URLs de evidencia ya vienen del frontend (se subieron vía presigned URLs)
+    const itemEvidenceUrls = items.map(item => item.evidencia_url || '').filter(Boolean);
 
-    for (let i = 0; i < itemEvidenceFiles.length; i += 1) {
-      if (!itemEvidenceFiles[i]) {
-        return NextResponse.json(
-          { success: false, error: `Falta archivo de justificación para el item ${i + 1}` },
-          { status: 400 }
-        );
-      }
-    }
+    const itemsWithEvidence = items.map((item) => ({
+      nombre: item.nombre,
+      cantidad: item.cantidad,
+      unidad: item.unidad,
+      precioUnitario: item.precioUnitario,
+      precioTotal: item.precioTotal,
+      justificacion: item.justificacion?.trim() ?? "",
+      evidencia_url: item.evidencia_url || undefined,
+    }));
 
     // Crear la lista de necesidades
     const { data: needsListData, error: insertError } = await supabaseAdmin
@@ -415,7 +352,7 @@ export async function POST(request: Request) {
         store_id: finalStoreId,
         bank_account_id: bankAccountId,
         date: new Date().toISOString().split('T')[0],
-        items: JSON.stringify(items),
+        items: JSON.stringify(itemsWithEvidence),
         justification: null,
         subtotal,
         iva,
@@ -425,7 +362,7 @@ export async function POST(request: Request) {
         status: 'pending',
         is_urgent: isUrgent,
         urgency_justification: isUrgent ? urgencyJustification : null,
-        evidence_urls: null,
+        evidence_urls: itemEvidenceUrls.length > 0 ? itemEvidenceUrls.join(',') : null,
       })
       .select()
       .single();
@@ -434,43 +371,6 @@ export async function POST(request: Request) {
       console.error('Error al crear lista de necesidades:', insertError);
       return NextResponse.json(
         { success: false, error: insertError?.message || "Error al crear la lista de necesidades" },
-        { status: 500 }
-      );
-    }
-
-    const itemEvidenceUrls: string[] = [];
-    for (let i = 0; i < itemEvidenceFiles.length; i += 1) {
-      const file = itemEvidenceFiles[i];
-      if (!file) continue;
-      const uploadedUrl = await uploadItemEvidenceFile(file, needsListData.id.toString(), i);
-      itemEvidenceUrls.push(uploadedUrl);
-    }
-
-    const itemsWithEvidence = items.map((item, index) => {
-      const itemJustificacion = item.justificacion?.trim() ?? "";
-      return {
-        ...item,
-        justificacion: itemJustificacion,
-        evidencia_url: itemEvidenceUrls[index],
-      };
-    });
-
-    const { error: updateNeedsListError } = await supabaseAdmin
-      .from('needs_lists')
-      .update({
-        items: JSON.stringify(itemsWithEvidence),
-        evidence_urls: itemEvidenceUrls.join(','),
-      })
-      .eq('id', needsListData.id);
-
-    if (updateNeedsListError) {
-      await supabaseAdmin
-        .from('needs_lists')
-        .delete()
-        .eq('id', needsListData.id);
-
-      return NextResponse.json(
-        { success: false, error: "Error al guardar justificaciones por item" },
         { status: 500 }
       );
     }

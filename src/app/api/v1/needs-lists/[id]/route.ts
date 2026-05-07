@@ -15,56 +15,7 @@ interface NormalizedNeedsListItem {
   evidencia_url?: string;
 }
 
-const BUCKET_NAME = "Coconsa";
-const ALLOWED_EVIDENCE_MIME_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/gif',
-  'application/pdf',
-]);
-const MAX_EVIDENCE_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
-async function uploadItemEvidenceFile(
-  file: File,
-  needsListId: number,
-  itemIndex: number
-): Promise<string> {
-  if (!ALLOWED_EVIDENCE_MIME_TYPES.has(file.type)) {
-    throw new Error(`Tipo de archivo no permitido en item ${itemIndex + 1}: "${file.type}"`);
-  }
-
-  if (file.size > MAX_EVIDENCE_FILE_SIZE_BYTES) {
-    throw new Error(`El archivo del item ${itemIndex + 1} excede el límite de 10 MB.`);
-  }
-
-  const timestamp = Date.now();
-  const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-  const filePath = `needs-lists/${needsListId}/items/${itemIndex + 1}/${timestamp}_${sanitizedName}`;
-  const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-
-  const { error } = await supabaseAdmin.storage
-    .from(BUCKET_NAME)
-    .upload(filePath, buffer, {
-      contentType: file.type,
-      upsert: false,
-    });
-
-  if (error) {
-    throw new Error(`No se pudo subir evidencia del item ${itemIndex + 1}: ${error.message}`);
-  }
-
-  const { data: urlData } = supabaseAdmin.storage
-    .from(BUCKET_NAME)
-    .getPublicUrl(filePath);
-
-  if (!urlData?.publicUrl) {
-    throw new Error(`No se pudo obtener URL pública para evidencia del item ${itemIndex + 1}`);
-  }
-
-  return urlData.publicUrl;
-}
 
 function toSafeNumber(value: unknown): number {
   if (typeof value === 'number') {
@@ -473,48 +424,8 @@ export async function PUT(
       iva_percentage?: number;
     };
 
-    // Parsear el body - soporta JSON y FormData
-    const contentType = request.headers.get('content-type') || '';
-    let body: UpdateNeedsListBody;
-    let formData: FormData | null = null;
-
-    if (contentType.includes('multipart/form-data')) {
-      formData = await request.formData();
-      const itemsStr = formData.get('items') as string;
-
-      if (!itemsStr) {
-        return NextResponse.json(
-          { success: false, error: 'Los items son requeridos' },
-          { status: 400 }
-        );
-      }
-
-      let parsedItems: unknown;
-      try {
-        parsedItems = JSON.parse(itemsStr);
-      } catch {
-        return NextResponse.json(
-          { success: false, error: 'Formato inválido de items' },
-          { status: 400 }
-        );
-      }
-
-      body = {
-        items: Array.isArray(parsedItems) ? parsedItems as UpdateNeedsListBody['items'] : [],
-        store_id: (formData.get('store_id') as string) || undefined,
-        store_name: (formData.get('store_name') as string) || undefined,
-        bank_account_id: (formData.get('bank_account_id') as string) || undefined,
-        currency: (formData.get('currency') as string) || undefined,
-        iva_percentage: (() => {
-          const raw = formData?.get('iva_percentage') as string | null;
-          if (!raw) return undefined;
-          const parsed = Number(raw);
-          return Number.isFinite(parsed) ? parsed : undefined;
-        })(),
-      };
-    } else {
-      body = await request.json();
-    }
+    // Solo aceptar JSON (los archivos ya se subieron vía presigned URLs desde el frontend)
+    const body: UpdateNeedsListBody = await request.json();
 
     const { 
       items, 
@@ -577,15 +488,8 @@ export async function PUT(
         const unit = (item.unit ?? item.unidad ?? '').toString().trim();
         const unitPrice = Number(item.unit_price ?? item.precioUnitario);
         const itemJustificacion = (item.justificacion ?? '').toString().trim();
-        const existingEvidenceUrl = (item.evidencia_url ?? '').toString().trim();
-
-        let finalEvidenceUrl = existingEvidenceUrl;
-        if (formData) {
-          const uploadedFile = formData.get(`item_evidence_${index}`);
-          if (uploadedFile instanceof File && uploadedFile.size > 0) {
-            finalEvidenceUrl = await uploadItemEvidenceFile(uploadedFile, needsListId, index);
-          }
-        }
+        // Las URLs de evidencia ya vienen del frontend (subidas vía presigned URLs)
+        const finalEvidenceUrl = (item.evidencia_url ?? '').toString().trim();
 
         if (!finalEvidenceUrl) {
           return NextResponse.json(

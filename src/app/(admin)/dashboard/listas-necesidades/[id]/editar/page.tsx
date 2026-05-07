@@ -293,28 +293,59 @@ export default function EditarListaNecesidadesPage() {
     setSubmitting(true);
 
     try {
-      const formDataToSend = new FormData();
-      formDataToSend.append("bank_account_id", bankAccountId);
-      formDataToSend.append("store_id", storeId);
-      formDataToSend.append("store_name", storeName);
-      formDataToSend.append("items", JSON.stringify(items.map((item) => ({
-        nombre: item.nombre,
-        cantidad: parseFloat(item.cantidad),
-        unidad: item.unidad,
-        precioUnitario: parseFloat(item.precioUnitario),
-        justificacion: item.justificacion,
-        evidencia_url: item.evidenciaUrlExistente || undefined,
-      }))));
+      // 1. Subir archivos nuevos de evidencia usando Presigned URLs directamente a Supabase
+      const itemsWithUrls = await Promise.all(
+        items.map(async (item, index) => {
+          let evidenciaUrl = item.evidenciaUrlExistente || undefined;
 
-      items.forEach((item, index) => {
-        if (item.evidenciaFile) {
-          formDataToSend.append(`item_evidence_${index}`, item.evidenciaFile);
-        }
-      });
+          if (item.evidenciaFile) {
+            const urlRes = await fetch('/api/v1/storage/signed-url', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                fileName: item.evidenciaFile.name,
+                contentType: item.evidenciaFile.type,
+                folder: 'needs-lists/staging',
+              }),
+            });
+
+            if (!urlRes.ok) throw new Error(`Error obteniendo permiso para subir archivo del item #${index + 1}`);
+            const urlData = await urlRes.json();
+
+            const uploadRes = await fetch(urlData.signedUrl, {
+              method: 'PUT',
+              headers: { 'Content-Type': item.evidenciaFile.type },
+              body: item.evidenciaFile,
+            });
+
+            if (!uploadRes.ok) throw new Error(`Error subiendo el archivo del item #${index + 1}`);
+
+            evidenciaUrl = urlData.publicUrl;
+          }
+
+          return {
+            nombre: item.nombre,
+            cantidad: parseFloat(item.cantidad),
+            unidad: item.unidad,
+            precioUnitario: parseFloat(item.precioUnitario),
+            justificacion: item.justificacion,
+            evidencia_url: evidenciaUrl,
+          };
+        })
+      );
+
+      // 2. Actualizar la lista (como JSON ligero con presigned URLs)
+      const payload = {
+        bank_account_id: bankAccountId,
+        store_id: storeId,
+        store_name: storeName,
+        items: itemsWithUrls,
+      };
 
       const response = await fetch(`/api/v1/needs-lists/${listId}`, {
         method: "PUT",
-        body: formDataToSend,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json();

@@ -168,33 +168,60 @@ export default function CreateNeedsListPage() {
     setLoading(true);
 
     try {
-      const formData = new FormData();
-      formData.append('bank_account_id', bankAccountId);
-      formData.append('store_name', storeName);
-      formData.append('store_id', storeId);
-      formData.append('currency', currency);
-      formData.append('iva_percentage', ivaPercentage.toString());
-      formData.append('is_urgent', isUrgent.toString());
-      if (isUrgent) {
-        formData.append('urgency_justification', urgencyJustification);
-      }
-      formData.append('items', JSON.stringify(items.map((item) => ({
-        nombre: item.nombre,
-        cantidad: item.cantidad,
-        unidad: item.unidad,
-        precioUnitario: item.precioUnitario,
-        justificacion: item.justificacion,
-      }))));
+      // 1. Subir archivos de evidencia usando Presigned URLs directamente a Supabase (salta límite de 4.5MB Vercel)
+      const itemEvidenceUrls: string[] = [];
 
-      items.forEach((item, index) => {
+      for (let index = 0; index < items.length; index++) {
+        const item = items[index];
         if (item.evidenciaFile) {
-          formData.append(`item_evidence_${index}`, item.evidenciaFile);
+          const urlRes = await fetch('/api/v1/storage/signed-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileName: item.evidenciaFile.name,
+              contentType: item.evidenciaFile.type,
+              folder: 'needs-lists/staging',
+            }),
+          });
+
+          if (!urlRes.ok) throw new Error(`Error obteniendo permiso para subir archivo del item #${index + 1}`);
+          const urlData = await urlRes.json();
+
+          const uploadRes = await fetch(urlData.signedUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': item.evidenciaFile.type },
+            body: item.evidenciaFile,
+          });
+
+          if (!uploadRes.ok) throw new Error(`Error subiendo el archivo del item #${index + 1}`);
+
+          itemEvidenceUrls.push(urlData.publicUrl);
         }
-      });
+      }
+
+      // 2. Crear la lista (como JSON ligero con presigned URLs)
+      const payload = {
+        bank_account_id: bankAccountId,
+        store_name: storeName,
+        store_id: storeId,
+        currency,
+        iva_percentage: ivaPercentage,
+        is_urgent: isUrgent,
+        urgency_justification: isUrgent ? urgencyJustification : undefined,
+        items: items.map((item, index) => ({
+          nombre: item.nombre,
+          cantidad: item.cantidad,
+          unidad: item.unidad,
+          precioUnitario: item.precioUnitario,
+          justificacion: item.justificacion,
+          evidencia_url: itemEvidenceUrls[index] || undefined,
+        })),
+      };
 
       const response = await fetch('/api/v1/needs-lists/create', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json();
@@ -207,7 +234,7 @@ export default function CreateNeedsListPage() {
       }
     } catch (error) {
       console.error('Error:', error);
-      toast.error('Error al crear la lista', 'Error al crear la lista de necesidades');
+      toast.error('Error al crear la lista', error instanceof Error ? error.message : 'Error al crear la lista de necesidades');
     } finally {
       setLoading(false);
     }
