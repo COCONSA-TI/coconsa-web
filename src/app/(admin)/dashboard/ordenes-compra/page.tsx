@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo, Suspense } from "react";
+import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { useRealtime } from "@/hooks/useRealtime";
 import Link from "next/link";
 import { OrdersPageSkeleton } from "@/components/ui/Skeletons";
 
@@ -212,6 +213,26 @@ function OrdenesCompraContent() {
       setLoading(false);
     }
   };
+
+  // Refetch silencioso (sin mostrar loading) para actualizaciones en tiempo real
+  const silentRefetch = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/v1/orders?tab=${tab}`);
+      const data = await response.json();
+      if (data.success) {
+        setOrders(data.orders);
+      }
+    } catch {
+      // Error silencioso en refetch de background
+    }
+  }, [tab]);
+
+  // Suscripción a cambios en tiempo real
+  useRealtime({
+    tables: ['orders', 'order_approvals'],
+    onchange: silentRefetch,
+    enabled: !authLoading,
+  });
 
   const handleGenerateReport = async () => {
     try {

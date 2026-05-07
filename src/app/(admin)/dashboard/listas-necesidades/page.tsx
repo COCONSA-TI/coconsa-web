@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useRealtime } from '@/hooks/useRealtime';
 import Link from 'next/link';
 
 interface NeedsList {
@@ -62,6 +63,25 @@ export default function NeedsListsPage() {
       setLoading(false);
     }
   };
+
+  // Refetch silencioso para actualizaciones en tiempo real
+  const silentRefetch = useCallback(async () => {
+    try {
+      const response = await fetch('/api/v1/needs-lists');
+      const data = await response.json();
+      if (data.success) {
+        setNeedsLists(data.data || []);
+      }
+    } catch {
+      // Error silencioso en refetch de background
+    }
+  }, []);
+
+  // Suscripción a cambios en tiempo real
+  useRealtime({
+    tables: ['needs_lists', 'needs_list_approvals'],
+    onchange: silentRefetch,
+  });
 
   const filteredLists = needsLists.filter(list => {
     if (filterStatus === 'all') return true;
