@@ -43,10 +43,11 @@ async function createNeedsListApprovalsServer(
   // ya que esos valores corresponden al flujo de órdenes de compra, no al de listas)
   const contabilidad = departments.find((d: Department) => d.code === 'contabilidad');
   const contraloria = departments.find((d: Department) => d.code === 'contraloria');
+  const pagos = departments.find((d: Department) => d.code === 'pagos');
 
   if (isUrgent && isApplicantDeptHead) {
     // LISTA URGENTE: Solo jefes de departamento pueden crear urgentes
-    // Flujo urgente: Contabilidad (2) → Contraloría (3)
+    // Flujo urgente: Contabilidad (2) → Contraloría (3) → Pagos (4)
     // Se salta: Gerencia (1)
 
     if (contabilidad) {
@@ -66,8 +67,17 @@ async function createNeedsListApprovalsServer(
         approval_order: 3,
       });
     }
+
+    if (pagos) {
+      approvalsToCreate.push({
+        needs_list_id: needsListId,
+        department_id: pagos.id,
+        status: 'pending',
+        approval_order: 4,
+      });
+    }
   } else {
-    // LISTA NORMAL: Flujo completo Gerencia → Contabilidad → Contraloría
+    // LISTA NORMAL: Flujo completo Gerencia → Contabilidad → Contraloría → Pagos
     const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
 
     // Determinar si el solicitante es de una Gerencia (approval_order = 1 en la DB)
@@ -75,7 +85,7 @@ async function createNeedsListApprovalsServer(
 
     if (isFromGerencia) {
       // El solicitante es de una Gerencia
-      // Flujo: Gerencia (1) → Contabilidad (2) → Contraloría (3)
+      // Flujo: Gerencia (1) → Contabilidad (2) → Contraloría (3) → Pagos (4)
 
       // 1. Aprobación del departamento del solicitante (gerencia)
       approvalsToCreate.push({
@@ -109,6 +119,16 @@ async function createNeedsListApprovalsServer(
           approval_order: 3,
         });
       }
+
+      // 4. Pagos (needs list order = 4)
+      if (pagos) {
+        approvalsToCreate.push({
+          needs_list_id: needsListId,
+          department_id: pagos.id,
+          status: 'pending',
+          approval_order: 4,
+        });
+      }
     } else {
       // El solicitante NO es de una Gerencia (ej: Contabilidad, Contraloría, otro)
       // Solo agregar los pasos que están "arriba" del solicitante en el flujo de necesidades
@@ -130,6 +150,16 @@ async function createNeedsListApprovalsServer(
           department_id: contraloria.id,
           status: 'pending',
           approval_order: 3,
+        });
+      }
+
+      // Pagos siempre se agrega (a menos que el solicitante sea de Pagos)
+      if (pagos && applicantDept?.id !== pagos.id) {
+        approvalsToCreate.push({
+          needs_list_id: needsListId,
+          department_id: pagos.id,
+          status: 'pending',
+          approval_order: 4,
         });
       }
     }

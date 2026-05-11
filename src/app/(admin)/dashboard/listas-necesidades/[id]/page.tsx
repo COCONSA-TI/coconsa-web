@@ -109,7 +109,7 @@ export default function ListaNecesidadesDetallePage() {
       // Use approvals from the same GET response (no extra API call needed)
       const listApprovals = (data.approvals || []) as NeedsListApproval[];
       const filteredApprovals = listApprovals
-        .filter(a => a.approval_order && a.approval_order >= 1 && a.approval_order <= 3)
+        .filter(a => a.approval_order && a.approval_order >= 1 && a.approval_order <= 4)
         .sort((a, b) => (a.approval_order || 0) - (b.approval_order || 0));
       setApprovals(filteredApprovals);
       

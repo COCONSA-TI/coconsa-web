@@ -100,9 +100,10 @@ async function recreateNeedsListApprovals(
   // ya que esos valores corresponden al flujo de órdenes de compra, no al de listas)
   const contabilidad = departments.find((d: Department) => d.code === 'contabilidad');
   const contraloria = departments.find((d: Department) => d.code === 'contraloria');
+  const pagos = departments.find((d: Department) => d.code === 'pagos');
 
   if (isUrgent && isApplicantDeptHead) {
-    // LISTA URGENTE: Contabilidad (2) → Contraloría (3)
+    // LISTA URGENTE: Contabilidad (2) → Contraloría (3) → Pagos (4)
 
     if (contabilidad) {
       approvalsToCreate.push({
@@ -121,8 +122,17 @@ async function recreateNeedsListApprovals(
         approval_order: 3,
       });
     }
+
+    if (pagos) {
+      approvalsToCreate.push({
+        needs_list_id: needsListId,
+        department_id: pagos.id,
+        status: 'pending',
+        approval_order: 4,
+      });
+    }
   } else {
-    // LISTA NORMAL: Gerencia (1) → Contabilidad (2) → Contraloría (3)
+    // LISTA NORMAL: Gerencia (1) → Contabilidad (2) → Contraloría (3) → Pagos (4)
     const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
     const isFromGerencia = applicantDept && applicantDept.approval_order === 1;
 
@@ -157,6 +167,16 @@ async function recreateNeedsListApprovals(
           approval_order: 3,
         });
       }
+
+      // Pagos
+      if (pagos) {
+        approvalsToCreate.push({
+          needs_list_id: needsListId,
+          department_id: pagos.id,
+          status: 'pending',
+          approval_order: 4,
+        });
+      }
     } else {
       // Solicitante NO es de Gerencia
       if (contabilidad && applicantDept?.id !== contabilidad.id) {
@@ -174,6 +194,16 @@ async function recreateNeedsListApprovals(
           department_id: contraloria.id,
           status: 'pending',
           approval_order: 3,
+        });
+      }
+
+      // Pagos siempre se agrega (a menos que el solicitante sea de Pagos)
+      if (pagos && applicantDept?.id !== pagos.id) {
+        approvalsToCreate.push({
+          needs_list_id: needsListId,
+          department_id: pagos.id,
+          status: 'pending',
+          approval_order: 4,
         });
       }
     }
