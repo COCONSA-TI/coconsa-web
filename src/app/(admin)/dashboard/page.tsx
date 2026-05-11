@@ -1,8 +1,7 @@
 'use client';
 
 import { useRequireAuth } from '@/hooks/useAuth';
-import { useEffect, useState, useCallback } from 'react';
-import { useRealtime } from '@/hooks/useRealtime';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { DashboardStatsSkeleton, OrdersListSkeleton } from '@/components/ui/Skeletons';
 
@@ -112,34 +111,6 @@ export default function DashboardPage() {
     }
   }, [user]);
 
-  // Refetch silencioso para actualizaciones en tiempo real
-  const silentRefetch = useCallback(async () => {
-    try {
-      const response = await fetch('/api/v1/orders', { credentials: 'include' });
-      if (response.ok) {
-        const data = await response.json();
-        const ordersList = data.orders || [];
-        setOrders(ordersList);
-
-        setStats({
-          pending: ordersList.filter((o: Order) => o.status === 'pending').length,
-          approved: ordersList.filter((o: Order) => o.status === 'approved').length,
-          rejected: ordersList.filter((o: Order) => o.status === 'rejected').length,
-          in_progress: ordersList.filter((o: Order) => o.status === 'in_progress').length,
-          total: ordersList.length,
-        });
-      }
-    } catch {
-      // Error silencioso
-    }
-  }, []);
-
-  // Suscripción a cambios en tiempo real
-  useRealtime({
-    tables: ['orders', 'order_approvals'],
-    onchange: silentRefetch,
-    enabled: !!user,
-  });
 
   if (loading) {
     return (
