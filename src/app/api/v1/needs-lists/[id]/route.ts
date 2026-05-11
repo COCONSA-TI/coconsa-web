@@ -377,6 +377,7 @@ export async function GET(
         is_definitive_rejection: needsList.is_definitive_rejection,
         current_department_name: currentDepartmentName,
         department_name: departmentName,
+        payment_proof_url: needsList.payment_proof_url || null,
       },
       approvals: approvals || [],
       canApprove,
