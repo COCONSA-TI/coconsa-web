@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/Toast';
 import { OrderDetailSkeleton } from '@/components/ui/Skeletons';
+import { ConfirmModal } from '@/components/ui/Modal';
 import { useAuth } from '@/hooks/useAuth';
 
 interface ExpenseProof {
@@ -29,6 +30,19 @@ export default function ComprobacionDetallePage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [finalizing, setFinalizing] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    action: 'submit' | 'accept' | 'reject' | null;
+    title: string;
+    message: string;
+    variant: 'danger' | 'warning' | 'success';
+  }>({
+    isOpen: false,
+    action: null,
+    title: '',
+    message: '',
+    variant: 'warning'
+  });
   const { user, isDepartmentHead, isAdmin } = useAuth();
   const [userDeptCode, setUserDeptCode] = useState<string | null>(null);
 
@@ -148,15 +162,40 @@ export default function ComprobacionDetallePage() {
     }
   };
 
-  const handleAction = async (action: 'submit' | 'accept' | 'reject') => {
-    let confirmMsg = '';
-    if (action === 'submit') confirmMsg = '¿Enviar comprobantes a revisión? Ya no podrás agregar más a menos que sean rechazados.';
-    else if (action === 'accept') confirmMsg = '¿Aceptar y cerrar esta comprobación?';
-    else confirmMsg = '¿Rechazar comprobación para que el solicitante la edite?';
+  const requestAction = (action: 'submit' | 'accept' | 'reject') => {
+    let title = '';
+    let message = '';
+    let variant: 'danger' | 'warning' | 'success' = 'warning';
 
-    if (!confirm(confirmMsg)) return;
+    if (action === 'submit') {
+      title = 'Enviar a Revisión';
+      message = '¿Enviar comprobantes a revisión? Ya no podrás agregar más a menos que sean rechazados.';
+      variant = 'warning';
+    } else if (action === 'accept') {
+      title = 'Aceptar Comprobación';
+      message = '¿Aceptar y cerrar esta comprobación permanentemente?';
+      variant = 'success';
+    } else {
+      title = 'Rechazar Comprobación';
+      message = '¿Rechazar comprobación para que el solicitante la edite?';
+      variant = 'danger';
+    }
+
+    setConfirmModal({
+      isOpen: true,
+      action,
+      title,
+      message,
+      variant
+    });
+  };
+
+  const handleAction = async () => {
+    const action = confirmModal.action;
+    if (!action) return;
     
     setFinalizing(true);
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
     try {
       const res = await fetch(`/api/v1/needs-lists/${listId}/verify`, {
         method: 'POST',
@@ -304,16 +343,16 @@ export default function ComprobacionDetallePage() {
           <h2 className="text-lg font-semibold text-gray-900">Comprobantes Registrados</h2>
           <div className="flex gap-2">
             {needsList.status === 'completed' && canEdit && proofs.length > 0 && (
-              <button onClick={() => handleAction('submit')} disabled={finalizing} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm font-medium transition-colors">
+              <button onClick={() => requestAction('submit')} disabled={finalizing} className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 text-sm font-medium transition-colors">
                 {finalizing ? 'Procesando...' : 'Enviar a Revisión'}
               </button>
             )}
             {needsList.status === 'verifying' && canApprove && (
               <>
-                <button onClick={() => handleAction('reject')} disabled={finalizing} className="px-4 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 disabled:opacity-50 text-sm font-medium transition-colors border border-red-200">
+                <button onClick={() => requestAction('reject')} disabled={finalizing} className="px-4 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 disabled:opacity-50 text-sm font-medium transition-colors border border-red-200">
                   Rechazar
                 </button>
-                <button onClick={() => handleAction('accept')} disabled={finalizing} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 text-sm font-medium transition-colors">
+                <button onClick={() => requestAction('accept')} disabled={finalizing} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 text-sm font-medium transition-colors">
                   Aceptar
                 </button>
               </>
@@ -380,6 +419,18 @@ export default function ComprobacionDetallePage() {
           </table>
         </div>
       </div>
+
+      {/* Modal de confirmación */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={handleAction}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        variant={confirmModal.variant}
+        loading={finalizing}
+        confirmText={confirmModal.action === 'reject' ? 'Rechazar' : confirmModal.action === 'accept' ? 'Aceptar' : 'Enviar a Revisión'}
+      />
     </div>
   );
 }
