@@ -32,10 +32,11 @@ export default function ComprobacionDetallePage() {
   const [finalizing, setFinalizing] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
-    action: 'submit' | 'accept' | 'reject' | null;
+    action: 'submit' | 'accept' | 'reject' | 'delete' | null;
     title: string;
     message: string;
     variant: 'danger' | 'warning' | 'success';
+    proofIdToDelete?: string;
   }>({
     isOpen: false,
     action: null,
@@ -162,6 +163,17 @@ export default function ComprobacionDetallePage() {
     }
   };
 
+  const requestDeleteProof = (proofId: string) => {
+    setConfirmModal({
+      isOpen: true,
+      action: 'delete',
+      title: 'Eliminar comprobante',
+      message: '¿Seguro que deseas eliminar este comprobante? Tendrás que volver a subirlo si fue un error.',
+      variant: 'danger',
+      proofIdToDelete: proofId
+    });
+  };
+
   const requestAction = (action: 'submit' | 'accept' | 'reject') => {
     let title = '';
     let message = '';
@@ -196,6 +208,25 @@ export default function ComprobacionDetallePage() {
     
     setFinalizing(true);
     setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    
+    if (action === 'delete') {
+      try {
+        const res = await fetch(`/api/v1/needs-lists/${listId}/expense-proofs?proofId=${confirmModal.proofIdToDelete}`, {
+          method: 'DELETE',
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error);
+
+        toast.success('Eliminado', 'El comprobante ha sido removido');
+        fetchDetails();
+      } catch (error) {
+        toast.error('Error', error instanceof Error ? error.message : 'No se pudo eliminar');
+      } finally {
+        setFinalizing(false);
+      }
+      return;
+    }
+
     try {
       const res = await fetch(`/api/v1/needs-lists/${listId}/verify`, {
         method: 'POST',
@@ -371,6 +402,9 @@ export default function ComprobacionDetallePage() {
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Archivo</th>
                   <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Fecha</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Monto</th>
+                  {needsList.status === 'completed' && canEdit && (
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Acción</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -385,6 +419,19 @@ export default function ComprobacionDetallePage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500">{new Date(proof.created_at).toLocaleDateString('es-MX')}</td>
                     <td className="px-4 py-3 text-sm text-right font-medium text-gray-900">{formatCurrency(proof.amount)}</td>
+                    {needsList.status === 'completed' && canEdit && (
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => requestDeleteProof(proof.id)}
+                          className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Eliminar comprobante"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -429,7 +476,7 @@ export default function ComprobacionDetallePage() {
         message={confirmModal.message}
         variant={confirmModal.variant}
         loading={finalizing}
-        confirmText={confirmModal.action === 'reject' ? 'Rechazar' : confirmModal.action === 'accept' ? 'Aceptar' : 'Enviar a Revisión'}
+        confirmText={confirmModal.action === 'delete' ? 'Eliminar' : confirmModal.action === 'reject' ? 'Rechazar' : confirmModal.action === 'accept' ? 'Aceptar' : 'Enviar a Revisión'}
       />
     </div>
   );

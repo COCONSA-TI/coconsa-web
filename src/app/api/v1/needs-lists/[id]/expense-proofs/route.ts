@@ -86,3 +86,45 @@ export async function POST(
     return NextResponse.json({ success: false, error: 'Error interno del servidor' }, { status: 500 });
   }
 }
+
+/**
+ * DELETE /api/v1/needs-lists/[id]/expense-proofs?proofId=xxx
+ * Elimina una comprobación de gasto
+ */
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: needsListId } = await params;
+    const session = await getSession();
+    
+    if (!session) {
+      return NextResponse.json({ success: false, error: 'No autorizado' }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const proofId = searchParams.get('proofId');
+
+    if (!proofId) {
+      return NextResponse.json({ success: false, error: 'ID de comprobante requerido' }, { status: 400 });
+    }
+
+    // Opcionalmente podemos validar que el estatus siga siendo completed o que sea del mismo usuario
+    const { error } = await supabaseAdmin
+      .from('expense_proofs')
+      .delete()
+      .eq('id', proofId)
+      .eq('needs_list_id', needsListId)
+      .eq('uploaded_by', session.userId);
+
+    if (error) {
+      console.error('Error borrando expense_proofs:', error);
+      return NextResponse.json({ success: false, error: 'Error al borrar la comprobación o sin permisos' }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, message: 'Comprobante eliminado' });
+  } catch (error) {
+    return NextResponse.json({ success: false, error: 'Error interno del servidor' }, { status: 500 });
+  }
+}
