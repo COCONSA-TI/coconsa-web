@@ -502,7 +502,7 @@ export interface OrderApprovalForPdf extends OrderApproval {
 // ============================================
 
 export type AccountType = 'ahorro' | 'cheques' | 'inversion';
-export type NeedsListStatus = 'pending' | 'in_progress' | 'approved' | 'rejected' | 'paid' | 'completed';
+export type NeedsListStatus = 'pending' | 'in_progress' | 'approved' | 'rejected' | 'paid' | 'completed' | 'verifying' | 'verified';
 
 export interface UserBankAccount {
   id: string;

@@ -44,6 +44,10 @@ export async function GET(request: Request) {
 
     const roleName = roleData?.name || '';
 
+    // Parse query parameters
+    const url = new URL(request.url);
+    const statusFilter = url.searchParams.get('status');
+
     let query = supabaseAdmin
       .from('needs_lists')
       .select(`
@@ -69,6 +73,14 @@ export async function GET(request: Request) {
         )
       `)
       .order('created_at', { ascending: false });
+
+    if (statusFilter) {
+      if (statusFilter.includes(',')) {
+        query = query.in('status', statusFilter.split(','));
+      } else {
+        query = query.eq('status', statusFilter);
+      }
+    }
 
     // Filtrar según el rol
     if (roleName === 'admin') {

@@ -39,6 +39,15 @@ const menuItems = [
     ),
   },
   {
+    name: 'Comprobación de gastos',
+    href: '/dashboard/comprobaciones',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
+  {
     name: 'Proyectos',
     href: '/dashboard/proyectos',
     icon: (
@@ -104,7 +113,7 @@ export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarPr
   // TEMPORAL: Solo mostrar Órdenes de compra, Listas de necesidades y Configuración durante el desarrollo
   const allowedItems = menuItems.filter(item => {
     // Solo mostrar estas secciones por ahora (las demás están en desarrollo)
-    if (item.href === '/dashboard/ordenes-compra' || item.href === '/dashboard/listas-necesidades') {
+    if (item.href === '/dashboard/ordenes-compra' || item.href === '/dashboard/listas-necesidades' || item.href === '/dashboard/comprobaciones') {
       return true;
     }
     // Proveedores: todos pueden ver
