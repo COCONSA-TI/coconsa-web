@@ -44,7 +44,7 @@ export default function ExpenseVerification({
   const [userDeptCode, setUserDeptCode] = useState<string | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
-    action: 'submit' | 'accept' | 'reject' | 'delete' | null;
+    action: 'submit' | 'accept' | 'reject' | 'delete' | 'reopen' | null;
     title: string;
     message: string;
     variant: 'danger' | 'warning' | 'success';
@@ -178,19 +178,25 @@ export default function ExpenseVerification({
     });
   };
 
-  const requestAction = (action: 'submit' | 'accept' | 'reject') => {
+  const requestAction = (action: 'submit' | 'accept' | 'reject' | 'reopen') => {
     let title = '';
     let message = '';
     let variant: 'danger' | 'warning' | 'success' = 'warning';
 
     if (action === 'submit') {
       title = 'Enviar a Revisión';
-      message = '¿Enviar comprobantes a revisión? Ya no podrás agregar más a menos que sean rechazados.';
+      message = '¿Enviar comprobantes a revisión? Puedes seguir agregando comprobantes mientras están en revisión.';
       variant = 'warning';
     } else if (action === 'accept') {
       title = 'Aceptar Comprobación';
-      message = '¿Aceptar y cerrar esta comprobación permanentemente?';
+      message = hasRemainingBalance
+        ? `Hay un saldo pendiente de ${formatCurrency(remainingBalance)}. Al aceptar, este saldo quedará registrado como pendiente y podrá comprobarse posteriormente o arrastrarse a otra lista.`
+        : '¿Aceptar y cerrar esta comprobación?';
       variant = 'success';
+    } else if (action === 'reopen') {
+      title = 'Reabrir Comprobación';
+      message = '¿Reabrir esta lista para agregar más comprobantes del saldo pendiente?';
+      variant = 'warning';
     } else {
       title = 'Rechazar Comprobación';
       message = '¿Rechazar comprobación para que el solicitante la edite?';
@@ -247,14 +253,18 @@ export default function ExpenseVerification({
   // Permissions
   const isApplicant = user?.email === listUserEmail;
   const canEdit = isApplicant;
+  // Solo Dirección puede aceptar/rechazar la comprobación (firma final)
   const canApprove =
     isAdmin ||
-    (isDepartmentHead && ['direccion', 'pagos', 'contabilidad'].includes(userDeptCode || ''));
+    (isDepartmentHead && userDeptCode === 'direccion');
 
   // Financial calculations
   const totalEntregado = listTotal || 0;
   const uniqueProofs = Array.from(new Map(proofs.map((p) => [p.created_at, p])).values());
   const actualComprobado = uniqueProofs.reduce((sum, p) => sum + Number(p.amount), 0);
+  const remainingBalance = totalEntregado - actualComprobado;
+  const hasRemainingBalance = remainingBalance > 0.01;
+  const progressPercent = totalEntregado > 0 ? Math.min((actualComprobado / totalEntregado) * 100, 100) : 0;
 
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: listCurrency || 'MXN' }).format(val);
@@ -312,39 +322,92 @@ export default function ExpenseVerification({
 
         <div className="p-6 space-y-6">
           {/* Resumen Financiero */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <p className="text-sm text-gray-500">Total Entregado</p>
-              <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(totalEntregado)}</p>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <p className="text-sm text-gray-500">Total Entregado</p>
+                <p className="text-xl font-bold text-gray-900 mt-1">{formatCurrency(totalEntregado)}</p>
+              </div>
+              <div className="bg-emerald-50 rounded-lg p-4">
+                <p className="text-sm text-emerald-600">Total Comprobado</p>
+                <p className="text-xl font-bold text-emerald-700 mt-1">{formatCurrency(actualComprobado)}</p>
+              </div>
+              <div className={`rounded-lg p-4 ${remainingBalance < 0 ? 'bg-red-50' : hasRemainingBalance ? 'bg-amber-50' : 'bg-green-50'}`}>
+                <p className="text-sm text-gray-500">Saldo Pendiente</p>
+                <p className={`text-xl font-bold mt-1 ${remainingBalance < 0 ? 'text-red-600' : hasRemainingBalance ? 'text-amber-600' : 'text-green-600'}`}>
+                  {formatCurrency(remainingBalance)}
+                </p>
+              </div>
             </div>
-            <div className="bg-emerald-50 rounded-lg p-4">
-              <p className="text-sm text-emerald-600">Total Comprobado</p>
-              <p className="text-xl font-bold text-emerald-700 mt-1">{formatCurrency(actualComprobado)}</p>
-            </div>
-            <div className={`rounded-lg p-4 ${totalEntregado - actualComprobado < 0 ? 'bg-red-50' : 'bg-gray-50'}`}>
-              <p className="text-sm text-gray-500">Diferencia</p>
-              <p className={`text-xl font-bold mt-1 ${totalEntregado - actualComprobado < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                {formatCurrency(totalEntregado - actualComprobado)}
-              </p>
-            </div>
+
+            {/* Barra de progreso */}
+            {totalEntregado > 0 && (
+              <div>
+                <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                  <span>Avance de comprobación</span>
+                  <span>{progressPercent.toFixed(0)}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div
+                    className={`h-2.5 rounded-full transition-all duration-500 ${
+                      progressPercent >= 100 ? 'bg-green-500' : progressPercent >= 50 ? 'bg-emerald-500' : 'bg-amber-500'
+                    }`}
+                    style={{ width: `${Math.min(progressPercent, 100)}%` }}
+                  ></div>
+                </div>
+              </div>
+            )}
+
+            {/* Mensaje de saldo pendiente */}
+            {hasRemainingBalance && listStatus === 'verified' && (
+              <div className="flex items-start gap-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <p className="text-sm font-medium text-amber-800">Saldo pendiente: {formatCurrency(remainingBalance)}</p>
+                  <p className="text-xs text-amber-600 mt-0.5">
+                    Este saldo puede comprobarse reabriendo esta lista o arrastrándolo a una siguiente lista de necesidades.
+                  </p>
+                </div>
+                {canEdit && (
+                  <button
+                    onClick={() => requestAction('reopen')}
+                    disabled={finalizing}
+                    className="ml-auto px-3 py-1.5 text-xs font-medium text-amber-700 bg-amber-100 rounded-lg hover:bg-amber-200 transition-colors disabled:opacity-50 whitespace-nowrap"
+                  >
+                    Reabrir
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Formulario de carga */}
-          {listStatus === 'verified' ? (
+          {listStatus === 'verified' && !hasRemainingBalance ? (
             <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center text-gray-500">
               Esta lista ya fue comprobada y cerrada.
             </div>
-          ) : listStatus === 'verifying' ? (
-            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 text-center text-blue-700">
-              Comprobantes en revisión. Espera la respuesta.
+          ) : listStatus === 'verified' && hasRemainingBalance ? (
+            <div className="p-4 bg-amber-50 rounded-lg border border-amber-200 text-center text-amber-700">
+              Lista comprobada con saldo pendiente. Puedes reabrir la lista para agregar más comprobantes.
             </div>
           ) : !canEdit ? (
             <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200 text-center text-yellow-700">
               Solo el solicitante puede subir comprobantes.
             </div>
           ) : (
-            <form onSubmit={handleUpload} className="space-y-4 bg-gray-50 rounded-lg p-4 border border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Agregar Comprobante</h3>
+            <>
+              {listStatus === 'verifying' && (
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 flex items-center gap-2 text-sm text-blue-700">
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Comprobantes en revisión. Puedes seguir agregando comprobantes mientras tanto.
+                </div>
+              )}
+              <form onSubmit={handleUpload} className="space-y-4 bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Agregar Comprobante</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Descripción / Concepto</label>
@@ -387,7 +450,8 @@ export default function ExpenseVerification({
                   {uploading ? 'Subiendo...' : 'Guardar Comprobante'}
                 </button>
               </div>
-            </form>
+              </form>
+            </>
           )}
 
           {/* Lista de comprobantes */}
@@ -423,7 +487,7 @@ export default function ExpenseVerification({
                       disabled={finalizing}
                       className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 text-sm font-medium transition-colors"
                     >
-                      Aceptar
+                      {hasRemainingBalance ? 'Aceptar con Saldo' : 'Aceptar'}
                     </button>
                   </>
                 )}
@@ -441,7 +505,7 @@ export default function ExpenseVerification({
                       <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Archivo</th>
                       <th className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase">Fecha</th>
                       <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Monto</th>
-                      {listStatus === 'completed' && canEdit && (
+                      {(listStatus === 'completed' || listStatus === 'verifying') && canEdit && (
                         <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Acción</th>
                       )}
                     </tr>
@@ -469,7 +533,7 @@ export default function ExpenseVerification({
                         <td className="px-4 py-3 text-sm text-right font-medium text-gray-900">
                           {formatCurrency(proof.amount)}
                         </td>
-                        {listStatus === 'completed' && canEdit && (
+                        {(listStatus === 'completed' || listStatus === 'verifying') && canEdit && (
                           <td className="px-4 py-3 text-right">
                             <button
                               onClick={() => requestDeleteProof(proof.id)}
@@ -502,13 +566,15 @@ export default function ExpenseVerification({
         variant={confirmModal.variant}
         loading={finalizing}
         confirmText={
-          confirmModal.action === 'delete'
+           confirmModal.action === 'delete'
             ? 'Eliminar'
             : confirmModal.action === 'reject'
               ? 'Rechazar'
               : confirmModal.action === 'accept'
-                ? 'Aceptar'
-                : 'Enviar a Revisión'
+                ? (hasRemainingBalance ? 'Aceptar con Saldo Pendiente' : 'Aceptar')
+                : confirmModal.action === 'reopen'
+                  ? 'Reabrir'
+                  : 'Enviar a Revisión'
         }
       />
     </>

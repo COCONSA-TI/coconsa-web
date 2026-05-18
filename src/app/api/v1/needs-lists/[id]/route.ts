@@ -100,10 +100,10 @@ async function recreateNeedsListApprovals(
   // ya que esos valores corresponden al flujo de órdenes de compra, no al de listas)
   const contabilidad = departments.find((d: Department) => d.code === 'contabilidad');
   const contraloria = departments.find((d: Department) => d.code === 'contraloria');
-  const direccion = departments.find((d: Department) => d.code === 'direccion');
+  const pagos = departments.find((d: Department) => d.code === 'pagos');
 
   if (isUrgent && isApplicantDeptHead) {
-    // LISTA URGENTE: Contabilidad (2) → Contraloría (3) → Dirección (4)
+    // LISTA URGENTE: Contabilidad (2) → Contraloría (3) → Pagos (4)
 
     if (contabilidad) {
       approvalsToCreate.push({
@@ -123,16 +123,16 @@ async function recreateNeedsListApprovals(
       });
     }
 
-    if (direccion) {
+    if (pagos) {
       approvalsToCreate.push({
         needs_list_id: needsListId,
-        department_id: direccion.id,
+        department_id: pagos.id,
         status: 'pending',
         approval_order: 4,
       });
     }
   } else {
-    // LISTA NORMAL: Gerencia (1) → Contabilidad (2) → Contraloría (3) → Dirección (4)
+    // LISTA NORMAL: Gerencia (1) → Contabilidad (2) → Contraloría (3) → Pagos (4)
     const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
     const isFromGerencia = applicantDept && applicantDept.approval_order === 1;
 
@@ -168,11 +168,11 @@ async function recreateNeedsListApprovals(
         });
       }
 
-      // Dirección
-      if (direccion) {
+      // Pagos
+      if (pagos) {
         approvalsToCreate.push({
           needs_list_id: needsListId,
-          department_id: direccion.id,
+          department_id: pagos.id,
           status: 'pending',
           approval_order: 4,
         });
@@ -197,11 +197,11 @@ async function recreateNeedsListApprovals(
         });
       }
 
-      // Dirección siempre se agrega (a menos que el solicitante sea de Dirección)
-      if (direccion && applicantDept?.id !== direccion.id) {
+      // Pagos
+      if (pagos && applicantDept?.id !== pagos.id) {
         approvalsToCreate.push({
           needs_list_id: needsListId,
-          department_id: direccion.id,
+          department_id: pagos.id,
           status: 'pending',
           approval_order: 4,
         });
