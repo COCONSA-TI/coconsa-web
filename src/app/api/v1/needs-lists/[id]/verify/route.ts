@@ -6,8 +6,8 @@ import { getSession } from '@/lib/auth';
  * POST /api/v1/needs-lists/[id]/verify
  * Maneja el flujo de estado de las comprobaciones de gastos:
  * - submit: Solicitante envía la comprobación a revisión (completed -> verifying)
- * - accept: Revisor acepta la comprobación (verifying -> verified), incluso con saldo pendiente
- * - reject: Revisor rechaza la comprobación (verifying -> completed)
+ * - accept: Dirección acepta la comprobación (verifying -> verified), calcula y guarda remaining_balance
+ * - reject: Dirección rechaza la comprobación (verifying -> completed)
  * - reopen: Reabre una lista verificada con saldo pendiente para agregar más comprobantes (verified -> completed)
  */
 export async function POST(
@@ -38,12 +38,10 @@ export async function POST(
       currentStatusConditions = ['verifying'];
       message = 'Comprobación aceptada';
     } else if (action === 'reject') {
-      newStatus = 'completed'; // Vuelve a completed para que edite
+      newStatus = 'completed';
       currentStatusConditions = ['verifying'];
       message = 'Comprobación rechazada, el solicitante puede editarla';
     } else if (action === 'reopen') {
-      // Permite reabrir una lista verificada para agregar más comprobantes
-      // (por ejemplo, para comprobar saldo pendiente)
       newStatus = 'completed';
       currentStatusConditions = ['verified'];
       message = 'Lista reabierta para agregar más comprobantes';
@@ -51,12 +49,59 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Acción inválida' }, { status: 400 });
     }
 
+    // Para "accept", calcular y guardar el remaining_balance
+    if (action === 'accept') {
+      // Obtener el total de la lista
+      const { data: needsList } = await supabaseAdmin
+        .from('needs_lists')
+        .select('total')
+        .eq('id', needsListId)
+        .single();
+
+      // Obtener la suma de todos los comprobantes de gastos
+      const { data: proofs } = await supabaseAdmin
+        .from('expense_proofs')
+        .select('amount')
+        .eq('needs_list_id', needsListId);
+
+      const totalEntregado = needsList?.total || 0;
+      const totalComprobado = proofs?.reduce((sum: number, p: { amount: number }) => sum + Number(p.amount), 0) || 0;
+      const remainingBalance = Math.round((totalEntregado - totalComprobado) * 100) / 100;
+
+      const { error: updateError } = await supabaseAdmin
+        .from('needs_lists')
+        .update({
+          status: newStatus,
+          remaining_balance: remainingBalance,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', needsListId)
+        .in('status', currentStatusConditions);
+
+      if (updateError) {
+        console.error('Error al actualizar estado de comprobación:', updateError);
+        return NextResponse.json({ success: false, error: 'Error al actualizar el estado' }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        message,
+        remaining_balance: remainingBalance,
+      });
+    }
+
+    // Para "reopen", limpiar el remaining_balance
+    const updateData: Record<string, unknown> = {
+      status: newStatus,
+      updated_at: new Date().toISOString(),
+    };
+    if (action === 'reopen') {
+      updateData.remaining_balance = null;
+    }
+
     const { error: updateError } = await supabaseAdmin
       .from('needs_lists')
-      .update({
-        status: newStatus,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', needsListId)
       .in('status', currentStatusConditions);
 
