@@ -30,9 +30,11 @@ const STATUS_CONFIG: Record<string, { label: string; className: string; dotColor
   rejected: { label: 'Rechazada', className: 'bg-red-100 text-red-800', dotColor: 'bg-red-500' },
   paid: { label: 'Pagada', className: 'bg-purple-100 text-purple-800', dotColor: 'bg-purple-500' },
   completed: { label: 'Completada', className: 'bg-gray-100 text-gray-800', dotColor: 'bg-gray-500' },
+  verifying: { label: 'En Revisión', className: 'bg-yellow-100 text-yellow-800', dotColor: 'bg-yellow-500' },
+  verified: { label: 'Comprobada', className: 'bg-blue-100 text-blue-800', dotColor: 'bg-blue-500' },
 };
 
-type FilterKey = 'all' | 'my-approvals' | 'mine' | 'pending' | 'in_progress' | 'approved' | 'rejected';
+type FilterKey = 'all' | 'my-approvals' | 'mine' | 'pending' | 'in_progress' | 'approved' | 'rejected' | 'completed' | 'verifying' | 'verified';
 
 export default function NeedsListsPage() {
   const router = useRouter();
@@ -68,6 +70,7 @@ export default function NeedsListsPage() {
     if (filterStatus === 'all') return true;
     if (filterStatus === 'my-approvals') return list.canApprove;
     if (filterStatus === 'mine') return list.isOwnList;
+    if (filterStatus === 'completed') return list.status === 'completed' || list.status === 'verifying' || list.status === 'verified';
     return list.status === filterStatus;
   });
 
@@ -157,6 +160,7 @@ export default function NeedsListsPage() {
     { key: 'in_progress', label: 'En Proceso', count: stats.inProgress },
     { key: 'approved', label: 'Aprobadas', count: stats.approved },
     { key: 'rejected', label: 'Rechazadas', count: needsLists.filter(l => l.status === 'rejected').length },
+    { key: 'completed', label: 'Completadas', count: needsLists.filter(l => l.status === 'completed' || l.status === 'verifying' || l.status === 'verified').length },
   ];
 
   return (

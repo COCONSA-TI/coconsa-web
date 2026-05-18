@@ -8,8 +8,9 @@ import { type NeedsListApproval, type ApprovalIconType, getApprovalIconType } fr
 import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
 import { OrderDetailSkeleton } from "@/components/ui/Skeletons";
+import ExpenseVerification from "@/components/needs-lists/ExpenseVerification";
 
-type NeedsListStatus = "pending" | "approved" | "rejected" | "in_progress" | "paid" | "completed";
+type NeedsListStatus = "pending" | "approved" | "rejected" | "in_progress" | "paid" | "completed" | "verifying" | "verified";
 
 interface NeedsListItem {
   id: string;
@@ -48,6 +49,7 @@ interface NeedsListDetail {
   current_department_name?: string | null;
   department_name?: string | null;
   payment_proof_url?: string | null;
+  currency?: string;
 }
 
 const statusConfig: Record<NeedsListStatus, { label: string; className: string; iconBg: string }> = {
@@ -57,6 +59,8 @@ const statusConfig: Record<NeedsListStatus, { label: string; className: string; 
   in_progress: { label: "En Proceso", className: "bg-blue-100 text-blue-800", iconBg: "bg-blue-500" },
   paid: { label: "Pagada", className: "bg-emerald-100 text-emerald-800", iconBg: "bg-emerald-500" },
   completed: { label: "Completada", className: "bg-emerald-100 text-emerald-800", iconBg: "bg-emerald-500" },
+  verifying: { label: "En Revisión", className: "bg-yellow-100 text-yellow-800", iconBg: "bg-yellow-500" },
+  verified: { label: "Comprobada", className: "bg-blue-100 text-blue-800", iconBg: "bg-blue-500" },
 };
 
 function formatCurrency(amount: number): string {
@@ -907,6 +911,18 @@ export default function ListaNecesidadesDetallePage() {
               </div>
             )}
           </div>
+        )}
+
+        {/* Comprobación de Gastos - Solo visible después de pagos */}
+        {(needsList.status === 'completed' || needsList.status === 'verifying' || needsList.status === 'verified') && (
+          <ExpenseVerification
+            listId={listId}
+            listStatus={needsList.status}
+            listTotal={needsList.total}
+            listCurrency={needsList.currency || 'MXN'}
+            listUserEmail={needsList.user_email}
+            onStatusChange={fetchNeedsListDetails}
+          />
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
