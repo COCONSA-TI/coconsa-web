@@ -76,7 +76,7 @@ export async function POST(
 
     // 5. Parse request body
     const body = await request.json();
-    const { filesInfo } = body;
+    const { filesInfo, deposit_amount } = body;
 
     if (!filesInfo || !Array.isArray(filesInfo) || filesInfo.length === 0) {
       return NextResponse.json(
@@ -98,14 +98,24 @@ export async function POST(
       fileUrls.push(file.url);
     }
 
-    // 7. Update needs list: set payment_proof_url and status to 'completed'
+    // 7. Update needs list: set payment_proof_url, deposit_amount, and status to 'completed'
+    const updateData: Record<string, unknown> = {
+      payment_proof_url: fileUrls.join(','),
+      status: 'completed',
+      updated_at: new Date().toISOString(),
+    };
+
+    // Guardar el monto depositado si se proporcionó
+    if (deposit_amount !== undefined && deposit_amount !== null) {
+      const parsedAmount = parseFloat(String(deposit_amount));
+      if (Number.isFinite(parsedAmount) && parsedAmount > 0) {
+        updateData.deposit_amount = parsedAmount;
+      }
+    }
+
     const { error: updateError } = await supabaseAdmin
       .from('needs_lists')
-      .update({
-        payment_proof_url: fileUrls.join(','),
-        status: 'completed',
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', needsListId);
 
     if (updateError) {

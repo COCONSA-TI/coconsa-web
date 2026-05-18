@@ -378,6 +378,7 @@ export async function GET(
         current_department_name: currentDepartmentName,
         department_name: departmentName,
         payment_proof_url: needsList.payment_proof_url || null,
+        deposit_amount: needsList.deposit_amount || null,
       },
       approvals: approvals || [],
       canApprove,

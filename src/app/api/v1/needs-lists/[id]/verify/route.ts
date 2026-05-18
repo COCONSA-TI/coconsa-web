@@ -51,10 +51,10 @@ export async function POST(
 
     // Para "accept", calcular y guardar el remaining_balance
     if (action === 'accept') {
-      // Obtener el total de la lista
+      // Obtener el total y el monto depositado de la lista
       const { data: needsList } = await supabaseAdmin
         .from('needs_lists')
-        .select('total')
+        .select('total, deposit_amount')
         .eq('id', needsListId)
         .single();
 
@@ -64,7 +64,9 @@ export async function POST(
         .select('amount')
         .eq('needs_list_id', needsListId);
 
-      const totalEntregado = needsList?.total || 0;
+      const totalEntregado = needsList?.deposit_amount !== null && needsList?.deposit_amount !== undefined 
+        ? Number(needsList.deposit_amount) 
+        : (needsList?.total || 0);
       const totalComprobado = proofs?.reduce((sum: number, p: { amount: number }) => sum + Number(p.amount), 0) || 0;
       const remainingBalance = Math.round((totalEntregado - totalComprobado) * 100) / 100;
 

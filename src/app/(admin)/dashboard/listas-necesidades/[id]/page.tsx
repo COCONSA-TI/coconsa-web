@@ -37,7 +37,10 @@ interface NeedsListDetail {
   created_at: string;
   user_name: string;
   user_email: string;
+  subtotal: number;
+  iva: number;
   total: number;
+  iva_percentage: number;
   status: NeedsListStatus;
   justification: string;
   evidence_urls: string | null;
@@ -49,6 +52,7 @@ interface NeedsListDetail {
   current_department_name?: string | null;
   department_name?: string | null;
   payment_proof_url?: string | null;
+  deposit_amount?: number | null;
   currency?: string;
 }
 
@@ -105,6 +109,9 @@ export default function ListaNecesidadesDetallePage() {
   const [userDepartmentCode, setUserDepartmentCode] = useState<string | null>(null);
   const [paymentProofFiles, setPaymentProofFiles] = useState<File[]>([]);
   const [uploadingProof, setUploadingProof] = useState(false);
+  const [depositAmount, setDepositAmount] = useState<string>('');
+  const [applicantPendingBalance, setApplicantPendingBalance] = useState<number>(0);
+  const [pendingBalanceLists, setPendingBalanceLists] = useState<Array<{ id: number; folio: string; remaining_balance: number }>>([]);
 
   const fetchNeedsListDetails = async () => {
     try {
@@ -148,9 +155,37 @@ export default function ListaNecesidadesDetallePage() {
     }
   };
 
+  // Cargar saldos pendientes del solicitante de la lista
+  const fetchApplicantPendingBalance = async (applicantEmail: string) => {
+    try {
+      const res = await fetch(`/api/v1/needs-lists/pending-balances?email=${encodeURIComponent(applicantEmail)}`);
+      const data = await res.json();
+      if (data.success) {
+        // Excluir la lista actual
+        const otherLists = (data.lists || []).filter(
+          (l: { id: number }) => String(l.id) !== String(listId)
+        );
+        const total = otherLists.reduce(
+          (sum: number, l: { remaining_balance: number }) => sum + Number(l.remaining_balance),
+          0
+        );
+        setApplicantPendingBalance(Math.round(total * 100) / 100);
+        setPendingBalanceLists(otherLists);
+      }
+    } catch {
+      // silent
+    }
+  };
+
   const handleUploadPaymentProof = async () => {
     if (paymentProofFiles.length === 0) {
       toast.warning('Archivos requeridos', 'Debes adjuntar al menos un comprobante de pago');
+      return;
+    }
+
+    const parsedDeposit = parseFloat(depositAmount);
+    if (!parsedDeposit || parsedDeposit <= 0) {
+      toast.warning('Monto requerido', 'Debes indicar el monto depositado');
       return;
     }
 
@@ -192,7 +227,7 @@ export default function ListaNecesidadesDetallePage() {
       const response = await fetch(`/api/v1/needs-lists/${listId}/payment-proof`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filesInfo }),
+        body: JSON.stringify({ filesInfo, deposit_amount: parsedDeposit }),
       });
 
       const data = await response.json();
@@ -203,6 +238,7 @@ export default function ListaNecesidadesDetallePage() {
 
       toast.success('Comprobante registrado', data.message);
       setPaymentProofFiles([]);
+      setDepositAmount('');
       await fetchNeedsListDetails();
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Error al subir comprobante';
@@ -227,6 +263,23 @@ export default function ListaNecesidadesDetallePage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.department_id]);
+
+  // Cargar saldos pendientes del solicitante cuando la lista está aprobada y el usuario puede subir comprobante
+  useEffect(() => {
+    if (needsList?.status === 'approved' && canUploadPaymentProof && needsList.user_email) {
+      fetchApplicantPendingBalance(needsList.user_email);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsList?.status, needsList?.user_email, canUploadPaymentProof]);
+
+  // Calcular monto sugerido de depósito cuando cambian los saldos
+  useEffect(() => {
+    if (needsList?.status === 'approved' && canUploadPaymentProof && !depositAmount) {
+      const suggested = Math.max(0, needsList.total - applicantPendingBalance);
+      setDepositAmount(suggested.toFixed(2));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsList?.total, applicantPendingBalance, canUploadPaymentProof]);
 
   const handleApprove = async (comments?: string) => {
     setProcessingAction(true);
@@ -817,6 +870,76 @@ export default function ListaNecesidadesDetallePage() {
             {/* Upload section - only for contabilidad/pagos when approved */}
             {needsList.status === 'approved' && canUploadPaymentProof && (
               <div className="space-y-4">
+                {/* Cálculo de depósito */}
+                <div className="p-4 bg-white rounded-xl border border-gray-200 space-y-3">
+                  <h4 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                    <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    Cálculo de Depósito
+                  </h4>
+
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Total de la lista</span>
+                      <span className="font-medium text-gray-900">{formatCurrency(needsList.total)}</span>
+                    </div>
+                    
+                    {applicantPendingBalance !== 0 && (
+                      <>
+                        <div className="border-t border-gray-100 pt-2">
+                          <p className="text-xs font-medium text-indigo-700 mb-1.5">Saldos pendientes de listas anteriores:</p>
+                          {pendingBalanceLists.map((list) => (
+                            <div key={list.id} className="flex justify-between text-xs pl-2 py-0.5">
+                              <span className="text-gray-500">LN-{list.folio}</span>
+                              <span className={Number(list.remaining_balance) > 0 ? 'text-amber-600' : 'text-red-600'}>
+                                {Number(list.remaining_balance) > 0 ? '+' : ''}{formatCurrency(Number(list.remaining_balance))}
+                              </span>
+                            </div>
+                          ))}
+                          <div className="flex justify-between pt-1 border-t border-gray-100 mt-1">
+                            <span className="text-gray-600">Saldo anterior acumulado</span>
+                            <span className={`font-medium ${applicantPendingBalance > 0 ? 'text-amber-600' : 'text-red-600'}`}>
+                              {applicantPendingBalance > 0 ? '-' : '+'}{formatCurrency(Math.abs(applicantPendingBalance))}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex justify-between pt-1 border-t border-emerald-200">
+                          <span className="font-medium text-emerald-700">Depósito sugerido</span>
+                          <span className="font-bold text-emerald-700">
+                            {formatCurrency(Math.max(0, needsList.total - applicantPendingBalance))}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Campo editable de monto a depositar */}
+                  <div className="pt-2 border-t border-gray-200">
+                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                      Monto a depositar *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={depositAmount}
+                        onChange={(e) => setDepositAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full pl-7 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
+                      />
+                    </div>
+                    {applicantPendingBalance > 0 && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Se sugiere depositar {formatCurrency(Math.max(0, needsList.total - applicantPendingBalance))} considerando el saldo a favor del usuario.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* File upload */}
                 <div className="border-2 border-dashed border-emerald-300 rounded-xl p-6 hover:border-emerald-400 transition-colors bg-white">
                   <input
                     type="file"
@@ -919,6 +1042,7 @@ export default function ListaNecesidadesDetallePage() {
             listId={listId}
             listStatus={needsList.status}
             listTotal={needsList.total}
+            listDepositAmount={needsList.deposit_amount}
             listCurrency={needsList.currency || 'MXN'}
             listUserEmail={needsList.user_email}
             onStatusChange={fetchNeedsListDetails}

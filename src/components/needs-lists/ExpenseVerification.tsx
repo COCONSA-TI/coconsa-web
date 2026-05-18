@@ -21,6 +21,7 @@ interface ExpenseVerificationProps {
   listId: string;
   listStatus: string;
   listTotal: number;
+  listDepositAmount?: number | null;
   listCurrency: string;
   listUserEmail: string;
   onStatusChange: () => void;
@@ -30,6 +31,7 @@ export default function ExpenseVerification({
   listId,
   listStatus,
   listTotal,
+  listDepositAmount,
   listCurrency,
   listUserEmail,
   onStatusChange,
@@ -289,7 +291,7 @@ export default function ExpenseVerification({
     (isDepartmentHead && userDeptCode === 'direccion');
 
   // Financial calculations
-  const totalEntregado = listTotal || 0;
+  const totalEntregado = listDepositAmount !== undefined && listDepositAmount !== null ? listDepositAmount : (listTotal || 0);
   const uniqueProofs = Array.from(new Map(proofs.map((p) => [p.created_at, p])).values());
   const actualComprobado = uniqueProofs.reduce((sum, p) => sum + Number(p.amount), 0);
   const remainingBalance = totalEntregado - actualComprobado;
