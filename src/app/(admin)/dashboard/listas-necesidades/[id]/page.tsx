@@ -675,12 +675,14 @@ export default function ListaNecesidadesDetallePage() {
                             <span className="font-medium">{approval.approver.full_name}</span>
                             <span className="hidden sm:inline"> · </span>
                             <span className="block sm:inline text-gray-400">{new Date(approval.approved_at!).toLocaleDateString('es-MX')}</span>
+                            <span className="text-gray-400 ml-1">{new Date(approval.approved_at!).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
                         )}
                         
                         {isRejected && approval.approver && (
                           <div className="text-xs text-red-600 mt-0.5 font-medium">
                             Rechazado por {approval.approver.full_name}
+                            <span className="block sm:inline text-red-400 font-normal sm:ml-1">{new Date(approval.approved_at!).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
                         )}
                         

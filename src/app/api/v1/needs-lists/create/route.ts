@@ -43,11 +43,11 @@ async function createNeedsListApprovalsServer(
   // ya que esos valores corresponden al flujo de órdenes de compra, no al de listas)
   const contabilidad = departments.find((d: Department) => d.code === 'contabilidad');
   const contraloria = departments.find((d: Department) => d.code === 'contraloria');
-  const pagos = departments.find((d: Department) => d.code === 'pagos');
+  const direccion = departments.find((d: Department) => d.code === 'direccion');
 
   if (isUrgent && isApplicantDeptHead) {
     // LISTA URGENTE: Solo jefes de departamento pueden crear urgentes
-    // Flujo urgente: Contabilidad (2) → Contraloría (3) → Pagos (4)
+    // Flujo urgente: Contabilidad (2) → Contraloría (3) → Dirección (4)
     // Se salta: Gerencia (1)
 
     if (contabilidad) {
@@ -68,16 +68,16 @@ async function createNeedsListApprovalsServer(
       });
     }
 
-    if (pagos) {
+    if (direccion) {
       approvalsToCreate.push({
         needs_list_id: needsListId,
-        department_id: pagos.id,
+        department_id: direccion.id,
         status: 'pending',
         approval_order: 4,
       });
     }
   } else {
-    // LISTA NORMAL: Flujo completo Gerencia → Contabilidad → Contraloría → Pagos
+    // LISTA NORMAL: Flujo completo Gerencia → Contabilidad → Contraloría → Dirección
     const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
 
     // Determinar si el solicitante es de una Gerencia (approval_order = 1 en la DB)
@@ -85,7 +85,7 @@ async function createNeedsListApprovalsServer(
 
     if (isFromGerencia) {
       // El solicitante es de una Gerencia
-      // Flujo: Gerencia (1) → Contabilidad (2) → Contraloría (3) → Pagos (4)
+      // Flujo: Gerencia (1) → Contabilidad (2) → Contraloría (3) → Dirección (4)
 
       // 1. Aprobación del departamento del solicitante (gerencia)
       approvalsToCreate.push({
@@ -120,11 +120,11 @@ async function createNeedsListApprovalsServer(
         });
       }
 
-      // 4. Pagos (needs list order = 4)
-      if (pagos) {
+      // 4. Dirección (needs list order = 4)
+      if (direccion) {
         approvalsToCreate.push({
           needs_list_id: needsListId,
-          department_id: pagos.id,
+          department_id: direccion.id,
           status: 'pending',
           approval_order: 4,
         });
@@ -153,11 +153,11 @@ async function createNeedsListApprovalsServer(
         });
       }
 
-      // Pagos siempre se agrega (a menos que el solicitante sea de Pagos)
-      if (pagos && applicantDept?.id !== pagos.id) {
+      // Dirección siempre se agrega (a menos que el solicitante sea de Dirección)
+      if (direccion && applicantDept?.id !== direccion.id) {
         approvalsToCreate.push({
           needs_list_id: needsListId,
-          department_id: pagos.id,
+          department_id: direccion.id,
           status: 'pending',
           approval_order: 4,
         });

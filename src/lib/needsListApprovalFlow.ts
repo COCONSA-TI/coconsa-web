@@ -3,8 +3,8 @@ import { createBrowserClient } from '@supabase/ssr';
 /**
  * Flujo de aprobaciones para Listas de Necesidades
  * 
- * Flujo normal: Gerencia → Contabilidad → Contraloría → Pagos
- * Flujo urgente: Contabilidad → Contraloría → Pagos (salta Gerencia)
+ * Flujo normal: Gerencia → Contabilidad → Contraloría → Dirección
+ * Flujo urgente: Contabilidad → Contraloría → Dirección (salta Gerencia)
  */
 
 export const NEEDS_LIST_APPROVAL_FLOW = [
@@ -22,15 +22,15 @@ export const NEEDS_LIST_APPROVAL_FLOW = [
   // Nivel 3: Contraloría
   { code: 'contraloria', name: 'Contraloría', order: 3 },
 
-  // Nivel 4: Pagos
-  { code: 'pagos', name: 'Pagos', order: 4 },
+  // Nivel 4: Dirección
+  { code: 'direccion', name: 'Dirección', order: 4 },
 ];
 
 // Flujo reducido para listas urgentes (salta Gerencia)
 export const URGENT_NEEDS_LIST_APPROVAL_FLOW = [
   { code: 'contabilidad', name: 'Contabilidad', order: 2 },
   { code: 'contraloria', name: 'Contraloría', order: 3 },
-  { code: 'pagos', name: 'Pagos', order: 4 },
+  { code: 'direccion', name: 'Dirección', order: 4 },
 ];
 
 export interface Department {
@@ -142,10 +142,10 @@ export async function createNeedsListApprovals(
   const approvalsToCreate = [];
 
   if (isUrgent) {
-    // Flujo urgente: Contabilidad (order=2) → Contraloría (order=3) → Pagos (order=4)
+    // Flujo urgente: Contabilidad (order=2) → Contraloría (order=3) → Dirección (order=4)
     const contabilidad = departments.find((d) => d.code === 'contabilidad');
     const contraloria = departments.find((d) => d.code === 'contraloria');
-    const pagos = departments.find((d) => d.code === 'pagos');
+    const direccion = departments.find((d) => d.code === 'direccion');
 
     if (contabilidad) {
       approvalsToCreate.push({
@@ -165,16 +165,16 @@ export async function createNeedsListApprovals(
       });
     }
 
-    if (pagos) {
+    if (direccion) {
       approvalsToCreate.push({
         needs_list_id: needsListId,
-        department_id: pagos.id,
+        department_id: direccion.id,
         status: 'pending',
         approval_order: 4,
       });
     }
   } else {
-    // Flujo normal: Gerencia → Contabilidad → Contraloría → Pagos
+    // Flujo normal: Gerencia → Contabilidad → Contraloría → Dirección
     
     // 1. Aprobación del departamento del solicitante (gerencia, order=1)
     const applicantDept = departments.find(
@@ -212,12 +212,12 @@ export async function createNeedsListApprovals(
       });
     }
 
-    // 4. Pagos (order=4)
-    const pagos = departments.find((d) => d.code === 'pagos');
-    if (pagos) {
+    // 4. Dirección (order=4)
+    const direccion = departments.find((d) => d.code === 'direccion');
+    if (direccion) {
       approvalsToCreate.push({
         needs_list_id: needsListId,
-        department_id: pagos.id,
+        department_id: direccion.id,
         status: 'pending',
         approval_order: 4,
       });
@@ -266,7 +266,7 @@ export function getDepartmentNameByOrder(order: number): string {
     case 3:
       return 'Contraloría';
     case 4:
-      return 'Pagos';
+      return 'Dirección';
     default:
       return 'Desconocido';
   }
