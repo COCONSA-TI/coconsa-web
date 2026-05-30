@@ -4,12 +4,13 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
-import { getNeedsListApprovals, canUserApproveNeedsList, getApprovalIconType, type NeedsListApproval, type ApprovalIconType } from "@/lib/needsListApprovalFlow";
+import { type NeedsListApproval, type ApprovalIconType, getApprovalIconType } from "@/lib/needsListApprovalFlow";
 import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
 import { OrderDetailSkeleton } from "@/components/ui/Skeletons";
+import ExpenseVerification from "@/components/needs-lists/ExpenseVerification";
 
-type NeedsListStatus = "pending" | "approved" | "rejected" | "in_progress";
+type NeedsListStatus = "pending" | "approved" | "rejected" | "in_progress" | "paid" | "completed" | "verifying" | "verified";
 
 interface NeedsListItem {
   id: string;
@@ -36,7 +37,10 @@ interface NeedsListDetail {
   created_at: string;
   user_name: string;
   user_email: string;
+  subtotal?: number;
+  iva?: number;
   total: number;
+  iva_percentage?: number;
   status: NeedsListStatus;
   justification: string;
   evidence_urls: string | null;
@@ -47,6 +51,9 @@ interface NeedsListDetail {
   is_definitive_rejection: boolean;
   current_department_name?: string | null;
   department_name?: string | null;
+  payment_proof_url?: string | null;
+  deposit_amount?: number | null;
+  currency?: string;
 }
 
 const statusConfig: Record<NeedsListStatus, { label: string; className: string; iconBg: string }> = {
@@ -108,9 +115,9 @@ export default function ListaNecesidadesDetallePage() {
       setNeedsList(data.needsList);
       
       const listApprovals = await getNeedsListApprovals(listIdNumber);
-      // Filter only main flow approvals (approval_order 1-3) and sort
+      // Filter only main flow approvals (approval_order 1-5) and sort
       const filteredApprovals = listApprovals
-        .filter(a => a.approval_order && a.approval_order >= 1 && a.approval_order <= 3)
+        .filter(a => a.approval_order && a.approval_order >= 1 && a.approval_order <= 5)
         .sort((a, b) => (a.approval_order || 0) - (b.approval_order || 0));
       setApprovals(filteredApprovals);
     } catch {
@@ -859,6 +866,19 @@ export default function ListaNecesidadesDetallePage() {
                 </>
               )}
             </button>
+
+            {/* Comprobación de Gastos - Solo cuando la lista está en estado approved o posterior */}
+            {(needsList.status === 'approved' || needsList.status === 'paid' || needsList.status === 'completed' || needsList.status === 'verifying' || needsList.status === 'verified') && (
+              <ExpenseVerification
+                listId={needsList.id}
+                listStatus={needsList.status}
+                listTotal={needsList.total}
+                listDepositAmount={needsList.deposit_amount}
+                listCurrency={needsList.currency || 'MXN'}
+                listUserEmail={needsList.user_email}
+                onStatusChange={() => fetchNeedsListDetails()}
+              />
+            )}
 
             {/* Botones de Accion */}
             {canApproveList && needsList.status !== 'approved' && needsList.status !== 'rejected' && (

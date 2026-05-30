@@ -3,8 +3,8 @@ import { createBrowserClient } from '@supabase/ssr';
 /**
  * Flujo de aprobaciones para Listas de Necesidades
  * 
- * Flujo normal: Gerencia → Contabilidad → Contraloría
- * Flujo urgente: Contabilidad → Contraloría (salta Gerencia)
+ * Flujo normal: Gerencia → Contabilidad → Contraloría → Dirección → Pagos
+ * Flujo urgente: Contabilidad → Contraloría → Dirección → Pagos (salta Gerencia)
  */
 
 export const NEEDS_LIST_APPROVAL_FLOW = [
@@ -21,12 +21,20 @@ export const NEEDS_LIST_APPROVAL_FLOW = [
   
   // Nivel 3: Contraloría
   { code: 'contraloria', name: 'Contraloría', order: 3 },
+
+  // Nivel 4: Dirección
+  { code: 'direccion', name: 'Dirección', order: 4 },
+
+  // Nivel 5: Pagos
+  { code: 'pagos', name: 'Pagos', order: 5 },
 ];
 
 // Flujo reducido para listas urgentes (salta Gerencia)
 export const URGENT_NEEDS_LIST_APPROVAL_FLOW = [
   { code: 'contabilidad', name: 'Contabilidad', order: 2 },
   { code: 'contraloria', name: 'Contraloría', order: 3 },
+  { code: 'direccion', name: 'Dirección', order: 4 },
+  { code: 'pagos', name: 'Pagos', order: 5 },
 ];
 
 export interface Department {
@@ -240,6 +248,10 @@ export function getDepartmentNameByOrder(order: number): string {
       return 'Contabilidad';
     case 3:
       return 'Contraloría';
+    case 4:
+      return 'Dirección';
+    case 5:
+      return 'Pagos';
     default:
       return 'Desconocido';
   }
