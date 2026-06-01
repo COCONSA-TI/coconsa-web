@@ -297,12 +297,14 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     return calculateTotal() + calculateIva() - totalRetention;
   };
 
-  const machineStores = availableStores.filter((store) =>
-    MACHINE_STORE_CODE_REGEX.test(store.trim())
-  );
-  const nonMachineStores = availableStores.filter((store) =>
-    !MACHINE_STORE_CODE_REGEX.test(store.trim())
-  );
+  const isMachineStore = (storeName: string) => {
+    const trimmed = storeName.trim();
+    if (MACHINE_STORE_CODE_REGEX.test(trimmed)) return true;
+    const extraMachines = ["Mercedez Benz", "Dodge Journey", "Kia Sportage", "Hyundai Palisade"];
+    return extraMachines.some(m => trimmed.toLowerCase().includes(m.toLowerCase()));
+  };
+
+  const nonMachineStores = availableStores.filter((store) => !isMachineStore(store));
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -522,14 +524,6 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
               required
             >
               <option value="">Selecciona un centro de costos</option>
-              {machineStores.length > 0 && (
-                <option value="__maquinaria_header__" disabled>
-                  ----maquinaria----
-                </option>
-              )}
-              {machineStores.map((store) => (
-                <option key={store} value={store}>{store}</option>
-              ))}
               {nonMachineStores.map((store) => (
                 <option key={store} value={store}>{store}</option>
               ))}
