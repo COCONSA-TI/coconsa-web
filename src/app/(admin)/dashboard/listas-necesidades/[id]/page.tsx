@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
 import { OrderDetailSkeleton } from "@/components/ui/Skeletons";
 import ExpenseVerification from "@/components/needs-lists/ExpenseVerification";
+import { mergeUrlsToPdf } from "@/lib/pdfUtils";
 
 type NeedsListStatus = "pending" | "approved" | "rejected" | "in_progress" | "paid" | "completed" | "verifying" | "verified";
 
@@ -101,6 +102,7 @@ export default function ListaNecesidadesDetallePage() {
   const [rejectDefinitive, setRejectDefinitive] = useState(false);
   const [processingAction, setProcessingAction] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [isMergingEvidences, setIsMergingEvidences] = useState(false);
   
   // Approval modal states
   const [approveComments, setApproveComments] = useState('');
@@ -363,6 +365,33 @@ export default function ListaNecesidadesDetallePage() {
       toast.error('Error', 'No se pudo descargar el PDF. Por favor, intenta nuevamente.');
     } finally {
       setDownloadingPdf(false);
+    }
+  };
+
+  const handleMergeEvidences = async () => {
+    if (!needsList || !needsList.items) return;
+    
+    const evidences = needsList.items
+      .filter(item => item.evidencia_url)
+      .map((item, index) => ({
+        url: item.evidencia_url!,
+        name: `Evidencia_Item_${index + 1}`
+      }));
+      
+    if (evidences.length === 0) {
+      toast.warning('Sin evidencias', 'No hay evidencias adjuntas para descargar.');
+      return;
+    }
+
+    setIsMergingEvidences(true);
+    try {
+      await mergeUrlsToPdf(evidences, `evidencias_NL-${needsList.folio || listId}.pdf`);
+      toast.success('Éxito', 'Las evidencias han sido descargadas en un solo PDF.');
+    } catch (error) {
+      console.error('Error merging evidences:', error);
+      toast.error('Error', 'No se pudieron unir las evidencias.');
+    } finally {
+      setIsMergingEvidences(false);
     }
   };
 
@@ -1073,9 +1102,36 @@ export default function ListaNecesidadesDetallePage() {
 
             {/* Articulos/Conceptos */}
             <div className="bg-white rounded-xl shadow p-5">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Conceptos <span className="text-gray-400 font-normal">({needsList.items.length})</span>
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Conceptos <span className="text-gray-400 font-normal">({needsList.items.length})</span>
+                </h2>
+                {needsList.items.some(item => item.evidencia_url) && (
+                  <button
+                    onClick={handleMergeEvidences}
+                    disabled={isMergingEvidences}
+                    className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium transition-colors flex items-center gap-1.5"
+                    title="Descargar todas las evidencias en 1 PDF"
+                  >
+                    {isMergingEvidences ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Descargando...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                        </svg>
+                        Unir Evidencias PDF
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
               
               {/* Mobile Cards */}
               <div className="lg:hidden space-y-3">
