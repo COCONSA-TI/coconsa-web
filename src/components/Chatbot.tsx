@@ -189,7 +189,8 @@ export default function Chatbot({ onFormDataExtracted, onOrderCreated }: Chatbot
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
               fileName: af.file.name, 
-              contentType: af.file.type 
+              contentType: af.file.type,
+              bucket: 'order-attachments'
             })
           });
           
