@@ -23,6 +23,7 @@ interface Order {
   my_department_status?: 'pending' | 'approved' | 'rejected' | null;
   current_department_name?: string | null;
   machine_name?: string | null;
+  suppliers?: string[];
 }
 
 const statusConfig: Record<OrderStatus, { label: string; className: string; iconBg: string }> = {
@@ -139,6 +140,7 @@ function OrdenesCompraContent() {
   const [searchTerm, setSearchTerm] = useState("");
   const [storeFilters, setStoreFilters] = useState<string[]>([]);
   const [applicantFilters, setApplicantFilters] = useState<string[]>([]);
+  const [supplierFilters, setSupplierFilters] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [myApprovalFilters, setMyApprovalFilters] = useState<string[]>([]);
@@ -162,6 +164,7 @@ function OrdenesCompraContent() {
         setSearchTerm(filters.searchTerm || "");
         setStoreFilters(filters.storeFilters || (filters.storeFilter && filters.storeFilter !== "all" ? [filters.storeFilter] : []));
         setApplicantFilters(filters.applicantFilters || (filters.applicantFilter && filters.applicantFilter !== "all" ? [filters.applicantFilter] : []));
+        setSupplierFilters(filters.supplierFilters || []);
         setDateFrom(filters.dateFrom || "");
         setDateTo(filters.dateTo || "");
         setMyApprovalFilters(filters.myApprovalFilters || (filters.myApprovalFilter && filters.myApprovalFilter !== "all" ? [filters.myApprovalFilter] : []));
@@ -181,6 +184,7 @@ function OrdenesCompraContent() {
       searchTerm,
       storeFilters,
       applicantFilters,
+      supplierFilters,
       dateFrom,
       dateTo,
       myApprovalFilters,
@@ -254,6 +258,16 @@ function OrdenesCompraContent() {
     return uniqueApplicants.sort();
   }, [orders]);
 
+  const suppliers = useMemo(() => {
+    const uniqueSuppliers = new Set<string>();
+    orders.forEach(o => {
+      if (o.suppliers) {
+        o.suppliers.forEach(s => uniqueSuppliers.add(s));
+      }
+    });
+    return Array.from(uniqueSuppliers).sort();
+  }, [orders]);
+
   // Aplicar todos los filtros
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
@@ -282,6 +296,13 @@ function OrdenesCompraContent() {
       // Filtro por solicitante
       if (applicantFilters.length > 0 && !applicantFilters.includes(order.applicant_name)) {
         return false;
+      }
+
+      // Filtro por proveedor
+      if (supplierFilters.length > 0) {
+        if (!order.suppliers || !order.suppliers.some(s => supplierFilters.includes(s))) {
+          return false;
+        }
       }
 
       // Filtro por fecha desde
@@ -313,7 +334,7 @@ function OrdenesCompraContent() {
 
       return true;
     });
-  }, [orders, statusFilter, searchTerm, storeFilters, applicantFilters, dateFrom, dateTo, myApprovalFilters]);
+  }, [orders, statusFilter, searchTerm, storeFilters, applicantFilters, supplierFilters, dateFrom, dateTo, myApprovalFilters]);
 
   const stats = {
     total: orders.length,
@@ -323,13 +344,14 @@ function OrdenesCompraContent() {
     rejected: orders.filter(o => o.status === "rejected").length,
   };
 
-  const hasActiveFilters = searchTerm || storeFilters.length > 0 || applicantFilters.length > 0 || dateFrom || dateTo || myApprovalFilters.length > 0;
+  const hasActiveFilters = searchTerm || storeFilters.length > 0 || applicantFilters.length > 0 || supplierFilters.length > 0 || dateFrom || dateTo || myApprovalFilters.length > 0;
 
   const clearAllFilters = () => {
     setStatusFilter("all");
     setSearchTerm("");
     setStoreFilters([]);
     setApplicantFilters([]);
+    setSupplierFilters([]);
     setDateFrom("");
     setDateTo("");
     setMyApprovalFilters([]);
@@ -649,6 +671,19 @@ function OrdenesCompraContent() {
                 />
               </div>
 
+              {/* Proveedor Filter */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
+                  Proveedor
+                </label>
+                <MultiSelectDropdown
+                  options={suppliers.map(supplier => ({ value: supplier, label: supplier }))}
+                  selected={supplierFilters}
+                  onChange={setSupplierFilters}
+                  placeholder="Todos los proveedores"
+                />
+              </div>
+
               {/* Date From */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
@@ -744,6 +779,17 @@ function OrdenesCompraContent() {
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
               Solicitante: {applicantFilters.join(", ")}
               <button onClick={() => setApplicantFilters([])} className="hover:opacity-70">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </span>
+          )}
+
+          {supplierFilters.length > 0 && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+              Proveedor: {supplierFilters.join(", ")}
+              <button onClick={() => setSupplierFilters([])} className="hover:opacity-70">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>

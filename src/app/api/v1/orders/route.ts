@@ -190,6 +190,12 @@ export async function GET(request: Request) {
         itemsArray = [];
       }
       
+        const uniqueSuppliers = new Set<string>();
+        itemsArray.forEach(item => {
+          if (item.proveedor) uniqueSuppliers.add(item.proveedor);
+          if (item.supplier_name) uniqueSuppliers.add(item.supplier_name);
+        });
+
       return {
         id: order.id,
         created_at: order.created_at,
@@ -206,6 +212,7 @@ export async function GET(request: Request) {
         my_department_status: userDeptApprovals.get(order.id) || null,
         current_department_name: currentDeptMap.get(order.id)?.name || null,
         machine_name: order.machine_id ? machinesMap.get(order.machine_id) || null : null,
+        suppliers: Array.from(uniqueSuppliers),
       };
     });
 
