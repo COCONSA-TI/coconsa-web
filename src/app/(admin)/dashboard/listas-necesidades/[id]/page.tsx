@@ -111,7 +111,7 @@ export default function ListaNecesidadesDetallePage() {
   const [uploadingProof, setUploadingProof] = useState(false);
   const [depositAmount, setDepositAmount] = useState<string>('');
   const [applicantPendingBalance, setApplicantPendingBalance] = useState<number>(0);
-  const [pendingBalanceLists, setPendingBalanceLists] = useState<Array<{ id: number; folio: string; remaining_balance: number }>>([]);
+  const [pendingBalanceLists, setPendingBalanceLists] = useState<Array<{ id: number; folio: string | null; remaining_balance: number }>>([]);
 
   const fetchNeedsListDetails = async () => {
     try {
@@ -128,7 +128,7 @@ export default function ListaNecesidadesDetallePage() {
       // Use approvals from the same GET response (no extra API call needed)
       const listApprovals = (data.approvals || []) as NeedsListApproval[];
       const filteredApprovals = listApprovals
-        .filter(a => a.approval_order && a.approval_order >= 1 && a.approval_order <= 4)
+        .filter(a => a.approval_order && a.approval_order >= 1 && a.approval_order <= 5)
         .sort((a, b) => (a.approval_order || 0) - (b.approval_order || 0));
       setApprovals(filteredApprovals);
       
@@ -891,7 +891,7 @@ export default function ListaNecesidadesDetallePage() {
                           <p className="text-xs font-medium text-indigo-700 mb-1.5">Saldos pendientes de listas anteriores:</p>
                           {pendingBalanceLists.map((list) => (
                             <div key={list.id} className="flex justify-between text-xs pl-2 py-0.5">
-                              <span className="text-gray-500">LN-{list.folio}</span>
+                              <span className="text-gray-500">{list.folio || `NL-${list.id}`}</span>
                               <span className={Number(list.remaining_balance) > 0 ? 'text-amber-600' : 'text-red-600'}>
                                 {Number(list.remaining_balance) > 0 ? '+' : ''}{formatCurrency(Number(list.remaining_balance))}
                               </span>

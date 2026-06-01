@@ -66,7 +66,7 @@ export default function ExpenseVerification({
 
   // Saldos pendientes de listas anteriores
   const [previousBalances, setPreviousBalances] = useState<{
-    lists: Array<{ id: number; folio: string; remaining_balance: number; currency: string }>;
+    lists: Array<{ id: number; folio: string | null; remaining_balance: number; currency: string }>;
     totalPendingBalance: number;
   }>({ lists: [], totalPendingBalance: 0 });
 
@@ -426,7 +426,7 @@ export default function ExpenseVerification({
                 <div className="space-y-1.5">
                   {previousBalances.lists.map((list) => (
                     <div key={list.id} className="flex items-center justify-between text-sm">
-                      <span className="text-indigo-700">LN-{list.folio}</span>
+                      <span className="text-indigo-700">{list.folio || `NL-${list.id}`}</span>
                       <span className={`font-medium ${Number(list.remaining_balance) > 0 ? 'text-amber-600' : 'text-red-600'}`}>
                         {Number(list.remaining_balance) > 0 ? '+' : ''}{formatCurrency(Number(list.remaining_balance))}
                       </span>

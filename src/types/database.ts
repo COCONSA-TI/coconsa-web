@@ -560,7 +560,7 @@ export interface NeedsListApproval {
   status: ApprovalStatus;
   comments: string | null;
   approved_at: string | null;
-  approval_order: number; // 1: Gerencia, 2: Contabilidad, 3: Contraloría, 4: Pagos
+  approval_order: number; // 1: Gerencia, 2: Contabilidad, 3: Contraloría, 4: Dirección, 5: Pagos
   created_at: string;
 }
 
