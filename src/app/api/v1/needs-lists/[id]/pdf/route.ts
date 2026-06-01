@@ -234,10 +234,11 @@ export async function GET(
 
     const signatureY = doc.internal.pageSize.height - 42;
     const signaturePositions = [
-      { x: 12, label: 'SOLICITANTE', order: 0 },
-      { x: 58, label: 'REVISIÓN\nGERENCIA', order: 1 },
-      { x: 106, label: 'REVISIÓN\nCONTABILIDAD', order: 2 },
-      { x: 154, label: 'AUTORIZACIÓN\nCONTRALORÍA', order: 3 },
+      { x: 8, label: 'SOLICITANTE', order: 0 },
+      { x: 46, label: 'REVISIÓN\nGERENCIA', order: 1 },
+      { x: 84, label: 'REVISIÓN\nCONTABILIDAD', order: 2 },
+      { x: 122, label: 'AUTORIZACIÓN\nCONTRALORÍA', order: 3 },
+      { x: 160, label: 'AUTORIZACIÓN\nDIRECCIÓN', order: 4 },
     ];
 
     const applicantInfo = {

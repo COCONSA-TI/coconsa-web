@@ -406,7 +406,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
           const urlRes = await fetch('/api/v1/storage/signed-url', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fileName: file.name, contentType: file.type })
+            body: JSON.stringify({ fileName: file.name, contentType: file.type, bucket: 'order-attachments' })
           });
 
           if (!urlRes.ok) throw new Error(`Error obteniendo permiso para subir archivo: ${file.name}`);

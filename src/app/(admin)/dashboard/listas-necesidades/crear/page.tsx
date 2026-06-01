@@ -181,6 +181,7 @@ export default function CreateNeedsListPage() {
               fileName: item.evidenciaFile.name,
               contentType: item.evidenciaFile.type,
               folder: 'needs-lists/staging',
+              bucket: 'order-attachments',
             }),
           });
 

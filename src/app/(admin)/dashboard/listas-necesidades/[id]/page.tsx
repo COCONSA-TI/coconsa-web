@@ -4,12 +4,14 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
-import { getNeedsListApprovals, canUserApproveNeedsList, getApprovalIconType, type NeedsListApproval, type ApprovalIconType } from "@/lib/needsListApprovalFlow";
+import { type NeedsListApproval, type ApprovalIconType, getApprovalIconType } from "@/lib/needsListApprovalFlow";
 import { useToast } from "@/components/ui/Toast";
 import { Modal } from "@/components/ui/Modal";
 import { OrderDetailSkeleton } from "@/components/ui/Skeletons";
+import ExpenseVerification from "@/components/needs-lists/ExpenseVerification";
+import { mergeUrlsToPdf } from "@/lib/pdfUtils";
 
-type NeedsListStatus = "pending" | "approved" | "rejected" | "in_progress";
+type NeedsListStatus = "pending" | "approved" | "rejected" | "in_progress" | "paid" | "completed" | "verifying" | "verified";
 
 interface NeedsListItem {
   id: string;
@@ -36,7 +38,10 @@ interface NeedsListDetail {
   created_at: string;
   user_name: string;
   user_email: string;
+  subtotal: number;
+  iva: number;
   total: number;
+  iva_percentage: number;
   status: NeedsListStatus;
   justification: string;
   evidence_urls: string | null;
@@ -47,6 +52,9 @@ interface NeedsListDetail {
   is_definitive_rejection: boolean;
   current_department_name?: string | null;
   department_name?: string | null;
+  payment_proof_url?: string | null;
+  deposit_amount?: number | null;
+  currency?: string;
 }
 
 const statusConfig: Record<NeedsListStatus, { label: string; className: string; iconBg: string }> = {
@@ -54,6 +62,10 @@ const statusConfig: Record<NeedsListStatus, { label: string; className: string; 
   approved: { label: "Aprobada", className: "bg-green-100 text-green-800", iconBg: "bg-green-500" },
   rejected: { label: "Rechazada", className: "bg-red-100 text-red-800", iconBg: "bg-red-500" },
   in_progress: { label: "En Proceso", className: "bg-blue-100 text-blue-800", iconBg: "bg-blue-500" },
+  paid: { label: "Pagada", className: "bg-emerald-100 text-emerald-800", iconBg: "bg-emerald-500" },
+  completed: { label: "Completada", className: "bg-emerald-100 text-emerald-800", iconBg: "bg-emerald-500" },
+  verifying: { label: "En Revisión", className: "bg-yellow-100 text-yellow-800", iconBg: "bg-yellow-500" },
+  verified: { label: "Comprobada", className: "bg-blue-100 text-blue-800", iconBg: "bg-blue-500" },
 };
 
 function formatCurrency(amount: number): string {
@@ -76,7 +88,6 @@ export default function ListaNecesidadesDetallePage() {
   const router = useRouter();
   const params = useParams();
   const listId = params.id as string;
-  const listIdNumber = parseInt(listId, 10);
   const { user } = useAuth();
   const toast = useToast();
   
@@ -91,9 +102,18 @@ export default function ListaNecesidadesDetallePage() {
   const [rejectDefinitive, setRejectDefinitive] = useState(false);
   const [processingAction, setProcessingAction] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [isMergingEvidences, setIsMergingEvidences] = useState(false);
   
   // Approval modal states
   const [approveComments, setApproveComments] = useState('');
+
+  // Payment proof states
+  const [userDepartmentCode, setUserDepartmentCode] = useState<string | null>(null);
+  const [paymentProofFiles, setPaymentProofFiles] = useState<File[]>([]);
+  const [uploadingProof, setUploadingProof] = useState(false);
+  const [depositAmount, setDepositAmount] = useState<string>('');
+  const [applicantPendingBalance, setApplicantPendingBalance] = useState<number>(0);
+  const [pendingBalanceLists, setPendingBalanceLists] = useState<Array<{ id: number; folio: string | null; remaining_balance: number }>>([]);
 
   const fetchNeedsListDetails = async () => {
     try {
@@ -107,12 +127,15 @@ export default function ListaNecesidadesDetallePage() {
       
       setNeedsList(data.needsList);
       
-      const listApprovals = await getNeedsListApprovals(listIdNumber);
-      // Filter only main flow approvals (approval_order 1-3) and sort
+      // Use approvals from the same GET response (no extra API call needed)
+      const listApprovals = (data.approvals || []) as NeedsListApproval[];
       const filteredApprovals = listApprovals
-        .filter(a => a.approval_order && a.approval_order >= 1 && a.approval_order <= 3)
+        .filter(a => a.approval_order && a.approval_order >= 1 && a.approval_order <= 5)
         .sort((a, b) => (a.approval_order || 0) - (b.approval_order || 0));
       setApprovals(filteredApprovals);
+      
+      // Use canApprove from the same GET response (no extra API call needed)
+      setCanApproveList(data.canApprove || false);
     } catch {
       toast.error('Error', 'No se pudo cargar la lista de necesidades');
       router.push('/dashboard/listas-necesidades');
@@ -121,16 +144,115 @@ export default function ListaNecesidadesDetallePage() {
     }
   };
 
-  const checkUserCanApprove = async () => {
-    if (!user?.id) return;
-    
+  const fetchUserDepartment = async () => {
+    if (!user?.department_id) return;
     try {
-      const result = await canUserApproveNeedsList(user.id, listIdNumber);
-      setCanApproveList(result.canApprove);
+      const response = await fetch(`/api/v1/departments/${user.department_id}`);
+      const data = await response.json();
+      if (data.success && data.department) {
+        setUserDepartmentCode(data.department.code);
+      }
     } catch {
       // Error silencioso
     }
   };
+
+  // Cargar saldos pendientes del solicitante de la lista
+  const fetchApplicantPendingBalance = async (applicantEmail: string) => {
+    try {
+      const res = await fetch(`/api/v1/needs-lists/pending-balances?email=${encodeURIComponent(applicantEmail)}`);
+      const data = await res.json();
+      if (data.success) {
+        // Excluir la lista actual
+        const otherLists = (data.lists || []).filter(
+          (l: { id: number }) => String(l.id) !== String(listId)
+        );
+        const total = otherLists.reduce(
+          (sum: number, l: { remaining_balance: number }) => sum + Number(l.remaining_balance),
+          0
+        );
+        setApplicantPendingBalance(Math.round(total * 100) / 100);
+        setPendingBalanceLists(otherLists);
+      }
+    } catch {
+      // silent
+    }
+  };
+
+  const handleUploadPaymentProof = async () => {
+    if (paymentProofFiles.length === 0) {
+      toast.warning('Archivos requeridos', 'Debes adjuntar al menos un comprobante de pago');
+      return;
+    }
+
+    const parsedDeposit = parseFloat(depositAmount);
+    if (!parsedDeposit || parsedDeposit <= 0) {
+      toast.warning('Monto requerido', 'Debes indicar el monto depositado');
+      return;
+    }
+
+    setUploadingProof(true);
+    try {
+      const filesInfo = [];
+      for (const file of paymentProofFiles) {
+        const urlRes = await fetch('/api/v1/storage/signed-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: file.name,
+            contentType: file.type,
+            bucket: 'order-attachments',
+            folder: `needs-lists/${listId}/payment-proof`,
+          }),
+        });
+
+        if (!urlRes.ok) throw new Error('Error obteniendo URL de subida para ' + file.name);
+        const urlData = await urlRes.json();
+
+        const uploadRes = await fetch(urlData.signedUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type },
+          body: file,
+        });
+
+        if (!uploadRes.ok) throw new Error('Error subiendo ' + file.name);
+
+        filesInfo.push({
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          url: urlData.publicUrl,
+          path: urlData.path,
+        });
+      }
+
+      const response = await fetch(`/api/v1/needs-lists/${listId}/payment-proof`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filesInfo, deposit_amount: parsedDeposit }),
+      });
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Error al registrar comprobante');
+      }
+
+      toast.success('Comprobante registrado', data.message);
+      setPaymentProofFiles([]);
+      setDepositAmount('');
+      await fetchNeedsListDetails();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Error al subir comprobante';
+      toast.error('Error', msg);
+    } finally {
+      setUploadingProof(false);
+    }
+  };
+
+  const canUploadPaymentProof = userDepartmentCode === 'contabilidad' || userDepartmentCode === 'pagos';
+  const isListOwner = user?.email === needsList?.user_email;
+  const isAdmin = user?.role === 'admin';
 
   useEffect(() => {
     fetchNeedsListDetails();
@@ -138,11 +260,28 @@ export default function ListaNecesidadesDetallePage() {
   }, [listId]);
 
   useEffect(() => {
-    if (needsList && user) {
-      checkUserCanApprove();
+    if (user?.department_id) {
+      fetchUserDepartment();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [needsList, user]);
+  }, [user?.department_id]);
+
+  // Cargar saldos pendientes del solicitante cuando la lista está aprobada y el usuario puede subir comprobante
+  useEffect(() => {
+    if (needsList?.status === 'approved' && canUploadPaymentProof && needsList.user_email) {
+      fetchApplicantPendingBalance(needsList.user_email);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsList?.status, needsList?.user_email, canUploadPaymentProof]);
+
+  // Calcular monto sugerido de depósito cuando cambian los saldos
+  useEffect(() => {
+    if (needsList?.status === 'approved' && canUploadPaymentProof && !depositAmount) {
+      const suggested = Math.max(0, needsList.total - applicantPendingBalance);
+      setDepositAmount(suggested.toFixed(2));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsList?.total, applicantPendingBalance, canUploadPaymentProof]);
 
   const handleApprove = async (comments?: string) => {
     setProcessingAction(true);
@@ -229,6 +368,33 @@ export default function ListaNecesidadesDetallePage() {
     }
   };
 
+  const handleMergeEvidences = async () => {
+    if (!needsList || !needsList.items) return;
+    
+    const evidences = needsList.items
+      .filter(item => item.evidencia_url)
+      .map((item, index) => ({
+        url: item.evidencia_url!,
+        name: `Evidencia_Item_${index + 1}`
+      }));
+      
+    if (evidences.length === 0) {
+      toast.warning('Sin evidencias', 'No hay evidencias adjuntas para descargar.');
+      return;
+    }
+
+    setIsMergingEvidences(true);
+    try {
+      await mergeUrlsToPdf(evidences, `evidencias_NL-${needsList.folio || listId}.pdf`);
+      toast.success('Éxito', 'Las evidencias han sido descargadas en un solo PDF.');
+    } catch (error) {
+      console.error('Error merging evidences:', error);
+      toast.error('Error', 'No se pudieron unir las evidencias.');
+    } finally {
+      setIsMergingEvidences(false);
+    }
+  };
+
   if (loading) {
     return <OrderDetailSkeleton />;
   }
@@ -242,7 +408,7 @@ export default function ListaNecesidadesDetallePage() {
 
   const getCurrentApprovalStep = () => {
     if (needsList.status === 'rejected') return -1;
-    if (needsList.status === 'approved') return approvals.length;
+    if (needsList.status === 'approved' || needsList.status === 'completed') return approvals.length;
     const firstPending = approvals.findIndex(a => a.status === 'pending');
     return firstPending === -1 ? approvals.length : firstPending;
   };
@@ -595,12 +761,14 @@ export default function ListaNecesidadesDetallePage() {
                             <span className="font-medium">{approval.approver.full_name}</span>
                             <span className="hidden sm:inline"> · </span>
                             <span className="block sm:inline text-gray-400">{new Date(approval.approved_at!).toLocaleDateString('es-MX')}</span>
+                            <span className="text-gray-400 ml-1">{new Date(approval.approved_at!).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
                         )}
                         
                         {isRejected && approval.approver && (
                           <div className="text-xs text-red-600 mt-0.5 font-medium">
                             Rechazado por {approval.approver.full_name}
+                            <span className="block sm:inline text-red-400 font-normal sm:ml-1">{new Date(approval.approved_at!).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
                         )}
                         
@@ -665,6 +833,251 @@ export default function ListaNecesidadesDetallePage() {
           </div>
         )}
 
+        {/* Comprobante de Pago Section */}
+        {(needsList.status === 'approved' || needsList.status === 'completed') && (
+          <div className={`rounded-xl shadow p-5 ${needsList.status === 'completed' ? 'bg-white' : 'bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${needsList.status === 'completed' ? 'bg-green-100' : 'bg-emerald-100'}`}>
+                  {needsList.status === 'completed' ? (
+                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
+                    </svg>
+                  )}
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Comprobante de Pago</h2>
+                  <p className="text-sm text-gray-500">
+                    {needsList.status === 'completed'
+                      ? 'La lista ha sido completada con comprobante de pago'
+                      : 'Se requiere comprobante de pago para completar la lista'
+                    }
+                  </p>
+                </div>
+              </div>
+              {needsList.status === 'completed' && (
+                <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                  Completada
+                </span>
+              )}
+            </div>
+
+            {/* Show existing payment proofs */}
+            {needsList.payment_proof_url && (
+              <div className="mb-4">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Comprobantes adjuntados</p>
+                <div className="space-y-2">
+                  {needsList.payment_proof_url.split(',').map((url, idx) => (
+                    <a
+                      key={idx}
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-green-300 hover:bg-green-50 transition-colors group"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0">
+                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <span className="text-sm text-gray-700 group-hover:text-green-700 truncate flex-1">
+                        Comprobante {idx + 1}
+                      </span>
+                      <svg className="w-4 h-4 text-gray-400 group-hover:text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Upload section - only for contabilidad/pagos when approved */}
+            {needsList.status === 'approved' && canUploadPaymentProof && (
+              <div className="space-y-4">
+                {/* Cálculo de depósito */}
+                <div className="p-4 bg-white rounded-xl border border-gray-200 space-y-3">
+                  <h4 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                    <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    Cálculo de Depósito
+                  </h4>
+
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Total de la lista</span>
+                      <span className="font-medium text-gray-900">{formatCurrency(needsList.total)}</span>
+                    </div>
+                    
+                    {applicantPendingBalance !== 0 && (
+                      <>
+                        <div className="border-t border-gray-100 pt-2">
+                          <p className="text-xs font-medium text-indigo-700 mb-1.5">Saldos pendientes de listas anteriores:</p>
+                          {pendingBalanceLists.map((list) => (
+                            <div key={list.id} className="flex justify-between text-xs pl-2 py-0.5">
+                              <span className="text-gray-500">{list.folio || `NL-${list.id}`}</span>
+                              <span className={Number(list.remaining_balance) > 0 ? 'text-amber-600' : 'text-red-600'}>
+                                {Number(list.remaining_balance) > 0 ? '+' : ''}{formatCurrency(Number(list.remaining_balance))}
+                              </span>
+                            </div>
+                          ))}
+                          <div className="flex justify-between pt-1 border-t border-gray-100 mt-1">
+                            <span className="text-gray-600">Saldo anterior acumulado</span>
+                            <span className={`font-medium ${applicantPendingBalance > 0 ? 'text-amber-600' : 'text-red-600'}`}>
+                              {applicantPendingBalance > 0 ? '-' : '+'}{formatCurrency(Math.abs(applicantPendingBalance))}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex justify-between pt-1 border-t border-emerald-200">
+                          <span className="font-medium text-emerald-700">Depósito sugerido</span>
+                          <span className="font-bold text-emerald-700">
+                            {formatCurrency(Math.max(0, needsList.total - applicantPendingBalance))}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Campo editable de monto a depositar */}
+                  <div className="pt-2 border-t border-gray-200">
+                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                      Monto a depositar *
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={depositAmount}
+                        onChange={(e) => setDepositAmount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full pl-7 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors text-gray-900"
+                      />
+                    </div>
+                    {applicantPendingBalance > 0 && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Se sugiere depositar {formatCurrency(Math.max(0, needsList.total - applicantPendingBalance))} considerando el saldo a favor del usuario.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* File upload */}
+                <div className="border-2 border-dashed border-emerald-300 rounded-xl p-6 hover:border-emerald-400 transition-colors bg-white">
+                  <input
+                    type="file"
+                    multiple
+                    accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx"
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      const maxSize = 10 * 1024 * 1024;
+                      const validFiles = files.filter(file => {
+                        if (file.size > maxSize) {
+                          toast.warning('Archivo muy grande', `${file.name} excede el límite de 10MB`);
+                          return false;
+                        }
+                        return true;
+                      });
+                      setPaymentProofFiles(prev => [...prev, ...validFiles]);
+                    }}
+                    className="hidden"
+                    id="nl-payment-proof-upload"
+                  />
+                  <label htmlFor="nl-payment-proof-upload" className="flex flex-col items-center cursor-pointer">
+                    <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mb-3">
+                      <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                      </svg>
+                    </div>
+                    <span className="text-sm font-medium text-gray-700">Arrastra o haz clic para subir comprobantes</span>
+                    <span className="text-xs text-gray-500 mt-1">PDF, imágenes o Excel · Máx. 10MB por archivo</span>
+                  </label>
+                </div>
+
+                {/* Selected files list */}
+                {paymentProofFiles.length > 0 && (
+                  <div className="space-y-2">
+                    {paymentProofFiles.map((file, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                            <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                            <p className="text-xs text-gray-500">{(file.size / 1024).toFixed(1)} KB</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setPaymentProofFiles(prev => prev.filter((_, i) => i !== idx))}
+                          className="ml-2 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+
+                    <button
+                      onClick={handleUploadPaymentProof}
+                      disabled={uploadingProof}
+                      className="w-full px-4 py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
+                    >
+                      {uploadingProof ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          Subiendo comprobantes...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Registrar Comprobante y Completar Lista
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Message for non-authorized users */}
+            {needsList.status === 'approved' && !canUploadPaymentProof && (isListOwner || isAdmin) && (
+              <div className="flex items-center gap-3 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                <svg className="w-5 h-5 text-yellow-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm text-yellow-700">
+                  Pendiente de comprobante de pago. Solo Contabilidad o Pagos pueden registrar el comprobante.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Comprobación de Gastos - Solo visible después de pagos */}
+        {(needsList.status === 'completed' || needsList.status === 'verifying' || needsList.status === 'verified') && (
+          <ExpenseVerification
+            listId={listId}
+            listStatus={needsList.status}
+            listTotal={needsList.total}
+            listDepositAmount={needsList.deposit_amount}
+            listCurrency={needsList.currency || 'MXN'}
+            listUserEmail={needsList.user_email}
+            onStatusChange={fetchNeedsListDetails}
+          />
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Informacion y Articulos */}
           <div className="lg:col-span-2 space-y-6">
@@ -689,9 +1102,36 @@ export default function ListaNecesidadesDetallePage() {
 
             {/* Articulos/Conceptos */}
             <div className="bg-white rounded-xl shadow p-5">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Conceptos <span className="text-gray-400 font-normal">({needsList.items.length})</span>
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Conceptos <span className="text-gray-400 font-normal">({needsList.items.length})</span>
+                </h2>
+                {needsList.items.some(item => item.evidencia_url) && (
+                  <button
+                    onClick={handleMergeEvidences}
+                    disabled={isMergingEvidences}
+                    className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm font-medium transition-colors flex items-center gap-1.5"
+                    title="Descargar todas las evidencias en 1 PDF"
+                  >
+                    {isMergingEvidences ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Descargando...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                        </svg>
+                        Unir Evidencias PDF
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
               
               {/* Mobile Cards */}
               <div className="lg:hidden space-y-3">
@@ -861,7 +1301,7 @@ export default function ListaNecesidadesDetallePage() {
             </button>
 
             {/* Botones de Accion */}
-            {canApproveList && needsList.status !== 'approved' && needsList.status !== 'rejected' && (
+            {canApproveList && needsList.status !== 'approved' && needsList.status !== 'rejected' && needsList.status !== 'completed' && (
               <div className="bg-white rounded-xl shadow p-5">
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">Acciones</h2>
                 <div className="space-y-3">

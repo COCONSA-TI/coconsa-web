@@ -100,9 +100,11 @@ async function recreateNeedsListApprovals(
   // ya que esos valores corresponden al flujo de órdenes de compra, no al de listas)
   const contabilidad = departments.find((d: Department) => d.code === 'contabilidad');
   const contraloria = departments.find((d: Department) => d.code === 'contraloria');
+  const direccion = departments.find((d: Department) => d.code === 'direccion');
+  const pagos = departments.find((d: Department) => d.code === 'pagos');
 
   if (isUrgent && isApplicantDeptHead) {
-    // LISTA URGENTE: Contabilidad (2) → Contraloría (3)
+    // LISTA URGENTE: Contabilidad (2) → Contraloría (3) → Dirección (4) → Pagos (5)
 
     if (contabilidad) {
       approvalsToCreate.push({
@@ -121,8 +123,26 @@ async function recreateNeedsListApprovals(
         approval_order: 3,
       });
     }
+
+    if (direccion) {
+      approvalsToCreate.push({
+        needs_list_id: needsListId,
+        department_id: direccion.id,
+        status: 'pending',
+        approval_order: 4,
+      });
+    }
+
+    if (pagos) {
+      approvalsToCreate.push({
+        needs_list_id: needsListId,
+        department_id: pagos.id,
+        status: 'pending',
+        approval_order: 5,
+      });
+    }
   } else {
-    // LISTA NORMAL: Gerencia (1) → Contabilidad (2) → Contraloría (3)
+    // LISTA NORMAL: Gerencia (1) → Contabilidad (2) → Contraloría (3) → Dirección (4) → Pagos (5)
     const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
     const isFromGerencia = applicantDept && applicantDept.approval_order === 1;
 
@@ -157,6 +177,26 @@ async function recreateNeedsListApprovals(
           approval_order: 3,
         });
       }
+
+      // Dirección
+      if (direccion) {
+        approvalsToCreate.push({
+          needs_list_id: needsListId,
+          department_id: direccion.id,
+          status: 'pending',
+          approval_order: 4,
+        });
+      }
+
+      // Pagos
+      if (pagos) {
+        approvalsToCreate.push({
+          needs_list_id: needsListId,
+          department_id: pagos.id,
+          status: 'pending',
+          approval_order: 5,
+        });
+      }
     } else {
       // Solicitante NO es de Gerencia
       if (contabilidad && applicantDept?.id !== contabilidad.id) {
@@ -174,6 +214,26 @@ async function recreateNeedsListApprovals(
           department_id: contraloria.id,
           status: 'pending',
           approval_order: 3,
+        });
+      }
+
+      // Dirección
+      if (direccion && applicantDept?.id !== direccion.id) {
+        approvalsToCreate.push({
+          needs_list_id: needsListId,
+          department_id: direccion.id,
+          status: 'pending',
+          approval_order: 4,
+        });
+      }
+
+      // Pagos
+      if (pagos && applicantDept?.id !== pagos.id) {
+        approvalsToCreate.push({
+          needs_list_id: needsListId,
+          department_id: pagos.id,
+          status: 'pending',
+          approval_order: 5,
         });
       }
     }
@@ -258,25 +318,51 @@ export async function GET(
     }
 
     // Obtener aprobaciones
-    const { data: approvals } = await supabaseAdmin
-      .from('needs_list_approvals')
-      .select(`
-        *,
-        department:departments (
-          name,
-          code
-        ),
-        approver:users!needs_list_approvals_approver_id_fkey (
-          full_name,
-          email
-        )
-      `)
-      .eq('needs_list_id', needsListId)
-      .order('approval_order');
+    // Get session for canApprove check
+    const session = await getSession();
+
+    // Run approvals and department name queries in parallel
+    const [{ data: approvals }, currentUser] = await Promise.all([
+      supabaseAdmin
+        .from('needs_list_approvals')
+        .select(`
+          *,
+          department:departments (
+            name,
+            code
+          ),
+          approver:users!needs_list_approvals_approver_id_fkey (
+            full_name,
+            email
+          )
+        `)
+        .eq('needs_list_id', needsListId)
+        .order('approval_order'),
+      session?.userId
+        ? supabaseAdmin
+            .from('users')
+            .select('id, department_id, is_department_head')
+            .eq('id', session.userId)
+            .single()
+            .then(r => r.data)
+        : Promise.resolve(null),
+    ]);
 
     // Get current department name from pending approval
     const pendingApproval = (approvals || []).find((a: { status: string }) => a.status === 'pending');
     const currentDepartmentName = pendingApproval?.department?.name || null;
+
+    // Compute canApprove server-side
+    let canApprove = false;
+    if (currentUser?.is_department_head && currentUser?.department_id && pendingApproval) {
+      canApprove = pendingApproval.department_id === currentUser.department_id;
+      if (canApprove && approvals) {
+        const previousApprovals = approvals.filter(
+          (a: { approval_order: number }) => a.approval_order < pendingApproval.approval_order
+        );
+        canApprove = previousApprovals.every((a: { status: string }) => a.status === 'approved');
+      }
+    }
 
     // Get applicant department name
     let departmentName = null;
@@ -321,8 +407,11 @@ export async function GET(
         is_definitive_rejection: needsList.is_definitive_rejection,
         current_department_name: currentDepartmentName,
         department_name: departmentName,
+        payment_proof_url: needsList.payment_proof_url || null,
+        deposit_amount: needsList.deposit_amount || null,
       },
       approvals: approvals || [],
+      canApprove,
     });
 
   } catch (error) {

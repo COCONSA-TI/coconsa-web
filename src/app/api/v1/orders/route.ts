@@ -112,41 +112,36 @@ export async function GET(request: Request) {
 
     const storeIds = [...new Set(orders.map((o: { store_id: number }) => o.store_id))];
     const userIds = [...new Set(orders.map((o: { applicant_id: string }) => o.applicant_id))];
-
-    const { data: stores } = await supabaseAdmin
-      .from('stores')
-      .select('id, name')
-      .in('id', storeIds);
-
-    const { data: users } = await supabaseAdmin
-      .from('users')
-      .select('id, full_name, department_id, is_department_head')
-      .in('id', userIds);
-
     const machineIds = [...new Set(orders.map((o: { machine_id: number | null }) => o.machine_id).filter(Boolean))];
-    const { data: machines } = await supabaseAdmin
-      .from('machines')
-      .select('id, name')
-      .in('id', machineIds);
+    const orderIds = (orders as SupabaseOrder[]).map((o) => o.id);
+
+    // Ejecutar TODAS las queries de enrichment en paralelo
+    const [
+      { data: stores },
+      { data: users },
+      { data: machines },
+      { data: allDepts },
+      { data: allPendingApprovals },
+      deptApprovalsResult,
+    ] = await Promise.all([
+      supabaseAdmin.from('stores').select('id, name').in('id', storeIds),
+      supabaseAdmin.from('users').select('id, full_name, department_id, is_department_head').in('id', userIds),
+      machineIds.length > 0
+        ? supabaseAdmin.from('machines').select('id, name').in('id', machineIds)
+        : Promise.resolve({ data: [] as { id: number; name: string }[] }),
+      supabaseAdmin.from('departments').select('id, name'),
+      orderIds.length > 0
+        ? supabaseAdmin.from('order_approvals').select('order_id, department_id, approval_order').in('order_id', orderIds).eq('status', 'pending')
+        : Promise.resolve({ data: [] as { order_id: string; department_id: string; approval_order: number }[] }),
+      currentUserData?.is_department_head && currentUserData?.department_id
+        ? supabaseAdmin.from('order_approvals').select('order_id, status, department_id').eq('department_id', currentUserData.department_id)
+        : Promise.resolve({ data: [] as { order_id: string; status: string; department_id: string }[] }),
+    ]);
 
     const storesMap = new Map(stores?.map(s => [s.id, s.name]) || []);
     const usersMap = new Map(users?.map(u => [u.id, u.full_name]) || []);
     const machinesMap = new Map(machines?.map(m => [m.id, m.name]) || []);
-
-    const orderIds = (orders as SupabaseOrder[]).map((o) => o.id);
-
-    // Obtener todos los departamentos para mapear sus nombres
-    const { data: allDepts } = await supabaseAdmin
-      .from('departments')
-      .select('id, name');
     const allDeptsMap = new Map(allDepts?.map(d => [d.id, d.name]) || []);
-
-    // Obtener las aprobaciones pendientes para saber en qué departamento está la orden (la de menor approval_order)
-    const { data: allPendingApprovals } = await supabaseAdmin
-      .from('order_approvals')
-      .select('order_id, department_id, approval_order')
-      .in('order_id', orderIds)
-      .eq('status', 'pending');
 
     const currentDeptMap = new Map<string, { order: number, name: string }>();
     if (allPendingApprovals) {
@@ -161,19 +156,12 @@ export async function GET(request: Request) {
       });
     }
 
-    // Si el usuario es jefe de departamento, obtener todas las aprobaciones de las órdenes para su departamento
     const userDeptApprovals = new Map();
-    if (currentUserData?.is_department_head && currentUserData?.department_id) {
-      const { data: approvals } = await supabaseAdmin
-        .from('order_approvals')
-        .select('order_id, status, department_id')
-        .eq('department_id', currentUserData.department_id);
-      
-      if (approvals) {
-        approvals.forEach(a => {
-          userDeptApprovals.set(a.order_id, a.status);
-        });
-      }
+    const deptApprovals = 'data' in deptApprovalsResult ? deptApprovalsResult.data : deptApprovalsResult;
+    if (deptApprovals) {
+      (deptApprovals as any[]).forEach(a => {
+        userDeptApprovals.set(a.order_id, a.status);
+      });
     }
 
     const statusMap: Record<string, string> = {
@@ -202,6 +190,12 @@ export async function GET(request: Request) {
         itemsArray = [];
       }
       
+        const uniqueSuppliers = new Set<string>();
+        itemsArray.forEach(item => {
+          if (item.proveedor) uniqueSuppliers.add(item.proveedor);
+          if (item.supplier_name) uniqueSuppliers.add(item.supplier_name);
+        });
+
       return {
         id: order.id,
         created_at: order.created_at,
@@ -218,6 +212,7 @@ export async function GET(request: Request) {
         my_department_status: userDeptApprovals.get(order.id) || null,
         current_department_name: currentDeptMap.get(order.id)?.name || null,
         machine_name: order.machine_id ? machinesMap.get(order.machine_id) || null : null,
+        suppliers: Array.from(uniqueSuppliers),
       };
     });
 

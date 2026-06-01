@@ -469,7 +469,8 @@ export default function EditarOrdenPage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ 
                 fileName: file.name, 
-                contentType: file.type 
+                contentType: file.type,
+                bucket: 'order-attachments'
               })
             });
             

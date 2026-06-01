@@ -60,8 +60,14 @@ export async function GET(request: Request) {
       'Máquina',
       'Proveedor',
       'Justificación',
+      'Tipo de Pago',
       'Urgente',
-      'Total',
+      'Item',
+      'Cantidad',
+      'Unidad',
+      'Precio Unitario',
+      'Precio Total Item',
+      'Total Orden',
       'Moneda',
       'Estado',
     ].join(','));
@@ -84,9 +90,30 @@ export async function GET(request: Request) {
       return stringified;
     };
 
-    // Agregar filas
+    // Agregar filas — una por item de cada orden
     for (const order of orders) {
-      const row = [
+      // Parsear items JSON
+      let parsedItems: Array<{
+        nombre?: string;
+        cantidad?: number;
+        unidad?: string;
+        precioUnitario?: number;
+        precioTotal?: number;
+      }> = [];
+
+      if (order.items) {
+        try {
+          const raw = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+          if (Array.isArray(raw)) {
+            parsedItems = raw;
+          }
+        } catch {
+          // Items mal formateados, se tratarán como vacíos
+        }
+      }
+
+      // Datos base de la orden (compartidos por todas las filas de items)
+      const baseRow = [
         order.id,
         order.created_at.split('T')[0],
         escapeCsv(usersMap.get(order.applicant_id)),
@@ -94,12 +121,36 @@ export async function GET(request: Request) {
         escapeCsv(machinesMap.get(order.machine_id) || ''),
         escapeCsv(suppliersMap.get(order.supplier_id) || ''),
         escapeCsv(order.justification || ''),
+        escapeCsv(order.payment_type || ''),
         order.is_urgent ? 'Sí' : 'No',
-        order.total,
-        order.currency || 'MXN',
-        escapeCsv(statusMap[order.status] || order.status),
       ];
-      csvRows.push(row.join(','));
+
+      if (parsedItems.length > 0) {
+        for (const item of parsedItems) {
+          const row = [
+            ...baseRow,
+            escapeCsv(item.nombre || ''),
+            item.cantidad ?? '',
+            escapeCsv(item.unidad || ''),
+            item.precioUnitario ?? '',
+            item.precioTotal ?? '',
+            order.total,
+            order.currency || 'MXN',
+            escapeCsv(statusMap[order.status] || order.status),
+          ];
+          csvRows.push(row.join(','));
+        }
+      } else {
+        // Orden sin items parseables — una fila con columnas de item vacías
+        const row = [
+          ...baseRow,
+          '', '', '', '', '',
+          order.total,
+          order.currency || 'MXN',
+          escapeCsv(statusMap[order.status] || order.status),
+        ];
+        csvRows.push(row.join(','));
+      }
     }
 
     const csvContent = csvRows.join('\n');

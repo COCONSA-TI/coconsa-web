@@ -306,6 +306,7 @@ export default function EditarListaNecesidadesPage() {
                 fileName: item.evidenciaFile.name,
                 contentType: item.evidenciaFile.type,
                 folder: 'needs-lists/staging',
+                bucket: 'order-attachments',
               }),
             });
 
