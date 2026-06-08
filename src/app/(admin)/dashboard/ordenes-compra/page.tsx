@@ -959,7 +959,7 @@ function OrdenesCompraContent() {
                     <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-4">
                       Almacén
                     </th>
-                    <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-4">
+                    <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-4 max-w-[250px]">
                       Items
                     </th>
                     <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-4">
@@ -1009,9 +1009,12 @@ function OrdenesCompraContent() {
                             </span>
                           )}
                         </td>
-                        <td className="px-6 py-4">
+                        <td className="px-6 py-4 max-w-[250px]">
                           <div className="flex flex-col">
-                            <span className="text-sm text-gray-900">
+                            <span 
+                              className="text-sm text-gray-900 truncate block w-full" 
+                              title={order.first_item_name || 'Sin items'}
+                            >
                               {order.first_item_name || 'Sin items'}
                             </span>
                             {order.items_count > 1 && (
