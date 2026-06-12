@@ -30,6 +30,12 @@ interface StoreOption {
   name: string;
 }
 
+interface UnitOption {
+  id: string;
+  name: string;
+  abbreviation: string;
+}
+
 const LEGACY_MACHINE_STORE_REGEX = /^(CG|M|C|V|AT)\d+[\.\s-]?/i;
 
 export default function CreateNeedsListPage() {
@@ -45,18 +51,32 @@ export default function CreateNeedsListPage() {
   const [storeName, setStoreName] = useState('');
   const [storeId, setStoreId] = useState('');
   const [availableStores, setAvailableStores] = useState<StoreOption[]>([]);
+  const [availableUnits, setAvailableUnits] = useState<UnitOption[]>([]);
   const [currency, setCurrency] = useState('MXN');
   const [ivaPercentage, setIvaPercentage] = useState(16);
   const [isUrgent, setIsUrgent] = useState(false);
   const [urgencyJustification, setUrgencyJustification] = useState('');
   const [items, setItems] = useState<NeedsListItem[]>([
-    { nombre: '', cantidad: 1, unidad: 'pza', precioUnitario: 0, justificacion: '', evidenciaFile: null },
+    { nombre: '', cantidad: 1, unidad: '', precioUnitario: 0, justificacion: '', evidenciaFile: null },
   ]);
 
   useEffect(() => {
     fetchBankAccounts();
     fetchStores();
+    fetchUnits();
   }, []);
+
+  const fetchUnits = async () => {
+    try {
+      const response = await fetch('/api/v1/units');
+      const data = await response.json();
+      if (response.ok && data.units) {
+        setAvailableUnits(data.units);
+      }
+    } catch (error) {
+      console.error('Error al cargar unidades:', error);
+    }
+  };
 
   const fetchBankAccounts = async () => {
     try {
@@ -97,7 +117,7 @@ export default function CreateNeedsListPage() {
   };
 
   const addItem = () => {
-    setItems([...items, { nombre: '', cantidad: 1, unidad: 'pza', precioUnitario: 0, justificacion: '', evidenciaFile: null }]);
+    setItems([...items, { nombre: '', cantidad: 1, unidad: '', precioUnitario: 0, justificacion: '', evidenciaFile: null }]);
   };
 
   const removeItem = (index: number) => {
@@ -481,15 +501,12 @@ export default function CreateNeedsListPage() {
                       required
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
                     >
-                      <option value="pza">Pieza</option>
-                      <option value="kg">Kilogramo</option>
-                      <option value="m">Metro</option>
-                      <option value="m2">Metro²</option>
-                      <option value="m3">Metro³</option>
-                      <option value="lt">Litro</option>
-                      <option value="caja">Caja</option>
-                      <option value="paq">Paquete</option>
-                      <option value="servicio">Servicio</option>
+                      <option value="" disabled>Seleccionar</option>
+                      {availableUnits.map((u) => (
+                        <option key={u.id} value={u.abbreviation}>
+                          {u.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
 

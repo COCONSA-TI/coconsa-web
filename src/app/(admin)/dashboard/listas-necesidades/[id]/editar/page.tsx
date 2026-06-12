@@ -63,6 +63,12 @@ interface StoreOption {
   name: string;
 }
 
+interface UnitOption {
+  id: string;
+  name: string;
+  abbreviation: string;
+}
+
 const LEGACY_MACHINE_STORE_REGEX = /^(CG|M|C|V|AT)\d+[\.\s-]?/i;
 
 export default function EditarListaNecesidadesPage() {
@@ -86,12 +92,13 @@ export default function EditarListaNecesidadesPage() {
   const [storeId, setStoreId] = useState("");
   const [storeName, setStoreName] = useState("");
   const [availableStores, setAvailableStores] = useState<StoreOption[]>([]);
+  const [availableUnits, setAvailableUnits] = useState<UnitOption[]>([]);
   const [items, setItems] = useState<FormItem[]>([
     {
       id: "1",
       nombre: "",
       cantidad: "1",
-      unidad: "pza",
+      unidad: "",
       precioUnitario: "",
       justificacion: "",
       evidenciaFile: null,
@@ -125,6 +132,18 @@ export default function EditarListaNecesidadesPage() {
       }
     } catch (fetchStoresError) {
       console.error('Error al cargar centros de costos:', fetchStoresError);
+    }
+  };
+
+  const fetchUnits = async () => {
+    try {
+      const response = await fetch('/api/v1/units');
+      const data = await response.json();
+      if (response.ok && data.units) {
+        setAvailableUnits(data.units);
+      }
+    } catch (error) {
+      console.error('Error al cargar unidades:', error);
     }
   };
 
@@ -185,6 +204,7 @@ export default function EditarListaNecesidadesPage() {
         // Fetch supporting data
         await fetchBankAccounts();
         await fetchStores();
+        await fetchUnits();
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "Error al cargar la lista";
         setError(errorMessage);
@@ -216,7 +236,7 @@ export default function EditarListaNecesidadesPage() {
         id: newId,
         nombre: "",
         cantidad: "1",
-        unidad: "pza",
+        unidad: "",
         precioUnitario: "",
         justificacion: "",
         evidenciaFile: null,
@@ -577,16 +597,12 @@ export default function EditarListaNecesidadesPage() {
                       onChange={(e) => handleItemChange(item.id, "unidad", e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 text-sm"
                     >
-                      <option value="pza">Pieza</option>
-                      <option value="kg">Kilogramo</option>
-                      <option value="lt">Litro</option>
-                      <option value="m">Metro</option>
-                      <option value="m2">Metro²</option>
-                      <option value="m3">Metro³</option>
-                      <option value="caja">Caja</option>
-                      <option value="paq">Paquete</option>
-                      <option value="rollo">Rollo</option>
-                      <option value="servicio">Servicio</option>
+                      <option value="" disabled>Seleccionar</option>
+                      {availableUnits.map((u) => (
+                        <option key={u.id} value={u.abbreviation}>
+                          {u.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
 

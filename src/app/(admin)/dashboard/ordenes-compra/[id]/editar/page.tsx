@@ -15,6 +15,12 @@ interface Item {
   precioUnitario: string;
 }
 
+interface UnitOption {
+  id: string;
+  name: string;
+  abbreviation: string;
+}
+
 interface OrderDetail {
   id: string;
   created_at: string;
@@ -182,6 +188,7 @@ export default function EditarOrdenPage() {
 
   const [availableStores, setAvailableStores] = useState<string[]>([]);
   const [availableSuppliers, setAvailableSuppliers] = useState<string[]>([]);
+  const [availableUnits, setAvailableUnits] = useState<UnitOption[]>([]);
 
   const [formData, setFormData] = useState({
     store_name: "",
@@ -196,7 +203,7 @@ export default function EditarOrdenPage() {
   const [selectedRetentions, setSelectedRetentions] = useState<string[]>([]);
 
   const [items, setItems] = useState<Item[]>([
-    { id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "" },
+    { id: "1", nombre: "", cantidad: "", unidad: "", precioUnitario: "" },
   ]);
 
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
@@ -247,6 +254,15 @@ export default function EditarOrdenPage() {
           }
           if (data.suppliers && Array.isArray(data.suppliers)) {
             setAvailableSuppliers(data.suppliers.map((supplier: { commercial_name: string }) => supplier.commercial_name));
+          }
+        }
+
+        // Cargar unidades
+        const unitsResponse = await fetch("/api/v1/units");
+        if (unitsResponse.ok) {
+          const data = await unitsResponse.json();
+          if (data.units) {
+            setAvailableUnits(data.units);
           }
         }
 
@@ -314,7 +330,7 @@ export default function EditarOrdenPage() {
     const newId = (Math.max(...items.map((i) => parseInt(i.id))) + 1).toString();
     setItems((prev) => [
       ...prev,
-      { id: newId, nombre: "", cantidad: "", unidad: "pza", precioUnitario: "" },
+      { id: newId, nombre: "", cantidad: "", unidad: "", precioUnitario: "" },
     ]);
   };
 
@@ -713,15 +729,12 @@ export default function EditarOrdenPage() {
                       onChange={(e) => handleItemChange(item.id, "unidad", e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm text-gray-900"
                     >
-                      <option value="pza">Pieza</option>
-                      <option value="kg">Kilogramo</option>
-                      <option value="m">Metro</option>
-                      <option value="m2">Metro cuadrado</option>
-                      <option value="m3">Metro cubico</option>
-                      <option value="lt">Litro</option>
-                      <option value="caja">Caja</option>
-                      <option value="paquete">Paquete</option>
-                      <option value="servicio">Servicio</option>
+                      <option value="" disabled>Seleccionar</option>
+                      {availableUnits.map((u) => (
+                        <option key={u.id} value={u.abbreviation}>
+                          {u.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="md:col-span-2">

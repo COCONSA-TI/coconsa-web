@@ -11,6 +11,12 @@ interface Item {
   precioUnitario: string;
 }
 
+interface UnitOption {
+  id: string;
+  name: string;
+  abbreviation: string;
+}
+
 interface OrderData {
   applicant_name: string;
   store_name: string;
@@ -163,6 +169,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
   const [availableStores, setAvailableStores] = useState<string[]>([]);
   const [availableSuppliers, setAvailableSuppliers] = useState<string[]>([]);
   const [availableMachines, setAvailableMachines] = useState<{id: string, name: string}[]>([]);
+  const [availableUnits, setAvailableUnits] = useState<UnitOption[]>([]);
   const [formData, setFormData] = useState({
     applicant_name: "",
     store_name: "",
@@ -179,7 +186,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
   });
 
   const [items, setItems] = useState<Item[]>([
-    { id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "" },
+    { id: "1", nombre: "", cantidad: "", unidad: "", precioUnitario: "" },
   ]);
 
   const [loading, setLoading] = useState(false);
@@ -238,6 +245,15 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
             setAvailableMachines(data.machines);
           }
         }
+
+        // Obtener unidades
+        const unitsResponse = await fetch('/api/v1/units');
+        if (unitsResponse.ok) {
+          const unitsData = await unitsResponse.json();
+          if (unitsData.units) {
+            setAvailableUnits(unitsData.units);
+          }
+        }
       } catch {
         // Error silencioso - se usarán listas vacías
       }
@@ -260,7 +276,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     const newId = (Math.max(...items.map((i) => parseInt(i.id))) + 1).toString();
     setItems((prev) => [
       ...prev,
-      { id: newId, nombre: "", cantidad: "", unidad: "pza", precioUnitario: "" },
+      { id: newId, nombre: "", cantidad: "", unidad: "", precioUnitario: "" },
     ]);
   };
 
@@ -457,7 +473,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
         is_urgent: false,
         urgency_justification: "",
       });
-      setItems([{ id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "" }]);
+      setItems([{ id: "1", nombre: "", cantidad: "", unidad: "", precioUnitario: "" }]);
       setEvidenceFiles([]);
 
       if (onSubmit) {
@@ -682,15 +698,12 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                     onChange={(e) => handleItemChange(item.id, "unidad", e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900"
                   >
-                    <option value="pza">Pieza</option>
-                    <option value="kg">Kilogramo</option>
-                    <option value="m">Metro</option>
-                    <option value="m2">Metro²</option>
-                    <option value="m3">Metro³</option>
-                    <option value="lt">Litro</option>
-                    <option value="caja">Caja</option>
-                    <option value="paquete">Paquete</option>
-                    <option value="servicio">Servicio</option>
+                    <option value="" disabled>Seleccionar</option>
+                    {availableUnits.map((u) => (
+                      <option key={u.id} value={u.abbreviation}>
+                        {u.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div className="md:col-span-2">
@@ -994,7 +1007,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
               is_urgent: false,
               urgency_justification: "",
             });
-            setItems([{ id: "1", nombre: "", cantidad: "", unidad: "pza", precioUnitario: "" }]);
+            setItems([{ id: "1", nombre: "", cantidad: "", unidad: "", precioUnitario: "" }]);
             setEvidenceFiles([]);
           }}
           className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
