@@ -154,20 +154,19 @@ export async function POST(request: Request) {
       );
     }
 
-    // Disparar las 3 consultas a la DB en paralelo en lugar de secuencialmente.
-    // Antes: ~3 round-trips × latencia_DB (ej. 3 × 30 ms = 90 ms).
-    // Ahora:  1 round-trip paralelo (≈ 30 ms). Mejora: ~60 ms por solicitud.
     const [
       { data: userData, error: userError },
       { data: stores },
       { data: suppliers },
       { data: machines },
+      { data: units },
       body,
     ] = await Promise.all([
       supabaseAdmin.from('users').select('id, full_name').eq('id', session.userId).single(),
       supabaseAdmin.from('stores').select('id, name').order('name'),
       supabaseAdmin.from('suppliers').select('id, commercial_name').order('commercial_name'),
       supabaseAdmin.from('machines').select('id, name').order('name'),
+      supabaseAdmin.from('units').select('id, abbreviation, name'),
       request.json(),
     ]);
 
@@ -225,7 +224,8 @@ export async function POST(request: Request) {
         userData,
         filteredStores as Store[],
         (suppliers || []) as Supplier[],
-        (machines || []) as any[]
+        (machines || []) as any[],
+        (units || []) as any[]
       );
       botMessage = sanitizeBotResponse(combinedResult.reply ?? "");
       extractedData = combinedResult;
@@ -285,7 +285,8 @@ async function extractOrderDataWithAI(
   userData: UserData,
   stores: Store[],
   suppliers: Supplier[],
-  machines: any[]
+  machines: any[],
+  units: any[]
 ) {
   try {
     const extractionModel = genAI.getGenerativeModel({ 
@@ -308,12 +309,17 @@ async function extractOrderDataWithAI(
       .map((msg) => `${msg.role === 'user' ? 'USUARIO' : 'ASISTENTE'}: ${msg.content}`)
       .join("\n");
 
+    const dynamicSystemPrompt = SYSTEM_PROMPT.replace(
+      "(pza, kg, m, litro, etc.)",
+      `(opciones válidas: ${units.map(u => u.abbreviation).join(", ")})`
+    );
+
     const extractionPrompt = `
       Eres el asistente de compras de COCONSA. Analiza la conversación y realiza DOS tareas:
 
       TAREA 1 — RESPUESTA AL USUARIO:
       Responde al último mensaje del USUARIO de forma natural, como si fueras un colega del área de compras.
-      ${SYSTEM_PROMPT}
+      ${dynamicSystemPrompt}
 
       TAREA 2 — EXTRACCIÓN DE DATOS:
       Extrae los datos de la Orden de Compra en formato JSON ESTRICTO.
@@ -323,6 +329,7 @@ async function extractOrderDataWithAI(
       - Almacenes (Centros de Costos) disponibles: ${JSON.stringify(stores.map(s => ({ id: s.id, name: s.name })))}
       - Máquinas disponibles: ${JSON.stringify(machines.map(m => ({ id: m.id, name: m.name })))}
       - Proveedores disponibles: ${JSON.stringify(suppliers.map(s => ({ id: s.id, commercial_name: s.commercial_name })))}
+      - Unidades de medida disponibles: ${JSON.stringify(units.map(u => ({ abbreviation: u.abbreviation, name: u.name })))}
 
       INSTRUCCIONES DE EXTRACCIÓN:
       1. Extrae el nombre del almacén/obra (ahora llamado Centro de Costos). Si encuentras coincidencia, incluye el ID.
@@ -361,7 +368,7 @@ async function extractOrderDataWithAI(
           {
             "nombre": "Nombre del artículo",
             "cantidad": 10,
-            "unidad": "pza",
+            "unidad": "${units[0]?.abbreviation || 'pza'}",
             "precioUnitario": 100.50
           }
         ],
