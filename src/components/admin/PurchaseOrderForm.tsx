@@ -9,6 +9,9 @@ interface Item {
   cantidad: string;
   unidad: string;
   precioUnitario: string;
+  insumo_clave?: string;
+  categoria?: string;
+  agotado?: boolean;
 }
 
 interface UnitOption {
@@ -164,6 +167,99 @@ function SearchableSupplierSelect({
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// InsumoAutocomplete: campo inteligente para seleccionar insumos del presupuesto
+// ─────────────────────────────────────────────────────────────────────────────
+interface InsumoOption {
+  id: number;
+  clave: string;
+  descripcion: string;
+  unidad: string;
+  costo_unitario: number;
+  cantidad_disponible: number;
+  agotado: boolean;
+  categoria: string;
+}
+
+interface InsumoAutocompleteProps {
+  value: string;
+  insumos: InsumoOption[];
+  onSelect: (insumo: InsumoOption) => void;
+  onChange: (val: string) => void;
+}
+
+function InsumoAutocomplete({ value, insumos, onSelect, onChange }: InsumoAutocompleteProps) {
+  const [query, setQuery] = useState(value);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Sync external value changes (e.g. form reset)
+  useEffect(() => { setQuery(value); }, [value]);
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = query.length >= 1
+    ? insumos.filter(ins =>
+        ins.clave.toLowerCase().includes(query.toLowerCase()) ||
+        ins.descripcion.toLowerCase().includes(query.toLowerCase())
+      ).slice(0, 30)
+    : insumos.slice(0, 30);
+
+  return (
+    <div ref={ref} className="relative">
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900"
+        placeholder="Busca por clave o descripción del presupuesto..."
+        autoComplete="off"
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white rounded-lg border border-gray-200 shadow-xl max-h-60 overflow-y-auto">
+          {filtered.map((ins) => (
+            <button
+              key={ins.id}
+              type="button"
+              onClick={() => {
+                onSelect(ins);
+                setQuery(ins.descripcion);
+                setOpen(false);
+              }}
+              className={`w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0 ${ins.agotado ? 'opacity-50' : ''}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-gray-500 font-mono">{ins.clave}</p>
+                  <p className="text-sm text-gray-800 truncate">{ins.descripcion}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className={`text-xs font-medium ${ins.agotado ? 'text-red-500' : 'text-green-600'}`}>
+                    {ins.agotado ? 'Agotado' : `Disp: ${ins.cantidad_disponible.toLocaleString('es-MX', { maximumFractionDigits: 2 })} ${ins.unidad}`}
+                  </p>
+                  <p className="text-xs text-gray-400">${ins.costo_unitario.toLocaleString('es-MX', { maximumFractionDigits: 2 })}/{ins.unidad}</p>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) {
   const [currentUser, setCurrentUser] = useState<{ name: string, email: string, isDepartmentHead: boolean } | null>(null);
   const [availableStores, setAvailableStores] = useState<string[]>([]);
@@ -195,6 +291,15 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
 
+  // Control de presupuesto: mapa de name→id de stores y lista de insumos de la obra seleccionada
+  const [storeIdMap, setStoreIdMap] = useState<Record<string, number>>({});
+  const [storeInsumos, setStoreInsumos] = useState<Array<{
+    id: number; clave: string; descripcion: string; unidad: string;
+    costo_unitario: number; cantidad_disponible: number; agotado: boolean; categoria: string;
+  }>>([]);
+  const [hasPresupuesto, setHasPresupuesto] = useState(false);
+  const [loadingInsumos, setLoadingInsumos] = useState(false);
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -212,6 +317,13 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
         if (storesResponse.ok) {
           const data = await storesResponse.json();
           if (data.stores && Array.isArray(data.stores)) {
+            // Guardar mapa name→id para poder consultar insumos por store_id
+            const idMap: Record<string, number> = {};
+            data.stores.forEach((store: { id: number; name: string }) => {
+              idMap[store.name] = store.id;
+            });
+            setStoreIdMap(idMap);
+
             const sortedStores = data.stores
               .map((store: { name: string }) => store.name)
               .sort((a: string, b: string) => {
@@ -265,6 +377,39 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
+
+  // Cargar insumos de la obra cuando cambia el Centro de Costos
+  const fetchInsumosForStore = useCallback(async (storeName: string) => {
+    const storeId = storeIdMap[storeName];
+    if (!storeId) {
+      setStoreInsumos([]);
+      setHasPresupuesto(false);
+      return;
+    }
+    setLoadingInsumos(true);
+    try {
+      const res = await fetch(`/api/v1/stores/${storeId}/insumos?limit=500`);
+      if (!res.ok) throw new Error('Error');
+      const data = await res.json();
+      setHasPresupuesto(data.hasPresupuesto);
+      setStoreInsumos(data.insumos || []);
+    } catch {
+      setStoreInsumos([]);
+      setHasPresupuesto(false);
+    } finally {
+      setLoadingInsumos(false);
+    }
+  }, [storeIdMap]);
+
+  useEffect(() => {
+    if (formData.store_name && !isMachineStore(formData.store_name)) {
+      fetchInsumosForStore(formData.store_name);
+    } else {
+      setStoreInsumos([]);
+      setHasPresupuesto(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.store_name, fetchInsumosForStore]);
 
   const handleItemChange = (id: string, field: keyof Item, value: string) => {
     setItems((prev) =>
@@ -407,6 +552,9 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
         precioUnitario: parseFloat(item.precioUnitario),
         proveedor: formData.supplier_name,
         precioTotal: parseFloat(item.cantidad) * parseFloat(item.precioUnitario),
+        // Datos de presupuesto (opcionales — solo si la obra tiene presupuesto cargado)
+        ...(item.insumo_clave ? { insumo_clave: item.insumo_clave } : {}),
+        ...(item.categoria ? { categoria: item.categoria } : {}),
       })),
     };
 
@@ -644,6 +792,39 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
           </button>
         </div>
 
+        {/* Indicador de presupuesto de la obra */}
+        {formData.store_name && !isMachineStore(formData.store_name) && (
+          <div className={`mb-4 px-4 py-3 rounded-lg border text-sm flex items-center gap-2 ${
+            loadingInsumos
+              ? 'bg-gray-50 border-gray-200 text-gray-500'
+              : hasPresupuesto
+              ? 'bg-green-50 border-green-200 text-green-700'
+              : 'bg-amber-50 border-amber-200 text-amber-700'
+          }`}>
+            {loadingInsumos ? (
+              <>
+                <span className="inline-block w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                Verificando presupuesto de la obra...
+              </>
+            ) : hasPresupuesto ? (
+              <>
+                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+                Esta obra tiene un presupuesto cargado. Selecciona los insumos del catálogo autorizados para esta obra.
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                Esta obra no tiene un presupuesto cargado. Puedes agregar artículos libremente, o{" "}
+                <a href="/dashboard/presupuestos" className="underline font-medium" target="_blank">cargar el presupuesto aquí</a>.
+              </>
+            )}
+          </div>
+        )}
+
         <div className="space-y-4">
           {items.map((item, index) => (
             <div key={item.id} className="border border-gray-200 p-4 rounded-lg bg-gray-50">
@@ -662,17 +843,56 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                 )}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="md:col-span-2">
+              <div className="md:col-span-2">
                   <label className="block text-xs font-medium text-gray-600 mb-1">
                     Nombre del Artículo
+                    {item.insumo_clave && (
+                      <span className="ml-2 text-xs text-green-600 font-normal">
+                        ({item.insumo_clave})
+                      </span>
+                    )}
                   </label>
-                  <input
-                    type="text"
-                    value={item.nombre}
-                    onChange={(e) => handleItemChange(item.id, "nombre", e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900"
-                    placeholder="Ej: Cemento gris 50kg"
-                  />
+                  {hasPresupuesto ? (
+                    <InsumoAutocomplete
+                      value={item.nombre}
+                      insumos={storeInsumos}
+                      onSelect={(insumo) => {
+                        setItems(prev => prev.map(i => {
+                          if (i.id !== item.id) return i;
+                          return {
+                            ...i,
+                            nombre: insumo.descripcion,
+                            unidad: insumo.unidad,
+                            precioUnitario: String(insumo.costo_unitario),
+                            insumo_clave: insumo.clave,
+                            categoria: insumo.categoria,
+                            agotado: insumo.agotado,
+                          };
+                        }));
+                      }}
+                      onChange={(val) => {
+                        setItems(prev => prev.map(i =>
+                          i.id === item.id ? { ...i, nombre: val, insumo_clave: undefined, categoria: undefined } : i
+                        ));
+                      }}
+                    />
+                  ) : (
+                    <input
+                      type="text"
+                      value={item.nombre}
+                      onChange={(e) => handleItemChange(item.id, "nombre", e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900"
+                      placeholder="Ej: Cemento gris 50kg"
+                    />
+                  )}
+                  {item.agotado && (
+                    <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      Este insumo no tiene cantidad disponible en el presupuesto.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -825,11 +1045,11 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                 {evidenceFiles.map((file, index) => (
                   <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded-lg border border-gray-200">
                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <span className="text-lg">
-                        {file.type.startsWith('image/') ? '🖼️' :
-                          file.type === 'application/pdf' ? '📄' :
-                            file.type.includes('word') ? '📝' :
-                              file.type.includes('excel') || file.type.includes('spreadsheet') ? '📊' : '📎'}
+                      <span className="flex-shrink-0 text-gray-400">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm text-gray-700 truncate">{file.name}</p>

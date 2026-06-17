@@ -410,7 +410,10 @@ export async function POST(request: Request) {
       unidad: item.unidad,
       precioUnitario: item.precioUnitario,
       precioTotal: parseFloat(String(item.cantidad)) * item.precioUnitario,
-      proveedor: resolvedSupplierName
+      proveedor: resolvedSupplierName,
+      // Datos de presupuesto (pasados desde el frontend si la obra tiene presupuesto)
+      ...(item.insumo_clave ? { insumo_clave: item.insumo_clave } : {}),
+      ...(item.categoria ? { categoria: item.categoria } : {}),
     }));
 
     // Crear la orden
@@ -476,6 +479,50 @@ export async function POST(request: Request) {
         // No fallar la creación de la orden si falla la creación de aprobaciones
       }
     }
+
+    // Reservar cantidades en store_insumos para los items que provienen del presupuesto
+    // (insumo_clave enlaza el item con store_insumos.clave)
+    const itemsConClave = items.filter((item: OrderItem) => item.insumo_clave?.trim());
+    if (itemsConClave.length > 0) {
+      try {
+        for (const item of itemsConClave) {
+          const cantidadPedida = parseFloat(String(item.cantidad)) || 0;
+          if (cantidadPedida <= 0 || !item.insumo_clave) continue;
+
+          // Intentar incremento atómico vía RPC (evita race conditions con órdenes concurrentes)
+          const { error: rpcError } = await supabaseAdmin.rpc('increment_insumo_solicitado', {
+            p_store_id: storeIdToUse,
+            p_clave: item.insumo_clave.trim(),
+            p_cantidad: cantidadPedida,
+          });
+
+          if (rpcError) {
+            // Fallback: si el RPC no existe aún, hacer el incremento manualmente
+            // (leer + sumar + escribir — no es atómico pero funciona en carga baja)
+            const { data: insumoData } = await supabaseAdmin
+              .from('store_insumos')
+              .select('id, cantidad_solicitada')
+              .eq('store_id', storeIdToUse)
+              .eq('clave', item.insumo_clave.trim())
+              .single();
+
+            if (insumoData) {
+              await supabaseAdmin
+                .from('store_insumos')
+                .update({
+                  cantidad_solicitada: (insumoData.cantidad_solicitada || 0) + cantidadPedida,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', insumoData.id);
+            }
+          }
+        }
+      } catch {
+        // No fallar la creación de la orden si falla la reserva de presupuesto
+        console.warn('[orders/create] No se pudo reservar presupuesto para algunos insumos');
+      }
+    }
+
 
     return NextResponse.json({
       success: true,
