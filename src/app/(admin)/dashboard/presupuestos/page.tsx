@@ -227,6 +227,9 @@ export default function PresupuestosPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
   // ── Cargar lista de stores ──────────────────────────────────────────────
   useEffect(() => {
     const fetchStores = async () => {
@@ -313,6 +316,12 @@ export default function PresupuestosPage() {
     return () => clearTimeout(t);
   }, [searchQuery, selectedCategoria, selectedStoreId, fetchInsumos]);
 
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
   // ── Subida de PDF ───────────────────────────────────────────────────────
   const handleUpload = async (file: File) => {
     if (!selectedStoreId) return;
@@ -341,9 +350,22 @@ export default function PresupuestosPage() {
     }
   };
 
+  const handleFileSelect = (file: File) => {
+    if (file.type !== "application/pdf") {
+      setUploadError("El archivo debe ser un PDF.");
+      return;
+    }
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+
+    setPendingFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+    setUploadError(null);
+    setUploadSuccess(null);
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleUpload(file);
+    if (file) handleFileSelect(file);
     e.target.value = "";
   };
 
@@ -351,7 +373,20 @@ export default function PresupuestosPage() {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files?.[0];
-    if (file) handleUpload(file);
+    if (file) handleFileSelect(file);
+  };
+
+  const handleConfirmUpload = () => {
+    if (pendingFile) handleUpload(pendingFile);
+    setPendingFile(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+  };
+
+  const handleCancelPreview = () => {
+    setPendingFile(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
   };
 
   // ── Borrar presupuesto ──────────────────────────────────────────────────
@@ -497,13 +532,12 @@ export default function PresupuestosPage() {
                     onDrop={handleDrop}
                     onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                     onDragLeave={() => setDragOver(false)}
-                    className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 ${
-                      dragOver
-                        ? "border-blue-500 bg-blue-50"
-                        : uploading
+                    className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 ${dragOver
+                      ? "border-blue-500 bg-blue-50"
+                      : uploading
                         ? "border-blue-300 bg-blue-50 cursor-not-allowed"
                         : "border-gray-300 hover:border-blue-400 hover:bg-gray-50 cursor-pointer"
-                    }`}
+                      }`}
                   >
                     <input
                       type="file"
@@ -539,6 +573,41 @@ export default function PresupuestosPage() {
                         </div>
                       )}
                     </label>
+                  </div>
+                )}
+
+                {previewUrl && pendingFile && (
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          Vista previa del PDF
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                          {pendingFile.name} · {(pendingFile.size / 1024 / 1024).toFixed(2)} MB
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleCancelPreview}
+                          className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={handleConfirmUpload}
+                          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                        >
+                          <IconUpload className="w-4 h-4" />
+                          Confirmar y procesar con IA
+                        </button>
+                      </div>
+                    </div>
+                    <iframe
+                      src={previewUrl}
+                      className="w-full h-[600px] rounded-lg border border-gray-200"
+                      title="Vista previa del PDF"
+                    />
                   </div>
                 )}
 
@@ -584,9 +653,8 @@ export default function PresupuestosPage() {
                       <button
                         key={cat}
                         onClick={() => setSelectedCategoria((prev) => (prev === cat ? "all" : cat))}
-                        className={`bg-white rounded-xl shadow-sm border-2 p-5 text-left hover:shadow-md transition-all ${
-                          isActive ? `${cfg.borderActive} shadow-md` : "border-gray-200"
-                        }`}
+                        className={`bg-white rounded-xl shadow-sm border-2 p-5 text-left hover:shadow-md transition-all ${isActive ? `${cfg.borderActive} shadow-md` : "border-gray-200"
+                          }`}
                       >
                         <div className="flex items-center justify-between mb-3">
                           <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${cfg.bg} ${cfg.text}`}>
@@ -607,9 +675,8 @@ export default function PresupuestosPage() {
                           </div>
                           <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                             <div
-                              className={`h-full rounded-full transition-all ${
-                                comprometido >= 90 ? "bg-red-500" : comprometido >= 70 ? "bg-amber-400" : "bg-green-500"
-                              }`}
+                              className={`h-full rounded-full transition-all ${comprometido >= 90 ? "bg-red-500" : comprometido >= 70 ? "bg-amber-400" : "bg-green-500"
+                                }`}
                               style={{ width: `${comprometido}%` }}
                             />
                           </div>
@@ -641,11 +708,10 @@ export default function PresupuestosPage() {
                     <div className="flex flex-wrap gap-2">
                       <button
                         onClick={() => setSelectedCategoria("all")}
-                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                          selectedCategoria === "all"
-                            ? "bg-gray-900 text-white"
-                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                        }`}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${selectedCategoria === "all"
+                          ? "bg-gray-900 text-white"
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          }`}
                       >
                         Todos ({summary.totalInsumos})
                       </button>
@@ -656,11 +722,10 @@ export default function PresupuestosPage() {
                           <button
                             key={cat}
                             onClick={() => setSelectedCategoria(selectedCategoria === cat ? "all" : cat)}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
-                              selectedCategoria === cat
-                                ? `${cfg.bg} ${cfg.text} ring-2 ring-offset-1 ring-current`
-                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                            }`}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${selectedCategoria === cat
+                              ? `${cfg.bg} ${cfg.text} ring-2 ring-offset-1 ring-current`
+                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                              }`}
                           >
                             <span className={selectedCategoria === cat ? cfg.text : "text-gray-500"}>
                               {cfg.icon}
@@ -753,11 +818,10 @@ export default function PresupuestosPage() {
                                   )}
                                 </td>
                                 <td className="px-4 py-3 text-right tabular-nums">
-                                  <span className={`font-semibold ${
-                                    insumo.agotado ? "text-red-600"
-                                      : insumo.cantidad_disponible < insumo.cantidad_presupuestada * 0.2 ? "text-amber-600"
+                                  <span className={`font-semibold ${insumo.agotado ? "text-red-600"
+                                    : insumo.cantidad_disponible < insumo.cantidad_presupuestada * 0.2 ? "text-amber-600"
                                       : "text-green-600"
-                                  }`}>
+                                    }`}>
                                     {insumo.cantidad_disponible.toLocaleString("es-MX", { maximumFractionDigits: 3 })}
                                   </span>
                                 </td>
