@@ -775,6 +775,7 @@ export default function PresupuestosPage() {
                             <th className="px-4 py-3 text-right">Monto Presup.</th>
                             <th className="px-4 py-3 text-right">Solicitado</th>
                             <th className="px-4 py-3 text-right">Disponible</th>
+                            <th className="px-4 py-3 text-right">Disp. Unidades</th>
                             <th className="px-4 py-3 text-center">Categoría</th>
                           </tr>
                         </thead>
@@ -823,6 +824,17 @@ export default function PresupuestosPage() {
                                       : "text-green-600"
                                     }`}>
                                     {insumo.cantidad_disponible.toLocaleString("es-MX", { maximumFractionDigits: 3 })}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-right tabular-nums">
+                                  <span className="font-semibold text-gray-700">
+                                    {insumo.costo_unitario > 0
+                                      ? (insumo.cantidad_disponible / insumo.costo_unitario).toLocaleString("es-MX", { maximumFractionDigits: 2 })
+                                      : "—"
+                                    }
+                                  </span>
+                                  <span className="text-xs text-gray-400 ml-1 lowercase">
+                                    {insumo.unidad}
                                   </span>
                                 </td>
                                 <td className="px-4 py-3 text-center">
