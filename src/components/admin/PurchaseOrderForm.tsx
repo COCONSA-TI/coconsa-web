@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useToast } from "@/components/ui/Toast";
 import { RETENTION_OPTIONS, calculateRetentions } from "@/types/database";
 
 interface Item {
@@ -261,6 +262,7 @@ function InsumoAutocomplete({ value, insumos, onSelect, onChange }: InsumoAutoco
 }
 
 export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) {
+  const toast = useToast();
   const [currentUser, setCurrentUser] = useState<{ name: string, email: string, isDepartmentHead: boolean } | null>(null);
   const [availableStores, setAvailableStores] = useState<string[]>([]);
   const [availableSuppliers, setAvailableSuppliers] = useState<string[]>([]);
@@ -286,8 +288,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
   ]);
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+
   const [evidenceFiles, setEvidenceFiles] = useState<File[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
 
@@ -488,12 +489,10 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setSuccess(false);
 
     // Validación básica
     if (!formData.applicant_name || !formData.store_name) {
-      setError("Por favor completa todos los campos requeridos");
+      toast.error("Campo requerido", "Por favor completa todos los campos requeridos");
       return;
     }
 
@@ -502,32 +501,32 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     );
 
     if (validItems.length === 0) {
-      setError("Debes agregar al menos un artículo válido");
+      toast.error("Artículos requeridos", "Debes agregar al menos un artículo válido");
       return;
     }
 
     if (!formData.supplier_name) {
-      setError("Debes seleccionar un proveedor");
+      toast.error("Proveedor requerido", "Debes seleccionar un proveedor");
       return;
     }
 
     if (!formData.payment_type) {
-      setError("Debes seleccionar un tipo de pago");
+      toast.error("Pago requerido", "Debes seleccionar un tipo de pago");
       return;
     }
 
     if (!formData.justification || formData.justification.length < 10) {
-      setError("La justificación debe tener al menos 10 caracteres");
+      toast.error("Justificación inválida", "La justificación debe tener al menos 10 caracteres");
       return;
     }
 
     if (formData.is_urgent && (!formData.urgency_justification || formData.urgency_justification.trim().length < 10)) {
-      setError("La justificación de urgencia debe tener al menos 10 caracteres");
+      toast.error("Justificación de urgencia", "La justificación de urgencia debe tener al menos 10 caracteres");
       return;
     }
 
     if (evidenceFiles.length === 0) {
-      setError("Debes adjuntar al menos un archivo de evidencia");
+      toast.error("Evidencia requerida", "Debes adjuntar al menos un archivo de evidencia");
       return;
     }
 
@@ -606,7 +605,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
         throw new Error(data.message || "Error al crear la orden");
       }
 
-      setSuccess(true);
+      toast.success("¡Éxito!", "La orden de compra ha sido creada correctamente.");
       setFormData({
         applicant_name: currentUser?.name || "",
         store_name: "",
@@ -628,11 +627,10 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
         onSubmit(data);
       }
 
-      setTimeout(() => setSuccess(false), 5000);
+
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
-      setError(errorMessage);
-      setTimeout(() => setError(null), 10000);
+      toast.error("Error al crear orden", errorMessage);
     } finally {
       setLoading(false);
       setUploadingFiles(false);
@@ -641,18 +639,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-4xl mx-auto">
-      {/* Mensajes de estado */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg">
-          <strong>Error:</strong> {error}
-        </div>
-      )}
 
-      {success && (
-        <div className="bg-green-50 border border-green-200 text-green-700 p-4 rounded-lg">
-          <strong>¡Éxito!</strong> La orden de compra ha sido creada correctamente.
-        </div>
-      )}
 
       {/* Información General */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
