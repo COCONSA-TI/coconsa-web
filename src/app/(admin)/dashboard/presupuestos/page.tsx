@@ -413,7 +413,7 @@ export default function PresupuestosPage() {
   const selectedStore = stores.find((s) => s.id === selectedStoreId);
 
   const getPorcentajeComprometido = (cat: string) => {
-    const cat_insumos = insumos.filter((i) => i.categoria === cat);
+    const cat_insumos = cat === "all" ? insumos : insumos.filter((i) => i.categoria === cat);
     const presup = cat_insumos.reduce((a, i) => a + i.monto_presupuestado, 0);
     if (presup === 0) return 0;
     const solicitado = cat_insumos.reduce((a, i) => a + i.costo_unitario * i.cantidad_solicitada, 0);
@@ -637,13 +637,54 @@ export default function PresupuestosPage() {
 
               {/* Resumen financiero por categoría */}
               {loadingSummary ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                  {[...Array(4)].map((_, i) => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
+                  {[...Array(5)].map((_, i) => (
                     <div key={i} className="h-36 bg-white rounded-xl shadow-sm border border-gray-200 animate-pulse" />
                   ))}
                 </div>
               ) : summary?.hasPresupuesto ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
+                  {/* Card de Total */}
+                  <button
+                    onClick={() => setSelectedCategoria("all")}
+                    className={`bg-white rounded-xl shadow-sm border-2 p-5 text-left hover:shadow-md transition-all ${
+                      selectedCategoria === "all"
+                        ? "border-indigo-400 shadow-md"
+                        : "border-gray-200"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-indigo-50 text-indigo-700">
+                        <IconChartBar className="w-5 h-5" />
+                      </div>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                        {summary.totalInsumos}
+                      </span>
+                    </div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Total General</p>
+                    <p className="text-xl font-bold text-gray-900 mt-0.5 tabular-nums">
+                      {formatCurrency(summary.totalReporte)}
+                    </p>
+                    <div className="mt-3">
+                      <div className="flex justify-between text-xs text-gray-400 mb-1">
+                        <span>Comprometido</span>
+                        <span className="tabular-nums">{getPorcentajeComprometido("all").toFixed(1)}%</span>
+                      </div>
+                      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            getPorcentajeComprometido("all") >= 90
+                              ? "bg-red-500"
+                              : getPorcentajeComprometido("all") >= 70
+                              ? "bg-amber-400"
+                              : "bg-green-500"
+                          }`}
+                          style={{ width: `${getPorcentajeComprometido("all")}%` }}
+                        />
+                      </div>
+                    </div>
+                  </button>
+
                   {CATEGORIAS.map((cat) => {
                     const cfg = CATEGORIA_CONFIG[cat];
                     const catData = summary.resumenPorCategoria[cat];
