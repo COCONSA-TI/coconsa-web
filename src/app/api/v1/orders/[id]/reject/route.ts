@@ -111,12 +111,17 @@ export async function POST(
       );
     }
 
-    // 6. Cambiar estado de la orden a 'RECHAZADA' y marcar si es definitiva
+    // 6. Cambiar estado de la orden a 'RECHAZADA'
+    // Si el rechazo es del paso 0 (autorización extraordinaria), siempre es definitivo:
+    // Dirección ya decidió que la compra fuera de presupuesto no está autorizada.
+    const isExtraordinaryRejection = (myApproval.approval_order ?? -1) === 0;
+    const isDefinitiveRejection = isExtraordinaryRejection || is_definitive === true;
+
     const { error: orderUpdateError } = await supabaseAdmin
       .from('orders')
       .update({ 
         status: 'RECHAZADA',
-        is_definitive_rejection: is_definitive === true,
+        is_definitive_rejection: isDefinitiveRejection,
         updated_at: new Date().toISOString()
       })
       .eq('id', orderId);
@@ -130,7 +135,10 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      message: 'Orden rechazada exitosamente',
+      message: isExtraordinaryRejection
+        ? 'Autorización extraordinaria rechazada. La compra de artículos fuera del presupuesto no fue autorizada por Dirección.'
+        : 'Orden rechazada exitosamente',
+      isDefinitive: isDefinitiveRejection,
     });
   } catch (error) {
     return NextResponse.json(

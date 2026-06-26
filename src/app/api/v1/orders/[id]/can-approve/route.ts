@@ -103,15 +103,18 @@ export async function GET(
     }
 
     // 4. Verificar que aprobaciones previas estén completadas
-    const previousApprovals = approvals.filter((a: OrderApprovalWithRelations) => (a.approval_order ?? 0) < (myApproval.approval_order ?? 0));
-    const allPreviousApproved = previousApprovals.every((a: OrderApprovalWithRelations) => a.status === 'approved');
+    // Excepción: el paso 0 (autorización extraordinaria) no tiene pasos previos por definición.
+    if ((myApproval.approval_order ?? -1) !== 0) {
+      const previousApprovals = approvals.filter((a: OrderApprovalWithRelations) => (a.approval_order ?? 0) < (myApproval.approval_order ?? 0));
+      const allPreviousApproved = previousApprovals.every((a: OrderApprovalWithRelations) => a.status === 'approved');
 
-    if (!allPreviousApproved) {
-      return NextResponse.json({
-        success: true,
-        canApprove: false,
-        reason: 'Faltan aprobaciones previas en el flujo'
-      });
+      if (!allPreviousApproved) {
+        return NextResponse.json({
+          success: true,
+          canApprove: false,
+          reason: 'Faltan aprobaciones previas en el flujo'
+        });
+      }
     }
 
     return NextResponse.json({
