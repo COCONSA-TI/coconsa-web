@@ -393,7 +393,13 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
       if (!res.ok) throw new Error('Error');
       const data = await res.json();
       setHasPresupuesto(data.hasPresupuesto);
-      setStoreInsumos(data.insumos || []);
+      // Solo Materiales y Herramienta son solicitables vía orden de compra
+      const CATEGORIAS_COMPRABLES = ['Materiales', 'Herramienta'];
+      setStoreInsumos(
+        (data.insumos || []).filter((i: { categoria: string }) =>
+          CATEGORIAS_COMPRABLES.includes(i.categoria)
+        )
+      );
     } catch {
       setStoreInsumos([]);
       setHasPresupuesto(false);
