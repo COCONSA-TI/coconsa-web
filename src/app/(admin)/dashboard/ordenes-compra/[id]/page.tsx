@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/Toast";
 import { ConfirmModal, InputModal, Modal } from "@/components/ui/Modal";
 import { RETENTION_OPTIONS, calculateRetentions } from "@/types/database";
 import { OrderDetailSkeleton } from "@/components/ui/Skeletons";
+import { mergeUrlsToPdf } from "@/lib/pdfUtils";
 
 type OrderStatus = "pending" | "approved" | "rejected" | "in_progress" | "completed";
 
@@ -97,6 +98,7 @@ export default function OrdenDetallesPage() {
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [isMergingEvidences, setIsMergingEvidences] = useState(false);
   const [confirmComplete, setConfirmComplete] = useState(false);
   const [approvals, setApprovals] = useState<OrderApproval[]>([]);
   const [canApproveOrder, setCanApproveOrder] = useState(false);
@@ -431,6 +433,31 @@ export default function OrdenDetallesPage() {
       toast.error('Error', 'No se pudo descargar el PDF. Por favor, intenta nuevamente.');
     } finally {
       setDownloadingPdf(false);
+    }
+  };
+
+  const handleMergeEvidences = async () => {
+    if (!order || !order.justification_prove) return;
+    
+    const evidences = order.justification_prove.split(',').filter(Boolean).map((url, index) => ({
+      url: url.trim(),
+      name: `Evidencia_${index + 1}`
+    }));
+      
+    if (evidences.length === 0) {
+      toast.warning('Sin evidencias', 'No hay evidencias adjuntas para descargar.');
+      return;
+    }
+
+    setIsMergingEvidences(true);
+    try {
+      await mergeUrlsToPdf(evidences, `evidencias_OC-${orderId}.pdf`);
+      toast.success('Éxito', 'Las evidencias han sido descargadas en un solo PDF.');
+    } catch (error) {
+      console.error('Error merging evidences:', error);
+      toast.error('Error', 'No se pudieron unir las evidencias.');
+    } finally {
+      setIsMergingEvidences(false);
     }
   };
 
@@ -1244,7 +1271,32 @@ export default function OrdenDetallesPage() {
                 {/* Evidencias */}
                 {order.justification_prove && (
                   <div className="sm:col-span-2 space-y-2">
-                    <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Evidencias</label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Evidencias</label>
+                      <button
+                        onClick={handleMergeEvidences}
+                        disabled={isMergingEvidences}
+                        className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-xs font-medium transition-colors flex items-center gap-1.5"
+                        title="Descargar todas las evidencias en 1 PDF"
+                      >
+                        {isMergingEvidences ? (
+                          <>
+                            <svg className="animate-spin h-3.5 w-3.5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Descargando...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                            </svg>
+                            Unir Evidencias PDF
+                          </>
+                        )}
+                      </button>
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {order.justification_prove.split(',').map((url, index) => {
                         const fileName = url.split('/').pop() || `Archivo ${index + 1}`;
