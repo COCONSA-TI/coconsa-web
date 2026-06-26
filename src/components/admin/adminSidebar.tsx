@@ -75,6 +75,19 @@ const menuItems = [
     ),
   },
   {
+    name: 'Reuniones',
+    href: '/dashboard/reuniones',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 10v2a7 7 0 0 1-14 0v-2" />
+        <line x1="12" y1="19" x2="12" y2="23" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+        <line x1="8" y1="23" x2="16" y2="23" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+      </svg>
+    ),
+    badge: 'IA',
+  },
+  {
     name: 'Mensajes',
     href: '/dashboard/mensajes',
     icon: (
@@ -120,21 +133,14 @@ export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarPr
     if (item.href === '/dashboard/proveedores') {
       return true;
     }
+    // Reuniones: gerencias, administradores y jefes de departamento
+    if (item.href === '/dashboard/reuniones') {
+      return isAdmin || isDepartmentHead;
+    }
     // Configuración: solo admin
     if (item.href === '/dashboard/configuracion') {
       return isAdmin;
     }
-    // TODO: Descomentar cuando las demás secciones estén listas
-    // Dashboard y Órdenes de compra: todos pueden ver
-    // if (item.href === '/dashboard' || item.href === '/dashboard/ordenes-compra') {
-    //   return true;
-    // }
-    // Reportes: admin y supervisor
-    // if (item.href === '/dashboard/reportes') {
-    //   return isAdmin || user?.role === 'supervisor';
-    // }
-    // Todo lo demás: solo admin
-    // return isAdmin;
     return false;
   });
 

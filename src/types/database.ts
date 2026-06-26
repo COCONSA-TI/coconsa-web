@@ -683,3 +683,68 @@ export interface UpdateNeedsListRequest {
   iva_percentage?: number;
   evidenceUrls?: string[];
 }
+
+// ============================================
+// MEETINGS (REUNIONES CON IA)
+// ============================================
+
+export type MeetingStatus = 'draft' | 'in_progress' | 'completed';
+
+export interface MeetingTask {
+  responsable: string;
+  tarea: string;
+  fecha_compromiso: string | null;
+}
+
+export interface MeetingPoint {
+  titulo: string;
+  detalle: string;
+}
+
+export interface MeetingMinutes {
+  fecha: string;
+  participantes: string[];
+  objetivo: string;
+  puntos_tratados: MeetingPoint[];
+  acuerdos: string[];
+  tareas: MeetingTask[];
+  proxima_reunion: string | null;
+}
+
+export interface Meeting {
+  id: string;
+  title: string;
+  description: string | null;
+  organizer_id: string;
+  attendees: string[];
+  started_at: string | null;
+  ended_at: string | null;
+  duration_seconds: number | null;
+  transcript: string | null;
+  minutes_structured: MeetingMinutes | null;
+  audio_path: string | null;
+  audio_size_bytes: number | null;
+  status: MeetingStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateMeetingRequest {
+  title: string;
+  description?: string;
+  attendees?: string[];
+}
+
+export interface UpdateMeetingRequest {
+  title?: string;
+  description?: string;
+  attendees?: string[];
+  started_at?: string;
+  ended_at?: string;
+  duration_seconds?: number;
+  transcript?: string;
+  minutes_structured?: MeetingMinutes;
+  audio_path?: string;
+  audio_size_bytes?: number;
+  status?: MeetingStatus;
+}
