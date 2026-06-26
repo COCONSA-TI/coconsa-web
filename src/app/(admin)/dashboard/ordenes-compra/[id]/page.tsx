@@ -62,6 +62,8 @@ interface OrderDetail {
   is_definitive_rejection: boolean;
   payment_proof_url: string | null;
   current_department_name?: string | null;
+  has_extra_budget_approval?: boolean;
+  extra_budget_items_count?: number;
 }
 
 const statusConfig: Record<OrderStatus, { label: string; className: string; iconBg: string }> = {
@@ -906,6 +908,29 @@ export default function OrdenDetallesPage() {
           </div>
         )}
 
+        {/* Banner: Autorización Extraordinaria pendiente */}
+        {order.has_extra_budget_approval && order.status === 'pending' && (
+          <div className="bg-amber-50 border border-amber-300 rounded-xl p-5">
+            <div className="flex items-start gap-4">
+              <div className="bg-amber-100 rounded-full p-2 flex-shrink-0">
+                <svg className="w-6 h-6 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-amber-900 font-semibold">Autorización Extraordinaria Requerida</h3>
+                <p className="text-amber-800 text-sm mt-1">
+                  Esta orden contiene{' '}
+                  <strong>{order.extra_budget_items_count ?? 0} artículo(s)</strong>{' '}
+                  que no están en el catálogo del presupuesto de la obra.{' '}
+                  Dirección debe autorizar esta compra antes de que inicie el flujo de aprobación normal.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Flujo de Aprobaciones */}
         {order.status !== 'rejected' && approvals.length > 0 && (
           <div className="bg-white rounded-xl shadow p-5">
@@ -926,6 +951,7 @@ export default function OrdenDetallesPage() {
               {/* Steps */}
               <div className="flex flex-col sm:flex-row sm:justify-between gap-4 sm:gap-0">
                 {approvals.map((approval, index) => {
+                  const isExtraordinary = (approval.approval_order ?? -1) === 0;
                   const isActive = index === currentApprovalStep;
                   const isCompleted = approval.status === 'approved';
                   const isRejected = approval.status === 'rejected';
@@ -939,20 +965,38 @@ export default function OrdenDetallesPage() {
                         className={`
                           w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0
                           transition-all duration-300
-                          ${isCompleted ? 'bg-green-500 text-white' : ''}
-                          ${isRejected ? 'bg-red-500 text-white' : ''}
-                          ${isActive && isPending ? 'bg-red-600 text-white ring-4 ring-red-100' : ''}
-                          ${isPending && !isActive ? 'bg-gray-200 text-gray-400' : ''}
+                          ${isExtraordinary && isPending && isActive ? 'bg-amber-500 text-white ring-4 ring-amber-100' : ''}
+                          ${isExtraordinary && isCompleted ? 'bg-amber-500 text-white' : ''}
+                          ${isExtraordinary && isRejected ? 'bg-red-500 text-white' : ''}
+                          ${!isExtraordinary && isCompleted ? 'bg-green-500 text-white' : ''}
+                          ${!isExtraordinary && isRejected ? 'bg-red-500 text-white' : ''}
+                          ${!isExtraordinary && isActive && isPending ? 'bg-red-600 text-white ring-4 ring-red-100' : ''}
+                          ${isPending && !isActive && !isExtraordinary ? 'bg-gray-200 text-gray-400' : ''}
+                          ${isPending && !isActive && isExtraordinary ? 'bg-amber-100 text-amber-500' : ''}
                         `}
                       >
-                        {renderApprovalIcon(iconType)}
+                        {isExtraordinary ? (
+                          // Icono de escudo para la autorización extraordinaria
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                          </svg>
+                        ) : (
+                          renderApprovalIcon(iconType)
+                        )}
                       </div>
 
                       {/* Info */}
                       <div className="sm:mt-3 sm:text-center flex-1 sm:flex-initial">
-                        <span className={`text-sm font-medium block ${isCompleted || isActive ? 'text-gray-900' : 'text-gray-400'}`}>
-                          {approval.department?.name || 'Departamento'}
+                        <span className={`text-sm font-medium block ${
+                          isCompleted || isActive ? 'text-gray-900' : 'text-gray-400'
+                        }`}>
+                          {isExtraordinary ? 'Autorización Extraordinaria' : (approval.department?.name || 'Departamento')}
                         </span>
+
+                        {isExtraordinary && isPending && (
+                          <span className="text-xs text-amber-600 block mt-0.5">Dirección</span>
+                        )}
 
                         {isCompleted && approval.approver && (
                           <div className="text-xs text-gray-500 mt-0.5">
@@ -971,7 +1015,7 @@ export default function OrdenDetallesPage() {
                         )}
 
                         {isActive && isPending && (
-                          <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium mt-0.5">
+                          <span className="inline-flex items-center gap-1 text-xs font-medium mt-0.5 text-red-600">
                             <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
                             En espera
                           </span>
