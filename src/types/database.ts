@@ -119,11 +119,17 @@ export interface StoreInsumo {
   unidad: string;
   cantidad_presupuestada: number;
   costo_unitario: number;
+  /** Costo autorizado manualmente por Gerencia o Dirección. Null = no asignado aún. */
+  costo_autorizado: number | null;
   monto_presupuestado: number;
+  /** Monto autorizado = costo_autorizado × cantidad_presupuestada. Null hasta que se asigne costo_autorizado. */
+  monto_autorizado: number | null;
   porcentaje: number;
   categoria: InsumoCategoria;
   cantidad_solicitada: number;
   cantidad_comprada: number;
+  /** Activo = true mientras el insumo esté en el presupuesto vigente. */
+  activo: boolean;
   created_at: string;
   updated_at: string;
 }

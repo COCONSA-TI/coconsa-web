@@ -224,46 +224,131 @@ export async function POST(
     }
     const totalReporte = Object.values(totales).reduce((a, b) => a + b, 0);
 
-    // Reemplazar los insumos existentes de esta obra (upsert completo)
-    // Primero eliminamos los anteriores para evitar insumos huérfanos del presupuesto viejo
-    const { error: deleteError } = await supabaseAdmin
+    // ── MERGE INTELIGENTE POR CLAVE ──────────────────────────────────────────
+    // En lugar de borrar y reinsertar, hacemos:
+    //   1. Obtener todas las claves existentes en la BD para esta obra.
+    //   2. Para cada insumo del PDF:
+    //      - Si ya existe (misma clave) → UPDATE solo campos del PDF, PRESERVAR
+    //        costo_autorizado, cantidad_solicitada, cantidad_comprada.
+    //      - Si es nuevo → INSERT completo.
+    //   3. Claves que existían pero no están en el PDF → marcar activo = false.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // Paso 1: Obtener registros actuales de la obra
+    const { data: existingInsumos, error: fetchExistingError } = await supabaseAdmin
       .from("store_insumos")
-      .delete()
+      .select("id, clave, costo_autorizado, cantidad_solicitada, cantidad_comprada")
       .eq("store_id", storeId);
 
-    if (deleteError) {
+    if (fetchExistingError) {
       return NextResponse.json(
-        { error: "Error al limpiar el presupuesto anterior: " + deleteError.message },
+        { error: "Error al leer el presupuesto existente: " + fetchExistingError.message },
         { status: 500 }
       );
     }
 
-    // Insertar los nuevos insumos
-    const insumosToInsert = geminiInsumos.map((insumo) => ({
-      store_id: storeId,
-      clave: insumo.clave?.trim() || "SIN_CLAVE",
-      descripcion: insumo.descripcion?.trim() || "",
-      unidad: insumo.unidad?.trim() || "pza",
-      cantidad_presupuestada: Number(insumo.cantidad) || 0,
-      costo_unitario: Number(insumo.costoUnitario) || 0,
-      monto_presupuestado: Number(insumo.monto) || 0,
-      porcentaje: Number(insumo.porcentaje) || 0,
-      categoria: insumo.categoria || "Materiales",
-      cantidad_solicitada: 0,
-      cantidad_comprada: 0,
-    }));
+    // Mapa clave → registro existente para lookup O(1)
+    const existingMap = new Map(
+      (existingInsumos ?? []).map((ins) => [ins.clave.trim(), ins])
+    );
 
-    const { data: insertedInsumos, error: insertError } = await supabaseAdmin
-      .from("store_insumos")
-      .insert(insumosToInsert)
-      .select("id");
+    // Claves que llegan en el nuevo PDF
+    const newClaves = new Set(geminiInsumos.map((i) => i.clave?.trim() || "SIN_CLAVE"));
+
+    // Paso 2a: Separar en actualizaciones e inserciones
+    const toUpdate: Array<{ id: number; fields: Record<string, unknown> }> = [];
+    const toInsert: Array<Record<string, unknown>> = [];
+
+    for (const insumo of geminiInsumos) {
+      const clave = insumo.clave?.trim() || "SIN_CLAVE";
+      const existing = existingMap.get(clave);
+
+      if (existing) {
+        // El insumo ya existe: actualizar solo los campos que vienen del PDF.
+        // Preservar: costo_autorizado, cantidad_solicitada, cantidad_comprada.
+        toUpdate.push({
+          id: existing.id,
+          fields: {
+            descripcion: insumo.descripcion?.trim() || "",
+            unidad: insumo.unidad?.trim() || "pza",
+            cantidad_presupuestada: Number(insumo.cantidad) || 0,
+            costo_unitario: Number(insumo.costoUnitario) || 0,
+            monto_presupuestado: Number(insumo.monto) || 0,
+            porcentaje: Number(insumo.porcentaje) || 0,
+            categoria: insumo.categoria || "Materiales",
+            activo: true,
+            updated_at: new Date().toISOString(),
+          },
+        });
+      } else {
+        // Insumo nuevo: insertar completo
+        toInsert.push({
+          store_id: storeId,
+          clave,
+          descripcion: insumo.descripcion?.trim() || "",
+          unidad: insumo.unidad?.trim() || "pza",
+          cantidad_presupuestada: Number(insumo.cantidad) || 0,
+          costo_unitario: Number(insumo.costoUnitario) || 0,
+          monto_presupuestado: Number(insumo.monto) || 0,
+          porcentaje: Number(insumo.porcentaje) || 0,
+          categoria: insumo.categoria || "Materiales",
+          cantidad_solicitada: 0,
+          cantidad_comprada: 0,
+          costo_autorizado: null,
+          activo: true,
+        });
+      }
+    }
+
+    // Paso 2b: Ejecutar updates individuales (Supabase no soporta batch update por ID variable)
+    let updatedCount = 0;
+    const updateErrors: string[] = [];
+    for (const { id, fields } of toUpdate) {
+      const { error: upErr } = await supabaseAdmin
+        .from("store_insumos")
+        .update(fields)
+        .eq("id", id);
+      if (upErr) {
+        updateErrors.push(`ID ${id}: ${upErr.message}`);
+      } else {
+        updatedCount++;
+      }
+    }
+
+    // Paso 2c: Insertar nuevos insumos
+    let insertedInsumos: Array<{ id: number }> | null = null;
+    let insertError: { message: string } | null = null;
+
+    if (toInsert.length > 0) {
+      const { data, error } = await supabaseAdmin
+        .from("store_insumos")
+        .insert(toInsert)
+        .select("id");
+      insertedInsumos = data;
+      insertError = error;
+    }
 
     if (insertError) {
       return NextResponse.json(
-        { error: "Error al guardar los insumos: " + insertError.message },
+        { error: "Error al guardar nuevos insumos: " + insertError.message },
         { status: 500 }
       );
     }
+
+    // Paso 3: Marcar como inactivos los insumos que ya no están en el PDF
+    const orphanIds = (existingInsumos ?? [])
+      .filter((ins) => !newClaves.has(ins.clave.trim()))
+      .map((ins) => ins.id);
+
+    if (orphanIds.length > 0) {
+      await supabaseAdmin
+        .from("store_insumos")
+        .update({ activo: false, updated_at: new Date().toISOString() })
+        .in("id", orphanIds);
+    }
+
+    // Total de insumos activos después del merge
+    const totalActivos = updatedCount + (insertedInsumos?.length ?? 0);
 
     // Guardar registro de auditoría de la carga
     const sessionData = await getSession();
@@ -277,16 +362,20 @@ export async function POST(
       total_herramienta: totales["Herramienta"],
       total_equipo: totales["Equipo"],
       total_reporte: totalReporte,
-      insumos_count: insertedInsumos?.length || 0,
+      insumos_count: totalActivos,
     });
 
     return NextResponse.json({
       success: true,
-      message: `Presupuesto cargado exitosamente para la obra "${store.name}"`,
+      message: `Presupuesto actualizado exitosamente para la obra "${store.name}"`,
       store: { id: storeId, name: store.name },
       resumen: {
-        totalInsumos: insertedInsumos?.length || 0,
+        totalInsumos: totalActivos,
+        actualizados: updatedCount,
+        nuevos: insertedInsumos?.length ?? 0,
+        inactivados: orphanIds.length,
         totalReporte,
+        ...(updateErrors.length > 0 && { advertencias: updateErrors }),
         totalesPorCategoria: {
           materiales: totales["Materiales"],
           manoDeObra: totales["Mano de Obra"],
