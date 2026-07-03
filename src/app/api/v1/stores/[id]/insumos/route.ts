@@ -32,6 +32,7 @@ export async function GET(
     const query = url.searchParams.get("query")?.trim() || "";
     const categoria = url.searchParams.get("categoria") || "";
     const limit = Math.min(parseInt(url.searchParams.get("limit") || "50", 10), 200);
+    const includeInactive = url.searchParams.get("includeInactive") === "true";
 
     // Verificar que el store existe
     const { data: store } = await supabaseAdmin
@@ -53,6 +54,11 @@ export async function GET(
       .order("clave", { ascending: true })
       .limit(limit);
 
+    // Por defecto solo activos; con ?includeInactive=true se incluyen los huérfanos
+    if (!includeInactive) {
+      dbQuery = dbQuery.eq("activo", true);
+    }
+
     if (categoria) {
       dbQuery = dbQuery.eq("categoria", categoria);
     }
@@ -63,6 +69,7 @@ export async function GET(
         `clave.ilike.%${query}%,descripcion.ilike.%${query}%`
       );
     }
+
 
     const { data: insumos, error } = await dbQuery;
 

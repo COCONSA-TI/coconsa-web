@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import type { StoreInsumoSearchResult, InsumoCategoria } from "@/types/database";
 
@@ -206,7 +206,7 @@ function DeleteConfirmModal({
 // ─── Componente principal ────────────────────────────────────────────────────
 
 export default function PresupuestosPage() {
-  useAuth();
+  const { user, isDepartmentHead, isAdmin } = useAuth();
 
   const [stores, setStores] = useState<Store[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null);
@@ -226,6 +226,18 @@ export default function PresupuestosPage() {
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // ── Edición inline de costo_autorizado ─────────────────────────────────
+  const [editingCostoId, setEditingCostoId] = useState<number | null>(null);
+  const [editingCostoValue, setEditingCostoValue] = useState("");
+  const [savingCosto, setSavingCosto] = useState(false);
+  const costoInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Edición inline de monto_autorizado ──────────────────────────────────
+  const [editingMontoId, setEditingMontoId] = useState<number | null>(null);
+  const [editingMontoValue, setEditingMontoValue] = useState("");
+  const [savingMonto, setSavingMonto] = useState(false);
+  const montoInputRef = useRef<HTMLInputElement>(null);
 
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -338,8 +350,13 @@ export default function PresupuestosPage() {
       const res = await fetch(`/api/v1/stores/${selectedStoreId}/budget`, { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error al procesar el PDF");
+      const r = data.resumen;
+      const parts = [];
+      if (r.actualizados) parts.push(`${r.actualizados} actualizados`);
+      if (r.nuevos) parts.push(`${r.nuevos} nuevos`);
+      if (r.inactivados) parts.push(`${r.inactivados} inactivados`);
       setUploadSuccess(
-        `Presupuesto cargado correctamente — ${data.resumen.totalInsumos} insumos · ${formatCurrency(data.resumen.totalReporte)} total`
+        `Presupuesto actualizado — ${parts.join(', ')} · ${formatCurrency(r.totalReporte)} total`
       );
       await fetchSummary(selectedStoreId);
       await fetchInsumos(selectedStoreId, searchQuery, selectedCategoria);
@@ -418,6 +435,120 @@ export default function PresupuestosPage() {
     if (presup === 0) return 0;
     const solicitado = cat_insumos.reduce((a, i) => a + i.costo_unitario * i.cantidad_solicitada, 0);
     return Math.min(100, (solicitado / presup) * 100);
+  };
+
+  // Gerencia (approval_order 1) y Dirección (code contiene 'direccion') pueden editar costo_autorizado
+  // La verificación real de permisos la hace el backend; aquí solo controlamos la UI.
+  const canEditCostoAutorizado = isAdmin || (isDepartmentHead && !!user?.department_code &&
+    (/gerencia/i.test(user.department_code) || /direccion/i.test(user.department_code)));
+
+  const startEditCosto = (insumo: StoreInsumoSearchResult) => {
+    setEditingCostoId(insumo.id);
+    setEditingCostoValue(
+      insumo.costo_autorizado != null ? String(insumo.costo_autorizado) : ""
+    );
+    setTimeout(() => costoInputRef.current?.focus(), 50);
+  };
+
+  const cancelEditCosto = () => {
+    setEditingCostoId(null);
+    setEditingCostoValue("");
+  };
+
+  const handleSaveCostoAutorizado = async (insumoId: number) => {
+    if (!selectedStoreId) return;
+    setSavingCosto(true);
+    try {
+      const val = editingCostoValue.trim() === "" ? null : parseFloat(editingCostoValue);
+      if (val !== null && (isNaN(val) || val < 0)) {
+        setUploadError("El costo autorizado debe ser un número mayor o igual a 0.");
+        return;
+      }
+      const insumoActual = insumos.find((i) => i.id === insumoId);
+      if (val !== null && insumoActual && val > insumoActual.costo_unitario) {
+        setUploadError(
+          `El costo autorizado ($${val.toFixed(2)}) no puede ser mayor al costo unitario ($${insumoActual.costo_unitario.toFixed(2)}).`
+        );
+        setSavingCosto(false);
+        return;
+      }
+      const res = await fetch(
+        `/api/v1/stores/${selectedStoreId}/insumos/${insumoId}`,
+        { method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ costo_autorizado: val }) }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al guardar");
+      setInsumos((prev) =>
+        prev.map((ins) => {
+          if (ins.id !== insumoId) return ins;
+          const montoAut = val != null ? val * ins.cantidad_presupuestada : null;
+          return { ...ins, costo_autorizado: val, monto_autorizado: montoAut };
+        })
+      );
+      setEditingCostoId(null);
+      setEditingCostoValue("");
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : "Error al guardar el costo autorizado");
+    } finally {
+      setSavingCosto(false);
+    }
+  };
+
+  const startEditMonto = (insumo: StoreInsumoSearchResult) => {
+    setEditingMontoId(insumo.id);
+    setEditingMontoValue(
+      insumo.monto_autorizado != null ? String(insumo.monto_autorizado) : ""
+    );
+    setTimeout(() => montoInputRef.current?.focus(), 50);
+  };
+
+  const cancelEditMonto = () => {
+    setEditingMontoId(null);
+    setEditingMontoValue("");
+  };
+
+  const handleSaveMontoAutorizado = async (insumoId: number) => {
+    if (!selectedStoreId) return;
+    setSavingMonto(true);
+    try {
+      const val = editingMontoValue.trim() === "" ? null : parseFloat(editingMontoValue);
+      if (val !== null && (isNaN(val) || val < 0)) {
+        setUploadError("El monto autorizado debe ser un número mayor o igual a 0.");
+        return;
+      }
+      const insumoActual = insumos.find((i) => i.id === insumoId);
+      if (val !== null && insumoActual && val > insumoActual.monto_presupuestado) {
+        setUploadError(
+          `El monto autorizado ($${val.toFixed(2)}) no puede ser mayor al monto presupuestado ($${insumoActual.monto_presupuestado.toFixed(2)}).`
+        );
+        setSavingMonto(false);
+        return;
+      }
+      const res = await fetch(
+        `/api/v1/stores/${selectedStoreId}/insumos/${insumoId}`,
+        { method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ monto_autorizado: val }) }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al guardar");
+      // Actualizar localmente: recalcular costo_autorizado desde el monto
+      setInsumos((prev) =>
+        prev.map((ins) => {
+          if (ins.id !== insumoId) return ins;
+          const costoAut = val != null && ins.cantidad_presupuestada > 0
+            ? val / ins.cantidad_presupuestada
+            : null;
+          return { ...ins, monto_autorizado: val, costo_autorizado: costoAut };
+        })
+      );
+      setEditingMontoId(null);
+      setEditingMontoValue("");
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : "Error al guardar el monto autorizado");
+    } finally {
+      setSavingMonto(false);
+    }
   };
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -813,7 +944,10 @@ export default function PresupuestosPage() {
                             <th className="px-4 py-3 text-center">Unidad</th>
                             <th className="px-4 py-3 text-right">Cantidad Presup.</th>
                             <th className="px-4 py-3 text-right">Costo Unit.</th>
+                            <th className="px-4 py-3 text-right">Costo Autorizado</th>
                             <th className="px-4 py-3 text-right">Monto Presup.</th>
+                            <th className="px-4 py-3 text-right">Monto Autorizado</th>
+                            <th className="px-4 py-3 text-right">Ahorro</th>
                             <th className="px-4 py-3 text-right">Solicitado</th>
                             <th className="px-4 py-3 text-right">Disponible</th>
                             <th className="px-4 py-3 text-right">Disp. Unidades</th>
@@ -843,9 +977,161 @@ export default function PresupuestosPage() {
                                 <td className="px-4 py-3 text-right text-gray-700 tabular-nums">
                                   {formatCurrency(insumo.costo_unitario)}
                                 </td>
+
+                                {/* Costo Autorizado — editable por Gerencia/Dirección */}
+                                <td className="px-4 py-3 text-right tabular-nums">
+                                  {editingCostoId === insumo.id ? (
+                                    <div className="flex items-center justify-end gap-1">
+                                      <input
+                                        ref={costoInputRef}
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={editingCostoValue}
+                                        onChange={(e) => setEditingCostoValue(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") handleSaveCostoAutorizado(insumo.id);
+                                          if (e.key === "Escape") cancelEditCosto();
+                                        }}
+                                        className="w-28 px-2 py-1 text-right text-sm text-gray-900 border border-blue-400 rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                        placeholder="0.00"
+                                        disabled={savingCosto}
+                                      />
+                                      <button
+                                        onClick={() => handleSaveCostoAutorizado(insumo.id)}
+                                        disabled={savingCosto}
+                                        title="Guardar"
+                                        className="p-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                                      >
+                                        {savingCosto ? (
+                                          <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        ) : (
+                                          <IconCheck className="w-3 h-3" />
+                                        )}
+                                      </button>
+                                      <button
+                                        onClick={cancelEditCosto}
+                                        title="Cancelar"
+                                        className="p-1 rounded bg-gray-200 text-gray-600 hover:bg-gray-300 transition-colors"
+                                      >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-end gap-1.5 group">
+                                      {insumo.costo_autorizado != null ? (
+                                        <span className="font-semibold text-green-700">
+                                          {formatCurrency(insumo.costo_autorizado)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-gray-300">—</span>
+                                      )}
+                                      {canEditCostoAutorizado && (
+                                        <button
+                                          onClick={() => startEditCosto(insumo)}
+                                          title="Editar costo autorizado"
+                                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-blue-50 text-blue-400 hover:text-blue-600"
+                                        >
+                                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                          </svg>
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </td>
+
                                 <td className="px-4 py-3 text-right font-semibold text-gray-900 tabular-nums">
                                   {formatCurrency(insumo.monto_presupuestado)}
                                 </td>
+
+                                {/* Monto Autorizado — editable por Gerencia/Dirección */}
+                                <td className="px-4 py-3 text-right tabular-nums">
+                                  {editingMontoId === insumo.id ? (
+                                    <div className="flex items-center justify-end gap-1">
+                                      <input
+                                        ref={montoInputRef}
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        value={editingMontoValue}
+                                        onChange={(e) => setEditingMontoValue(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") handleSaveMontoAutorizado(insumo.id);
+                                          if (e.key === "Escape") cancelEditMonto();
+                                        }}
+                                        className="w-32 px-2 py-1 text-right text-sm text-gray-900 border border-blue-400 rounded focus:outline-none focus:ring-2 focus:ring-blue-300"
+                                        placeholder="0.00"
+                                        disabled={savingMonto}
+                                      />
+                                      <button
+                                        onClick={() => handleSaveMontoAutorizado(insumo.id)}
+                                        disabled={savingMonto}
+                                        title="Guardar"
+                                        className="p-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                                      >
+                                        {savingMonto ? (
+                                          <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                        ) : (
+                                          <IconCheck className="w-3 h-3" />
+                                        )}
+                                      </button>
+                                      <button
+                                        onClick={cancelEditMonto}
+                                        title="Cancelar"
+                                        className="p-1 rounded bg-gray-200 text-gray-600 hover:bg-gray-300 transition-colors"
+                                      >
+                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-end gap-1.5 group">
+                                      {insumo.monto_autorizado != null ? (
+                                        <span className="font-semibold text-green-700">
+                                          {formatCurrency(insumo.monto_autorizado)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-gray-300">—</span>
+                                      )}
+                                      {canEditCostoAutorizado && (
+                                        <button
+                                          onClick={() => startEditMonto(insumo)}
+                                          title="Editar monto autorizado"
+                                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-blue-50 text-blue-400 hover:text-blue-600"
+                                        >
+                                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                              d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                          </svg>
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </td>
+
+                                {/* Ahorro = monto_presupuestado − monto_autorizado */}
+                                <td className="px-4 py-3 text-right tabular-nums">
+                                  {insumo.monto_autorizado != null ? (
+                                    (() => {
+                                      const ahorro = insumo.monto_presupuestado - insumo.monto_autorizado;
+                                      return (
+                                        <span className={`font-semibold ${
+                                          ahorro > 0 ? "text-emerald-600" : ahorro < 0 ? "text-red-500" : "text-gray-400"
+                                        }`}>
+                                          {ahorro > 0 ? "+" : ""}{formatCurrency(ahorro)}
+                                        </span>
+                                      );
+                                    })()
+                                  ) : (
+                                    <span className="text-gray-300">—</span>
+                                  )}
+                                </td>
+
                                 <td className="px-4 py-3 text-right tabular-nums">
                                   <span className={`font-medium ${insumo.cantidad_solicitada > 0 ? "text-orange-600" : "text-gray-400"}`}>
                                     {insumo.cantidad_solicitada.toLocaleString("es-MX", { maximumFractionDigits: 3 })}
