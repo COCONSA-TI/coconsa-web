@@ -939,19 +939,13 @@ export default function PresupuestosPage() {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                            <th className="px-4 py-3 text-left">Clave</th>
+                            <th className="px-4 py-3 text-left">Clave / Cat.</th>
                             <th className="px-4 py-3 text-left">Descripción</th>
                             <th className="px-4 py-3 text-center">Unidad</th>
-                            <th className="px-4 py-3 text-right">Cantidad Presup.</th>
-                            <th className="px-4 py-3 text-right">Costo Unit.</th>
-                            <th className="px-4 py-3 text-right">Costo Autorizado</th>
-                            <th className="px-4 py-3 text-right">Monto Presup.</th>
-                            <th className="px-4 py-3 text-right">Monto Autorizado</th>
+                            <th className="px-4 py-3 text-right">Cantidad (Presup. / Disp.)</th>
+                            <th className="px-4 py-3 text-right">Costo (Base / Autorizado)</th>
+                            <th className="px-4 py-3 text-right">Monto (Base / Autorizado)</th>
                             <th className="px-4 py-3 text-right">Ahorro</th>
-                            <th className="px-4 py-3 text-right">Solicitado</th>
-                            <th className="px-4 py-3 text-right">Disponible</th>
-                            <th className="px-4 py-3 text-right">Disp. Unidades</th>
-                            <th className="px-4 py-3 text-center">Categoría</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -962,24 +956,55 @@ export default function PresupuestosPage() {
                               : 0;
                             return (
                               <tr key={insumo.id} className="hover:bg-gray-50 transition-colors">
-                                <td className="px-4 py-3 font-mono text-xs font-semibold text-gray-700">
-                                  {insumo.clave}
+                                {/* Clave y Categoría */}
+                                <td className="px-4 py-3">
+                                  <div className="flex flex-col gap-1">
+                                    <span className="font-mono text-xs font-semibold text-gray-700">{insumo.clave}</span>
+                                    <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full w-max ${cfg.badge}`}>
+                                      {cfg.icon}
+                                      <span>{insumo.categoria}</span>
+                                    </span>
+                                  </div>
                                 </td>
+                                
+                                {/* Descripción */}
                                 <td className="px-4 py-3 text-gray-700 max-w-xs">
                                   <p className="line-clamp-2">{insumo.descripcion}</p>
                                 </td>
+                                
+                                {/* Unidad */}
                                 <td className="px-4 py-3 text-center text-gray-500 uppercase text-xs font-medium">
                                   {insumo.unidad}
                                 </td>
-                                <td className="px-4 py-3 text-right text-gray-700 tabular-nums">
-                                  {insumo.cantidad_presupuestada.toLocaleString("es-MX", { maximumFractionDigits: 3 })}
-                                </td>
-                                <td className="px-4 py-3 text-right text-gray-700 tabular-nums">
-                                  {formatCurrency(insumo.costo_unitario)}
+                                
+                                {/* Cantidad (Presup. / Disp.) */}
+                                <td className="px-4 py-3 text-right tabular-nums">
+                                  <div className="text-gray-900 font-medium">
+                                    {insumo.cantidad_presupuestada.toLocaleString("es-MX", { maximumFractionDigits: 3 })}
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-0.5">
+                                    Disp: <span className={insumo.cantidad_disponible > 0 ? "text-green-600 font-semibold" : "text-red-500 font-semibold"}>
+                                      {insumo.cantidad_disponible.toLocaleString("es-MX", { maximumFractionDigits: 3 })}
+                                    </span>
+                                    {insumo.cantidad_solicitada > 0 && (
+                                      <span className="text-gray-400"> (Sol: {insumo.cantidad_solicitada.toLocaleString("es-MX", { maximumFractionDigits: 3 })})</span>
+                                    )}
+                                  </div>
+                                  {insumo.cantidad_presupuestada > 0 && (
+                                    <div className="mt-1 h-1 bg-gray-100 rounded-full overflow-hidden w-16 ml-auto">
+                                      <div
+                                        className={`h-full rounded-full ${pct >= 100 ? "bg-red-500" : pct >= 75 ? "bg-amber-400" : "bg-green-400"}`}
+                                        style={{ width: `${Math.min(100, pct)}%` }}
+                                      />
+                                    </div>
+                                  )}
                                 </td>
 
-                                {/* Costo Autorizado — editable por Gerencia/Dirección */}
+                                {/* Costo (Base / Autorizado) */}
                                 <td className="px-4 py-3 text-right tabular-nums">
+                                  <div className="text-xs text-gray-400 mb-1">
+                                    Base: {formatCurrency(insumo.costo_unitario)}
+                                  </div>
                                   {editingCostoId === insumo.id ? (
                                     <div className="flex items-center justify-end gap-1">
                                       <input
@@ -1044,12 +1069,11 @@ export default function PresupuestosPage() {
                                   )}
                                 </td>
 
-                                <td className="px-4 py-3 text-right font-semibold text-gray-900 tabular-nums">
-                                  {formatCurrency(insumo.monto_presupuestado)}
-                                </td>
-
-                                {/* Monto Autorizado — editable por Gerencia/Dirección */}
+                                {/* Monto (Base / Autorizado) */}
                                 <td className="px-4 py-3 text-right tabular-nums">
+                                  <div className="text-xs text-gray-400 mb-1">
+                                    Base: {formatCurrency(insumo.monto_presupuestado)}
+                                  </div>
                                   {editingMontoId === insumo.id ? (
                                     <div className="flex items-center justify-end gap-1">
                                       <input
@@ -1114,7 +1138,7 @@ export default function PresupuestosPage() {
                                   )}
                                 </td>
 
-                                {/* Ahorro = monto_presupuestado − monto_autorizado */}
+                                {/* Ahorro */}
                                 <td className="px-4 py-3 text-right tabular-nums">
                                   {insumo.monto_autorizado != null ? (
                                     (() => {
@@ -1131,45 +1155,6 @@ export default function PresupuestosPage() {
                                     <span className="text-gray-300">—</span>
                                   )}
                                 </td>
-
-                                <td className="px-4 py-3 text-right tabular-nums">
-                                  <span className={`font-medium ${insumo.cantidad_solicitada > 0 ? "text-orange-600" : "text-gray-400"}`}>
-                                    {insumo.cantidad_solicitada.toLocaleString("es-MX", { maximumFractionDigits: 3 })}
-                                  </span>
-                                  {insumo.cantidad_presupuestada > 0 && (
-                                    <div className="mt-1 h-1 bg-gray-100 rounded-full overflow-hidden w-16 ml-auto">
-                                      <div
-                                        className={`h-full rounded-full ${pct >= 100 ? "bg-red-500" : pct >= 75 ? "bg-amber-400" : "bg-green-400"}`}
-                                        style={{ width: `${Math.min(100, pct)}%` }}
-                                      />
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="px-4 py-3 text-right tabular-nums">
-                                  <span className={`font-semibold ${insumo.agotado ? "text-red-600"
-                                    : insumo.cantidad_disponible < insumo.cantidad_presupuestada * 0.2 ? "text-amber-600"
-                                      : "text-green-600"
-                                    }`}>
-                                    {insumo.cantidad_disponible.toLocaleString("es-MX", { maximumFractionDigits: 3 })}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 text-right tabular-nums">
-                                  <span className="font-semibold text-gray-700">
-                                    {insumo.costo_unitario > 0
-                                      ? (insumo.cantidad_disponible / insumo.costo_unitario).toLocaleString("es-MX", { maximumFractionDigits: 2 })
-                                      : "—"
-                                    }
-                                  </span>
-                                  <span className="text-xs text-gray-400 ml-1 lowercase">
-                                    {insumo.unidad}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 text-center">
-                                  <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full ${cfg.badge}`}>
-                                    {cfg.icon}
-                                    <span>{insumo.categoria}</span>
-                                  </span>
-                                </td>
                               </tr>
                             );
                           })}
@@ -1180,12 +1165,30 @@ export default function PresupuestosPage() {
 
                   {/* Footer */}
                   {insumos.length > 0 && (
-                    <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex justify-between items-center text-sm">
+                    <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex flex-col sm:flex-row justify-between items-center gap-2 text-sm">
                       <span className="text-gray-500">{insumos.length} insumos mostrados</span>
-                      <span className="font-semibold text-gray-900 tabular-nums">
-                        Total presupuestado:{" "}
-                        {formatCurrency(insumos.reduce((a, i) => a + i.monto_presupuestado, 0))}
-                      </span>
+                      <div className="flex flex-wrap gap-4 sm:gap-6 justify-end">
+                        <span className="text-gray-600">
+                          Presupuestado: <strong className="text-gray-900">{formatCurrency(insumos.reduce((a, i) => a + i.monto_presupuestado, 0))}</strong>
+                        </span>
+                        {insumos.some(i => i.monto_autorizado != null) && (
+                          <>
+                            <span className="text-gray-600">
+                              Autorizado: <strong className="text-green-700">{formatCurrency(insumos.reduce((a, i) => a + (i.monto_autorizado ?? i.monto_presupuestado), 0))}</strong>
+                            </span>
+                            {(() => {
+                              const totalPres = insumos.reduce((a, i) => a + i.monto_presupuestado, 0);
+                              const totalAut = insumos.reduce((a, i) => a + (i.monto_autorizado ?? i.monto_presupuestado), 0);
+                              const totalAhorro = totalPres - totalAut;
+                              return totalAhorro !== 0 ? (
+                                <span className="text-gray-600">
+                                  Ahorro Total: <strong className={totalAhorro > 0 ? "text-emerald-600" : "text-red-500"}>{totalAhorro > 0 ? "+" : ""}{formatCurrency(totalAhorro)}</strong>
+                                </span>
+                              ) : null;
+                            })()}
+                          </>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
