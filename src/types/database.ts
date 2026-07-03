@@ -157,6 +157,18 @@ export interface StoreBudgetUpload {
   created_at: string;
 }
 
+export interface StoreWeeklyReport {
+  id: number;
+  store_id: number;
+  week_start_date: string; // YYYY-MM-DD
+  mano_obra_gasto: number;
+  equipo_gasto: number;
+  comments: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+
 export interface Supplier {
   id: number;
   commercial_name: string;
