@@ -240,6 +240,143 @@ export default function PresupuestosPage() {
   const montoInputRef = useRef<HTMLInputElement>(null);
 
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  // ── Reportes Semanales ──────────────────────────────────────────────────
+  const [weeklyReports, setWeeklyReports] = useState<any[]>([]);
+  const [loadingWeeklyReports, setLoadingWeeklyReports] = useState(false);
+  const [savingReportId, setSavingReportId] = useState<number | string | null>(null);
+  const [deletingReportId, setDeletingReportId] = useState<number | null>(null);
+
+  const fetchWeeklyReports = useCallback(async (storeId: number) => {
+    setLoadingWeeklyReports(true);
+    try {
+      const res = await fetch(`/api/v1/stores/${storeId}/weekly-reports`);
+      if (!res.ok) throw new Error("Error");
+      const data = await res.json();
+      setWeeklyReports(data.reports || []);
+    } catch {
+      setWeeklyReports([]);
+    } finally {
+      setLoadingWeeklyReports(false);
+    }
+  }, []);
+
+  const handleAddWeek = () => {
+    if (!selectedStoreId) return;
+    const today = new Date();
+    const day = today.getDay();
+    const diff = today.getDate() - day + (day === 0 ? -6 : 1); // lunes de esta semana
+    const monday = new Date(today.setDate(diff));
+    const formattedDate = monday.toISOString().split("T")[0];
+
+    if (weeklyReports.some((r) => r.week_start_date === formattedDate)) {
+      setUploadError("Ya existe un reporte para esta semana.");
+      return;
+    }
+
+    const newTempReport = {
+      id: "temp-" + Date.now(),
+      store_id: selectedStoreId,
+      week_start_date: formattedDate,
+      mano_obra_gasto: 0,
+      equipo_gasto: 0,
+      comments: "",
+      isTemp: true,
+    };
+    setWeeklyReports((prev) => [...prev, newTempReport]);
+  };
+
+  const updateReportField = (id: string | number, field: string, value: any) => {
+    setWeeklyReports((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, [field]: value } : r))
+    );
+  };
+
+  const handleSaveReport = async (report: any) => {
+    if (!selectedStoreId) return;
+    setSavingReportId(report.id);
+    setUploadError(null);
+    setUploadSuccess(null);
+    try {
+      const res = await fetch(`/api/v1/stores/${selectedStoreId}/weekly-reports`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          week_start_date: report.week_start_date,
+          mano_obra_gasto: Number(report.mano_obra_gasto) || 0,
+          equipo_gasto: Number(report.equipo_gasto) || 0,
+          comments: report.comments,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al guardar el reporte");
+      
+      setUploadSuccess("Reporte semanal guardado correctamente.");
+      await fetchWeeklyReports(selectedStoreId);
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : "Error al guardar");
+    } finally {
+      setSavingReportId(null);
+    }
+  };
+
+  const handleDeleteReport = async (report: any) => {
+    if (report.isTemp) {
+      setWeeklyReports((prev) => prev.filter((r) => r.id !== report.id));
+      return;
+    }
+    if (!selectedStoreId) return;
+    if (!confirm("¿Estás seguro de que deseas eliminar este reporte semanal?")) return;
+    setDeletingReportId(report.id);
+    setUploadError(null);
+    setUploadSuccess(null);
+    try {
+      const res = await fetch(
+        `/api/v1/stores/${selectedStoreId}/weekly-reports?reportId=${report.id}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al eliminar");
+      
+      setUploadSuccess("Reporte semanal eliminado.");
+      await fetchWeeklyReports(selectedStoreId);
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : "Error al eliminar");
+    } finally {
+      setDeletingReportId(null);
+    }
+  };
+
+  const getWeekRangeLabel = (startDateStr: string) => {
+    const start = new Date(startDateStr + "T00:00:00");
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+
+    const options: Intl.DateTimeFormatOptions = { day: "2-digit", month: "short" };
+    const startStr = start.toLocaleDateString("es-MX", options);
+    const endStr = end.toLocaleDateString("es-MX", options);
+    const yearStr = start.getFullYear();
+
+    return `Del ${startStr} al ${endStr} (${yearStr})`;
+  };
+
+  const getPresupuestoManoObra = () => {
+    const manoObraInsumos = insumos.filter((i) => i.categoria === "Mano de Obra");
+    return manoObraInsumos.reduce((sum, i) => sum + (i.monto_autorizado ?? i.monto_presupuestado), 0);
+  };
+
+  const getPresupuestoEquipo = () => {
+    const equipoInsumos = insumos.filter((i) => i.categoria === "Equipo");
+    return equipoInsumos.reduce((sum, i) => sum + (i.monto_autorizado ?? i.monto_presupuestado), 0);
+  };
+
+  const getGastoManoObraTotal = () => {
+    return weeklyReports.reduce((sum, r) => sum + (Number(r.mano_obra_gasto) || 0), 0);
+  };
+
+  const getGastoEquipoTotal = () => {
+    return weeklyReports.reduce((sum, r) => sum + (Number(r.equipo_gasto) || 0), 0);
+  };
+
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   // ── Cargar lista de stores ──────────────────────────────────────────────
@@ -319,7 +456,8 @@ export default function PresupuestosPage() {
     if (!selectedStoreId) return;
     fetchSummary(selectedStoreId);
     fetchInsumos(selectedStoreId);
-  }, [selectedStoreId, fetchSummary, fetchInsumos]);
+    fetchWeeklyReports(selectedStoreId);
+  }, [selectedStoreId, fetchSummary, fetchInsumos, fetchWeeklyReports]);
 
   // Filtro con debounce
   useEffect(() => {
@@ -874,7 +1012,8 @@ export default function PresupuestosPage() {
 
               {/* Tabla de insumos */}
               {summary?.hasPresupuesto && (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+                <>
+                                  <div className="bg-white rounded-xl shadow-sm border border-gray-200">
                   {/* Toolbar */}
                   <div className="px-6 py-4 border-b border-gray-200 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
                     <div className="flex flex-wrap gap-2">
@@ -1192,6 +1331,263 @@ export default function PresupuestosPage() {
                     </div>
                   )}
                 </div>
+
+                  {/* Reporteador Semanal de Mano de Obra y Equipo */}
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 mt-6 p-6">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 border-b border-gray-100 pb-4">
+                      <div>
+                        <h3 className="text-lg font-bold text-gray-900">Control y Reporte Semanal</h3>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Registra manualmente los gastos semanales de mano de obra y equipo/maquinaria para comparar con el presupuesto.
+                        </p>
+                      </div>
+                      {canEditCostoAutorizado && (
+                        <button
+                          onClick={handleAddWeek}
+                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-colors flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                          Agregar Semana
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Resumen Comparativo Acumulado */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                      {/* Mano de Obra Card */}
+                      {(() => {
+                        const presup = getPresupuestoManoObra();
+                        const gasto = getGastoManoObraTotal();
+                        const disponible = presup - gasto;
+                        const pct = presup > 0 ? (gasto / presup) * 100 : 0;
+                        return (
+                          <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-5">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-semibold text-emerald-800 uppercase tracking-wider">Mano de Obra</span>
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${pct > 100 ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                {pct.toFixed(1)}% Consumido
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 mt-4 text-center">
+                              <div className="bg-white/80 rounded-lg p-2.5 shadow-sm border border-emerald-50">
+                                <span className="block text-[10px] font-semibold text-gray-400 uppercase">Presupuesto</span>
+                                <span className="text-sm font-bold text-gray-800 mt-1 block">{formatCurrency(presup)}</span>
+                              </div>
+                              <div className="bg-white/80 rounded-lg p-2.5 shadow-sm border border-emerald-50">
+                                <span className="block text-[10px] font-semibold text-gray-400 uppercase">Gasto Reportado</span>
+                                <span className="text-sm font-bold text-emerald-700 mt-1 block">{formatCurrency(gasto)}</span>
+                              </div>
+                              <div className="bg-white/80 rounded-lg p-2.5 shadow-sm border border-emerald-50">
+                                <span className="block text-[10px] font-semibold text-gray-400 uppercase">Saldo Disp.</span>
+                                <span className={`text-sm font-bold mt-1 block ${disponible >= 0 ? "text-green-600" : "text-red-600"}`}>
+                                  {formatCurrency(disponible)}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="mt-4 h-2 bg-emerald-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${pct > 100 ? 'bg-red-500' : pct > 90 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                                style={{ width: `${Math.min(100, pct)}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* Equipo Card */}
+                      {(() => {
+                        const presup = getPresupuestoEquipo();
+                        const gasto = getGastoEquipoTotal();
+                        const disponible = presup - gasto;
+                        const pct = presup > 0 ? (gasto / presup) * 100 : 0;
+                        return (
+                          <div className="bg-violet-50/50 border border-violet-100 rounded-xl p-5">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-semibold text-violet-800 uppercase tracking-wider">Equipo y Maquinaria</span>
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${pct > 100 ? 'bg-red-100 text-red-700' : 'bg-violet-100 text-violet-700'}`}>
+                                {pct.toFixed(1)}% Consumido
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 mt-4 text-center">
+                              <div className="bg-white/80 rounded-lg p-2.5 shadow-sm border border-violet-50">
+                                <span className="block text-[10px] font-semibold text-gray-400 uppercase">Presupuesto</span>
+                                <span className="text-sm font-bold text-gray-800 mt-1 block">{formatCurrency(presup)}</span>
+                              </div>
+                              <div className="bg-white/80 rounded-lg p-2.5 shadow-sm border border-violet-50">
+                                <span className="block text-[10px] font-semibold text-gray-400 uppercase">Gasto Reportado</span>
+                                <span className="text-sm font-bold text-violet-700 mt-1 block">{formatCurrency(gasto)}</span>
+                              </div>
+                              <div className="bg-white/80 rounded-lg p-2.5 shadow-sm border border-violet-50">
+                                <span className="block text-[10px] font-semibold text-gray-400 uppercase">Saldo Disp.</span>
+                                <span className={`text-sm font-bold mt-1 block ${disponible >= 0 ? "text-green-600" : "text-red-600"}`}>
+                                  {formatCurrency(disponible)}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="mt-4 h-2 bg-violet-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${pct > 100 ? 'bg-red-500' : pct > 90 ? 'bg-amber-500' : 'bg-violet-500'}`}
+                                style={{ width: `${Math.min(100, pct)}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* Tabla de Semanas */}
+                    {loadingWeeklyReports ? (
+                      <div className="py-10 text-center">
+                        <div className="inline-block w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                        <p className="text-sm text-gray-500 mt-2">Cargando reporteador...</p>
+                      </div>
+                    ) : weeklyReports.length === 0 ? (
+                      <div className="py-10 text-center border border-dashed border-gray-200 rounded-xl bg-gray-50/50">
+                        <svg className="w-10 h-10 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <p className="text-sm font-semibold text-gray-600">No se han registrado gastos semanales</p>
+                        <p className="text-xs text-gray-400 mt-1">Presiona "Agregar Semana" para comenzar a reportar.</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto border border-gray-100 rounded-xl">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-100">
+                              <th className="px-4 py-3 text-left w-64">Fecha / Período de la Semana</th>
+                              <th className="px-4 py-3 text-right w-44">Gasto Mano de Obra</th>
+                              <th className="px-4 py-3 text-right w-44">Gasto Equipo / Maq.</th>
+                              <th className="px-4 py-3 text-left">Comentarios / Notas</th>
+                              {canEditCostoAutorizado && <th className="px-4 py-3 text-center w-36">Acciones</th>}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 bg-white">
+                            {weeklyReports.map((report) => {
+                              return (
+                                <tr key={report.id} className="hover:bg-gray-50/50 transition-colors">
+                                  {/* Selector de fecha / Label */}
+                                  <td className="px-4 py-3">
+                                    {report.isTemp ? (
+                                      <div className="flex flex-col gap-1">
+                                        <label className="text-[10px] font-semibold text-indigo-600 uppercase">Selecciona el lunes de inicio:</label>
+                                        <input
+                                          type="date"
+                                          value={report.week_start_date}
+                                          onChange={(e) => {
+                                            const chosenDate = new Date(e.target.value + "T00:00:00");
+                                            const day = chosenDate.getDay();
+                                            const diff = chosenDate.getDate() - day + (day === 0 ? -6 : 1);
+                                            const monday = new Date(chosenDate.setDate(diff));
+                                            const formatted = monday.toISOString().split("T")[0];
+                                            
+                                            if (weeklyReports.some((r) => r.id !== report.id && r.week_start_date === formatted)) {
+                                              setUploadError("Ya existe un reporte registrado para esa semana.");
+                                              return;
+                                            }
+                                            updateReportField(report.id, "week_start_date", formatted);
+                                          }}
+                                          className="px-2 py-1.5 border border-indigo-300 rounded focus:ring-2 focus:ring-indigo-300 outline-none text-gray-900 bg-indigo-50/30"
+                                        />
+                                        <span className="text-[10px] text-gray-400 mt-1">{getWeekRangeLabel(report.week_start_date)}</span>
+                                      </div>
+                                    ) : (
+                                      <div className="font-medium text-gray-900">
+                                        {getWeekRangeLabel(report.week_start_date)}
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  {/* Input Mano de Obra */}
+                                  <td className="px-4 py-3 text-right">
+                                    {canEditCostoAutorizado ? (
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        placeholder="0.00"
+                                        value={report.mano_obra_gasto}
+                                        onChange={(e) => updateReportField(report.id, "mano_obra_gasto", e.target.value)}
+                                        className="w-full max-w-[150px] px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-right text-gray-900"
+                                      />
+                                    ) : (
+                                      <span className="font-semibold text-gray-800 tabular-nums">{formatCurrency(report.mano_obra_gasto)}</span>
+                                    )}
+                                  </td>
+
+                                  {/* Input Equipo */}
+                                  <td className="px-4 py-3 text-right">
+                                    {canEditCostoAutorizado ? (
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        placeholder="0.00"
+                                        value={report.equipo_gasto}
+                                        onChange={(e) => updateReportField(report.id, "equipo_gasto", e.target.value)}
+                                        className="w-full max-w-[150px] px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-right text-gray-900"
+                                      />
+                                    ) : (
+                                      <span className="font-semibold text-gray-800 tabular-nums">{formatCurrency(report.equipo_gasto)}</span>
+                                    )}
+                                  </td>
+
+                                  {/* Comentarios */}
+                                  <td className="px-4 py-3">
+                                    {canEditCostoAutorizado ? (
+                                      <input
+                                        type="text"
+                                        placeholder="ej. Avance de cimentación..."
+                                        value={report.comments || ""}
+                                        onChange={(e) => updateReportField(report.id, "comments", e.target.value)}
+                                        className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900"
+                                      />
+                                    ) : (
+                                      <span className="text-gray-500 text-xs">{report.comments || "—"}</span>
+                                    )}
+                                  </td>
+
+                                  {/* Acciones */}
+                                  {canEditCostoAutorizado && (
+                                    <td className="px-4 py-3 text-center">
+                                      <div className="flex justify-center gap-2">
+                                        <button
+                                          onClick={() => handleSaveReport(report)}
+                                          disabled={savingReportId === report.id}
+                                          className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex items-center justify-center disabled:opacity-50"
+                                          title="Guardar semana"
+                                        >
+                                          {savingReportId === report.id ? (
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                          ) : (
+                                            <IconCheck className="w-4 h-4" />
+                                          )}
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteReport(report)}
+                                          disabled={deletingReportId === report.id}
+                                          className="p-2 bg-red-50/50 hover:bg-red-100 text-red-600 rounded-lg transition-colors flex items-center justify-center disabled:opacity-50"
+                                          title="Eliminar semana"
+                                        >
+                                          {deletingReportId === report.id ? (
+                                            <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                                          ) : (
+                                            <IconTrash className="w-4 h-4" />
+                                          )}
+                                        </button>
+                                      </div>
+                                    </td>
+                                  )}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </>
           )}
