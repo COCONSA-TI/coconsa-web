@@ -133,8 +133,8 @@ export async function GET(request: Request) {
       orderIds.length > 0
         ? supabaseAdmin.from('order_approvals').select('order_id, department_id, approval_order').in('order_id', orderIds).eq('status', 'pending')
         : Promise.resolve({ data: [] as { order_id: string; department_id: string; approval_order: number }[] }),
-      currentUserData?.is_department_head && currentUserData?.department_id
-        ? supabaseAdmin.from('order_approvals').select('order_id, status, department_id').eq('department_id', currentUserData.department_id)
+      currentUserData?.is_department_head && currentUserData?.department_id && orderIds.length > 0
+        ? supabaseAdmin.from('order_approvals').select('order_id, status, department_id').eq('department_id', currentUserData.department_id).in('order_id', orderIds)
         : Promise.resolve({ data: [] as { order_id: string; status: string; department_id: string }[] }),
     ]);
 
