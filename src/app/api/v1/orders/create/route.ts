@@ -410,7 +410,10 @@ export async function POST(request: Request) {
       unidad: item.unidad,
       precioUnitario: item.precioUnitario,
       precioTotal: parseFloat(String(item.cantidad)) * item.precioUnitario,
-      proveedor: resolvedSupplierName
+      proveedor: resolvedSupplierName,
+      // Datos de presupuesto (pasados desde el frontend si la obra tiene presupuesto)
+      ...(item.insumo_clave ? { insumo_clave: item.insumo_clave } : {}),
+      ...(item.categoria ? { categoria: item.categoria } : {}),
     }));
 
     // Crear la orden
@@ -437,6 +440,9 @@ export async function POST(request: Request) {
       status: 'pending',
       is_urgent: is_urgent || false,
       urgency_justification: is_urgent ? urgency_justification : null,
+      // Campos de presupuesto extraordinario (se actualizan abajo si aplica)
+      has_extra_budget_approval: false,
+      extra_budget_items_count: 0,
     };
 
     const { data: orderCreated, error: orderError } = await supabaseAdmin
@@ -468,14 +474,111 @@ export async function POST(request: Request) {
       orderCreated.justification_prove = finalEvidenceUrls.join(',');
     }
     
-    // Crear el flujo de aprobaciones automáticamente
+    // ── Determinar si la orden requiere aprobación extraordinaria de Dirección ──
+    // Condición: la obra tiene presupuesto cargado Y alguno de los items no está en el catálogo
+    const itemsSinClave = items.filter((item: OrderItem) => !item.insumo_clave?.trim());
+    let requiresExtraBudgetApproval = false;
+
+    if (storeIdToUse && itemsSinClave.length > 0) {
+      // Verificar si la obra tiene presupuesto cargado (hay registros en store_insumos)
+      const { count: insumoCount } = await supabaseAdmin
+        .from('store_insumos')
+        .select('id', { count: 'exact', head: true })
+        .eq('store_id', storeIdToUse);
+
+      if ((insumoCount ?? 0) > 0) {
+        requiresExtraBudgetApproval = true;
+        // Actualizar la orden con los flags de presupuesto extraordinario
+        await supabaseAdmin
+          .from('orders')
+          .update({
+            has_extra_budget_approval: true,
+            extra_budget_items_count: itemsSinClave.length,
+          })
+          .eq('id', orderCreated.id);
+      }
+    }
+
+    // Crear el flujo de aprobaciones
     if (userDepartmentId) {
       try {
-        await createOrderApprovalsServer(String(orderCreated.id), userDepartmentId, userId, is_urgent);
+        if (requiresExtraBudgetApproval) {
+          // APROBACIÓN EXTRAORDINARIA: Crear solo el paso 0 de Dirección
+          // La orden queda en 'pending' hasta que Dirección apruebe.
+          // Una vez aprobada, el endpoint approve/route.ts lanza el flujo normal.
+          const { data: direccionDept } = await supabaseAdmin
+            .from('departments')
+            .select('id')
+            .ilike('code', '%direccion%')
+            .eq('requires_approval', true)
+            .single();
+
+          if (direccionDept) {
+            await supabaseAdmin
+              .from('order_approvals')
+              .insert({
+                order_id: orderCreated.id,
+                department_id: direccionDept.id,
+                status: 'pending',
+                approval_order: 0, // Paso 0 = antes del flujo normal
+                comments: `Autorización extraordinaria requerida: ${itemsSinClave.length} artículo(s) no están en el catálogo del presupuesto de la obra.`,
+              });
+          } else {
+            // Si no se encuentra Dirección, usar flujo normal como fallback
+            await createOrderApprovalsServer(String(orderCreated.id), userDepartmentId, userId, is_urgent);
+          }
+        } else {
+          // FLUJO NORMAL: sin items fuera de presupuesto
+          await createOrderApprovalsServer(String(orderCreated.id), userDepartmentId, userId, is_urgent);
+        }
       } catch {
         // No fallar la creación de la orden si falla la creación de aprobaciones
       }
     }
+
+    // Reservar cantidades en store_insumos para los items que provienen del presupuesto
+    // (insumo_clave enlaza el item con store_insumos.clave)
+    const itemsConClave = items.filter((item: OrderItem) => item.insumo_clave?.trim());
+    if (itemsConClave.length > 0) {
+      try {
+        for (const item of itemsConClave) {
+          const cantidadPedida = parseFloat(String(item.cantidad)) || 0;
+          if (cantidadPedida <= 0 || !item.insumo_clave) continue;
+
+          // Intentar incremento atómico vía RPC (evita race conditions con órdenes concurrentes)
+          const { error: rpcError } = await supabaseAdmin.rpc('increment_insumo_solicitado', {
+            p_store_id: storeIdToUse,
+            p_clave: item.insumo_clave.trim(),
+            p_cantidad: cantidadPedida,
+          });
+
+          if (rpcError) {
+            // Fallback: si el RPC no existe aún, hacer el incremento manualmente
+            // (leer + sumar + escribir — no es atómico pero funciona en carga baja)
+            const { data: insumoData } = await supabaseAdmin
+              .from('store_insumos')
+              .select('id, cantidad_solicitada')
+              .eq('store_id', storeIdToUse)
+              .eq('clave', item.insumo_clave.trim())
+              .single();
+
+            if (insumoData) {
+              await supabaseAdmin
+                .from('store_insumos')
+                .update({
+                  cantidad_solicitada: (insumoData.cantidad_solicitada || 0) + cantidadPedida,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', insumoData.id);
+            }
+          }
+        }
+      } catch {
+        // No fallar la creación de la orden si falla la reserva de presupuesto
+        console.warn('[orders/create] No se pudo reservar presupuesto para algunos insumos');
+      }
+    }
+
 
     return NextResponse.json({
       success: true,

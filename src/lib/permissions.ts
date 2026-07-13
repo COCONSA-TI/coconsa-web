@@ -43,6 +43,13 @@ export const PERMISSIONS = {
     edit: ['admin'],
     delete: ['admin'],
   },
+  // Reuniones con IA — acceso para admins y jefes de departamento
+  meetings: {
+    access: ['admin', 'supervisor'],
+    create: ['admin', 'supervisor'],
+    view_own: ['admin', 'supervisor', 'user'],
+    delete: ['admin'],
+  },
 } as const;
 
 /**

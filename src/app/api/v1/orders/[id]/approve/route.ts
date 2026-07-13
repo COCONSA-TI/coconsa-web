@@ -2,6 +2,74 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { getSession } from '@/lib/auth';
 import { OrderApprovalWithRelations, ApprovalStatus } from '@/types/database';
+import type { Department } from '@/types/database';
+
+// Lanza el flujo de aprobación normal después de que Dirección apruebe
+// la autorización extraordinaria (paso 0).
+async function launchNormalApprovalFlow(
+  orderId: string,
+  applicantId: string,
+  isUrgent: boolean
+) {
+  const { data: applicant } = await supabaseAdmin
+    .from('users')
+    .select('is_department_head, department_id')
+    .eq('id', applicantId)
+    .single();
+
+  const { data: departments } = await supabaseAdmin
+    .from('departments')
+    .select('*')
+    .eq('requires_approval', true)
+    .order('approval_order');
+
+  if (!departments || departments.length === 0) return;
+
+  const applicantDeptId = applicant?.department_id;
+  const isApplicantDeptHead = applicant?.is_department_head && applicant?.department_id === applicantDeptId;
+  const applicantDept = departments.find((d: Department) => d.id === applicantDeptId);
+  const applicantApprovalOrder = applicantDept?.approval_order ?? 0;
+
+  const approvalsToCreate = [];
+
+  if (isUrgent && isApplicantDeptHead) {
+    // Urgente: solo Dirección(3)+
+    for (const dept of departments.filter((d: Department) => (d.approval_order ?? 0) >= 3)) {
+      approvalsToCreate.push({ order_id: orderId, department_id: dept.id, status: 'pending', approval_order: dept.approval_order });
+    }
+  } else if (applicantApprovalOrder >= 2) {
+    // Depto del flujo: desde contraloría en adelante
+    for (const dept of departments.filter((d: Department) => (d.approval_order ?? 0) >= 2)) {
+      approvalsToCreate.push({ order_id: orderId, department_id: dept.id, status: 'pending', approval_order: dept.approval_order });
+    }
+  } else {
+    // Gerencia: flujo completo
+    if (applicantDept) {
+      approvalsToCreate.push({
+        order_id: orderId,
+        department_id: applicantDept.id,
+        status: isApplicantDeptHead ? 'approved' : 'pending',
+        approval_order: applicantDept.approval_order,
+        approver_id: isApplicantDeptHead ? applicantId : null,
+        approved_at: isApplicantDeptHead ? new Date().toISOString() : null,
+        comments: isApplicantDeptHead ? 'Auto-aprobado (solicitante es jefe de departamento)' : null,
+      });
+    }
+    for (const dept of departments.filter((d: Department) => (d.approval_order ?? 0) > 1 && d.id !== applicantDeptId)) {
+      approvalsToCreate.push({ order_id: orderId, department_id: dept.id, status: 'pending', approval_order: dept.approval_order });
+    }
+  }
+
+  if (approvalsToCreate.length > 0) {
+    await supabaseAdmin.from('order_approvals').insert(approvalsToCreate);
+  }
+
+  // Poner la orden en in_progress
+  await supabaseAdmin
+    .from('orders')
+    .update({ status: 'in_progress', updated_at: new Date().toISOString() })
+    .eq('id', orderId);
+}
 
 const ORDER_ATTACHMENTS_BUCKET = 'order-attachments';
 
@@ -159,11 +227,43 @@ export async function POST(
       );
     }
 
-    // 7. Verificar si todas las aprobaciones están completas
+    // 7. Si se aprobó el paso 0 (autorización extraordinaria de Dirección),
+    //    lanzar el flujo de aprobación normal completo.
+    if ((myApproval.approval_order ?? -1) === 0) {
+      // Obtener el solicitante de la orden para recrear el flujo correcto
+      const { data: orderData } = await supabaseAdmin
+        .from('orders')
+        .select('applicant_id, is_urgent')
+        .eq('id', orderId)
+        .single();
+
+      if (orderData?.applicant_id) {
+        try {
+          await launchNormalApprovalFlow(
+            orderId,
+            orderData.applicant_id,
+            orderData.is_urgent || false
+          );
+        } catch (e) {
+          console.error('[approve] Error lanzando flujo normal tras autorización extraordinaria:', e);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: 'Autorización extraordinaria aprobada. El flujo de aprobación normal ha comenzado.',
+        allApproved: false,
+        extraordinaryApproved: true,
+        filesUploaded: uploadedFileIds.length,
+      });
+    }
+
+    // 8. Verificar si todas las aprobaciones (flujo normal) están completas
     const { data: updatedApprovals, error: checkError } = await supabaseAdmin
       .from('order_approvals')
       .select('id, status, department_id, approval_order')
-      .eq('order_id', orderId);
+      .eq('order_id', orderId)
+      .gt('approval_order', 0); // Excluir el paso 0 ya aprobado
 
     if (checkError) {
       console.error('Error verificando aprobaciones:', checkError);
@@ -171,7 +271,7 @@ export async function POST(
 
     const allApproved = updatedApprovals?.every((a: { status: ApprovalStatus | null }) => a.status === 'approved');
 
-    // 8. Si todas están aprobadas, cambiar estado de la orden
+    // 9. Si todas están aprobadas, cambiar estado de la orden
     if (allApproved) {
       const { error: orderUpdateError } = await supabaseAdmin
         .from('orders')

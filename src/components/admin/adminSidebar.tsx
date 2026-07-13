@@ -39,6 +39,15 @@ const menuItems = [
     ),
   },
   {
+    name: 'Presupuestos',
+    href: '/dashboard/presupuestos',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 11h.01M12 11h.01M15 11h.01M4 19h16a2 2 0 002-2V7a2 2 0 00-2-2H4a2 2 0 00-2 2v10a2 2 0 002 2z" />
+      </svg>
+    ),
+  },
+  {
     name: 'Proyectos',
     href: '/dashboard/proyectos',
     icon: (
@@ -64,6 +73,19 @@ const menuItems = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
       </svg>
     ),
+  },
+  {
+    name: 'Reuniones',
+    href: '/dashboard/reuniones',
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 10v2a7 7 0 0 1-14 0v-2" />
+        <line x1="12" y1="19" x2="12" y2="23" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+        <line x1="8" y1="23" x2="16" y2="23" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
+      </svg>
+    ),
+    badge: 'IA',
   },
   {
     name: 'Mensajes',
@@ -111,21 +133,14 @@ export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarPr
     if (item.href === '/dashboard/proveedores') {
       return true;
     }
+    // Reuniones: gerencias, administradores y jefes de departamento
+    if (item.href === '/dashboard/reuniones') {
+      return isAdmin || isDepartmentHead;
+    }
     // Configuración: solo admin
     if (item.href === '/dashboard/configuracion') {
       return isAdmin;
     }
-    // TODO: Descomentar cuando las demás secciones estén listas
-    // Dashboard y Órdenes de compra: todos pueden ver
-    // if (item.href === '/dashboard' || item.href === '/dashboard/ordenes-compra') {
-    //   return true;
-    // }
-    // Reportes: admin y supervisor
-    // if (item.href === '/dashboard/reportes') {
-    //   return isAdmin || user?.role === 'supervisor';
-    // }
-    // Todo lo demás: solo admin
-    // return isAdmin;
     return false;
   });
 

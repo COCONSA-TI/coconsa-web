@@ -105,6 +105,70 @@ export interface Store {
   created_at: string;
 }
 
+// ============================================
+// INSUMOS DE PRESUPUESTO POR OBRA (store_insumos)
+// ============================================
+
+export type InsumoCategoria = 'Materiales' | 'Mano de Obra' | 'Herramienta' | 'Equipo';
+
+export interface StoreInsumo {
+  id: number;
+  store_id: number;
+  clave: string;
+  descripcion: string;
+  unidad: string;
+  cantidad_presupuestada: number;
+  costo_unitario: number;
+  /** Costo autorizado manualmente por Gerencia o Dirección. Null = no asignado aún. */
+  costo_autorizado: number | null;
+  monto_presupuestado: number;
+  /** Monto autorizado = costo_autorizado × cantidad_presupuestada. Null hasta que se asigne costo_autorizado. */
+  monto_autorizado: number | null;
+  porcentaje: number;
+  categoria: InsumoCategoria;
+  cantidad_solicitada: number;
+  cantidad_comprada: number;
+  /** Activo = true mientras el insumo esté en el presupuesto vigente. */
+  activo: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Shape devuelto por el endpoint GET /api/v1/stores/[id]/insumos para autocompletado */
+export interface StoreInsumoSearchResult extends StoreInsumo {
+  /** Cantidad disponible = presupuestada - solicitada - comprada */
+  cantidad_disponible: number;
+  /** true si ya se excedió la cantidad presupuestada */
+  agotado: boolean;
+}
+
+export interface StoreBudgetUpload {
+  id: number;
+  store_id: number;
+  uploaded_by: string;
+  file_name: string | null;
+  file_url: string | null;
+  total_materiales: number;
+  total_mano_obra: number;
+  total_herramienta: number;
+  total_equipo: number;
+  total_reporte: number;
+  insumos_count: number;
+  created_at: string;
+}
+
+export interface StoreWeeklyReport {
+  id: number;
+  store_id: number;
+  week_start_date: string; // YYYY-MM-DD
+  mano_obra_gasto: number;
+  equipo_gasto: number;
+  comments: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+
 export interface Supplier {
   id: number;
   commercial_name: string;
@@ -245,6 +309,10 @@ export interface OrderItem {
   proveedor?: string;
   supplier_id?: number;
   supplier_name?: string;
+  /** Clave del insumo del presupuesto (store_insumos.clave) — enlace presupuestal */
+  insumo_clave?: string;
+  /** Categoría del insumo: Materiales, Mano de Obra, Herramienta, Equipo */
+  categoria?: InsumoCategoria;
 }
 
 export interface Order {
@@ -632,4 +700,69 @@ export interface UpdateNeedsListRequest {
   currency?: Currency;
   iva_percentage?: number;
   evidenceUrls?: string[];
+}
+
+// ============================================
+// MEETINGS (REUNIONES CON IA)
+// ============================================
+
+export type MeetingStatus = 'draft' | 'in_progress' | 'completed';
+
+export interface MeetingTask {
+  responsable: string;
+  tarea: string;
+  fecha_compromiso: string | null;
+}
+
+export interface MeetingPoint {
+  titulo: string;
+  detalle: string;
+}
+
+export interface MeetingMinutes {
+  fecha: string;
+  participantes: string[];
+  objetivo: string;
+  puntos_tratados: MeetingPoint[];
+  acuerdos: string[];
+  tareas: MeetingTask[];
+  proxima_reunion: string | null;
+}
+
+export interface Meeting {
+  id: string;
+  title: string;
+  description: string | null;
+  organizer_id: string;
+  attendees: string[];
+  started_at: string | null;
+  ended_at: string | null;
+  duration_seconds: number | null;
+  transcript: string | null;
+  minutes_structured: MeetingMinutes | null;
+  audio_path: string | null;
+  audio_size_bytes: number | null;
+  status: MeetingStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateMeetingRequest {
+  title: string;
+  description?: string;
+  attendees?: string[];
+}
+
+export interface UpdateMeetingRequest {
+  title?: string;
+  description?: string;
+  attendees?: string[];
+  started_at?: string;
+  ended_at?: string;
+  duration_seconds?: number;
+  transcript?: string;
+  minutes_structured?: MeetingMinutes;
+  audio_path?: string;
+  audio_size_bytes?: number;
+  status?: MeetingStatus;
 }
