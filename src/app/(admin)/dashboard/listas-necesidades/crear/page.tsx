@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import BankAccountManager from '@/components/admin/BankAccountManager';
@@ -23,6 +23,8 @@ interface NeedsListItem {
   precioTotal?: number;
   justificacion: string;
   evidenciaFile: File | null;
+  insumo_clave?: string;
+  categoria?: string;
 }
 
 interface StoreOption {
@@ -34,6 +36,95 @@ interface UnitOption {
   id: string;
   name: string;
   abbreviation: string;
+}
+
+interface InsumoOption {
+  id: number;
+  clave: string;
+  descripcion: string;
+  unidad: string;
+  costo_unitario: number;
+  cantidad_disponible: number;
+  agotado: boolean;
+  categoria: string;
+}
+
+interface InsumoAutocompleteProps {
+  value: string;
+  insumos: InsumoOption[];
+  onSelect: (insumo: InsumoOption) => void;
+  onChange: (val: string) => void;
+}
+
+function InsumoAutocomplete({ value, insumos, onSelect, onChange }: InsumoAutocompleteProps) {
+  const [query, setQuery] = useState(value);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setQuery(value); }, [value]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = query.length >= 1
+    ? insumos.filter(ins =>
+        ins.clave.toLowerCase().includes(query.toLowerCase()) ||
+        ins.descripcion.toLowerCase().includes(query.toLowerCase())
+      ).slice(0, 30)
+    : insumos.slice(0, 30);
+
+  return (
+    <div ref={ref} className="relative">
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm text-gray-900"
+        placeholder="Busca por clave o descripción del presupuesto..."
+        autoComplete="off"
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-white rounded-lg border border-gray-200 shadow-xl max-h-60 overflow-y-auto">
+          {filtered.map((ins) => (
+            <button
+              key={ins.id}
+              type="button"
+              onClick={() => {
+                onSelect(ins);
+                setQuery(ins.descripcion);
+                setOpen(false);
+              }}
+              className={`w-full text-left px-3 py-2 hover:bg-red-50 transition-colors border-b border-gray-50 last:border-0 ${ins.agotado ? 'opacity-50' : ''}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <span className="text-xs font-semibold text-gray-500 font-mono mr-2">{ins.clave}</span>
+                  <span className="inline-block px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-600 rounded mr-2">{ins.categoria}</span>
+                  <p className="text-sm text-gray-800 truncate mt-0.5">{ins.descripcion}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className={`text-xs font-medium ${ins.agotado ? 'text-red-500' : 'text-green-600'}`}>
+                    {ins.agotado ? 'Agotado' : `Disp: ${ins.cantidad_disponible.toLocaleString('es-MX', { maximumFractionDigits: 2 })} ${ins.unidad}`}
+                  </p>
+                  <p className="text-xs text-gray-400">${ins.costo_unitario.toLocaleString('es-MX', { maximumFractionDigits: 2 })}/{ins.unidad}</p>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 const LEGACY_MACHINE_STORE_REGEX = /^(CG|M|C|V|AT)\d+[\.\s-]?/i;
@@ -52,6 +143,9 @@ export default function CreateNeedsListPage() {
   const [storeId, setStoreId] = useState('');
   const [availableStores, setAvailableStores] = useState<StoreOption[]>([]);
   const [availableUnits, setAvailableUnits] = useState<UnitOption[]>([]);
+  const [storeInsumos, setStoreInsumos] = useState<InsumoOption[]>([]);
+  const [hasPresupuesto, setHasPresupuesto] = useState(false);
+  const [loadingInsumos, setLoadingInsumos] = useState(false);
   const [currency, setCurrency] = useState('MXN');
   const [ivaPercentage, setIvaPercentage] = useState(16);
   const [isUrgent, setIsUrgent] = useState(false);
@@ -60,11 +154,46 @@ export default function CreateNeedsListPage() {
     { nombre: '', cantidad: 1, unidad: '', precioUnitario: 0, justificacion: '', evidenciaFile: null },
   ]);
 
+  const fetchInsumosForStore = useCallback(async (sId: string) => {
+    if (!sId) {
+      setStoreInsumos([]);
+      setHasPresupuesto(false);
+      return;
+    }
+    setLoadingInsumos(true);
+    try {
+      const res = await fetch(`/api/v1/stores/${sId}/insumos?limit=500`);
+      if (!res.ok) throw new Error('Error');
+      const data = await res.json();
+      setHasPresupuesto(data.hasPresupuesto);
+      const CATEGORIAS_SOLICITABLES = ['Materiales', 'Herramienta'];
+      setStoreInsumos(
+        (data.insumos || []).filter((i: { categoria: string }) =>
+          CATEGORIAS_SOLICITABLES.includes(i.categoria)
+        )
+      );
+    } catch {
+      setStoreInsumos([]);
+      setHasPresupuesto(false);
+    } finally {
+      setLoadingInsumos(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchBankAccounts();
     fetchStores();
     fetchUnits();
   }, []);
+
+  useEffect(() => {
+    if (storeId) {
+      fetchInsumosForStore(storeId);
+    } else {
+      setStoreInsumos([]);
+      setHasPresupuesto(false);
+    }
+  }, [storeId, fetchInsumosForStore]);
 
   const fetchUnits = async () => {
     try {
@@ -236,6 +365,8 @@ export default function CreateNeedsListPage() {
           precioUnitario: item.precioUnitario,
           justificacion: item.justificacion,
           evidencia_url: itemEvidenceUrls[index] || undefined,
+          insumo_clave: item.insumo_clave || undefined,
+          categoria: item.categoria || undefined,
         })),
       };
 
@@ -449,6 +580,15 @@ export default function CreateNeedsListPage() {
             </button>
           </div>
 
+          {hasPresupuesto && (
+            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800 flex items-center justify-between">
+              <div>
+                <span className="font-semibold">Presupuesto activo:</span> Esta obra cuenta con un presupuesto cargado. Selecciona los insumos autorizados (categorías Materiales y Herramienta) para vinculación automática.
+              </div>
+              {loadingInsumos && <span className="text-blue-600 animate-pulse font-medium">Cargando catálogo...</span>}
+            </div>
+          )}
+
           <div className="space-y-4">
             {items.map((item, index) => (
               <div key={index} className="border border-gray-200 rounded-lg p-4">
@@ -469,15 +609,46 @@ export default function CreateNeedsListPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                   <div className="md:col-span-2">
-                    <label className="block text-sm text-gray-600 mb-1">Nombre *</label>
-                    <input
-                      type="text"
-                      value={item.nombre}
-                      onChange={(e) => updateItem(index, 'nombre', e.target.value)}
-                      required
-                      placeholder="Descripción del item"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
-                    />
+                    <label className="block text-sm text-gray-600 mb-1 flex items-center justify-between">
+                      <span>Nombre / Descripción <span className="text-red-500">*</span></span>
+                      {item.insumo_clave && (
+                        <span className="text-[11px] font-mono text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
+                          {item.insumo_clave} ({item.categoria})
+                        </span>
+                      )}
+                    </label>
+                    {hasPresupuesto && storeInsumos.length > 0 ? (
+                      <InsumoAutocomplete
+                        value={item.nombre}
+                        insumos={storeInsumos}
+                        onChange={(val) => {
+                          const newItems = [...items];
+                          newItems[index] = { ...newItems[index], nombre: val, insumo_clave: undefined, categoria: undefined };
+                          setItems(newItems);
+                        }}
+                        onSelect={(insumo) => {
+                          const newItems = [...items];
+                          newItems[index] = {
+                            ...newItems[index],
+                            nombre: insumo.descripcion,
+                            unidad: insumo.unidad || newItems[index].unidad,
+                            precioUnitario: insumo.costo_unitario || newItems[index].precioUnitario,
+                            insumo_clave: insumo.clave,
+                            categoria: insumo.categoria,
+                          };
+                          setItems(newItems);
+                        }}
+                      />
+                    ) : (
+                      <input
+                        type="text"
+                        value={item.nombre}
+                        onChange={(e) => updateItem(index, 'nombre', e.target.value)}
+                        required
+                        placeholder="Descripción del item"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
+                      />
+                    )}
                   </div>
 
                   <div>
