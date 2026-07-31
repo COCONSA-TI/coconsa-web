@@ -117,6 +117,53 @@ export async function POST(
       return NextResponse.json({ error: "Los gastos deben ser números mayores o iguales a 0" }, { status: 400 });
     }
 
+    // 1. Obtener presupuesto de la obra para Mano de Obra y Equipo
+    const { data: insumos } = await supabaseAdmin
+      .from("store_insumos")
+      .select("categoria, monto_presupuestado")
+      .eq("store_id", storeId);
+
+    const presupuestoManoObra = (insumos || [])
+      .filter((i) => i.categoria === "Mano de Obra")
+      .reduce((sum, i) => sum + (Number(i.monto_presupuestado) || 0), 0);
+
+    const presupuestoEquipo = (insumos || [])
+      .filter((i) => i.categoria === "Equipo")
+      .reduce((sum, i) => sum + (Number(i.monto_presupuestado) || 0), 0);
+
+    // 2. Obtener gastos previos aprobados (excluyendo la semana actual)
+    const { data: previousReports } = await supabaseAdmin
+      .from("store_weekly_reports")
+      .select("week_start_date, mano_obra_gasto, equipo_gasto, status")
+      .eq("store_id", storeId)
+      .neq("week_start_date", week_start_date)
+      .eq("status", "approved");
+
+    const prevManoObra = (previousReports || []).reduce((sum, r) => sum + (Number(r.mano_obra_gasto) || 0), 0);
+    const prevEquipo = (previousReports || []).reduce((sum, r) => sum + (Number(r.equipo_gasto) || 0), 0);
+
+    const totalManoObraPropuesto = prevManoObra + mano_obra_gasto;
+    const totalEquipoPropuesto = prevEquipo + equipo_gasto;
+
+    const exceedsManoObra = presupuestoManoObra > 0
+      ? (totalManoObraPropuesto > presupuestoManoObra)
+      : (mano_obra_gasto > 0);
+
+    const exceedsEquipo = presupuestoEquipo > 0
+      ? (totalEquipoPropuesto > presupuestoEquipo)
+      : (equipo_gasto > 0);
+
+    let reportStatus: "approved" | "pending_approval" = "approved";
+    let exceededCategoriesStr: string | null = null;
+
+    if (exceedsManoObra || exceedsEquipo) {
+      reportStatus = "pending_approval";
+      const categories: string[] = [];
+      if (exceedsManoObra) categories.push("Mano de Obra");
+      if (exceedsEquipo) categories.push("Equipo y Maquinaria");
+      exceededCategoriesStr = categories.join(", ");
+    }
+
     // Ejecutar UPSERT
     const { data: upserted, error: upsertError } = await supabaseAdmin
       .from("store_weekly_reports")
@@ -126,6 +173,9 @@ export async function POST(
         mano_obra_gasto,
         equipo_gasto,
         comments: comments || null,
+        status: reportStatus,
+        exceeded_categories: exceededCategoriesStr,
+        requested_by: session!.userId,
         updated_at: new Date().toISOString(),
       }, {
         onConflict: "store_id,week_start_date",
@@ -141,9 +191,15 @@ export async function POST(
       );
     }
 
+    const isPending = reportStatus === "pending_approval";
+
     return NextResponse.json({
       success: true,
-      message: "Reporte semanal guardado exitosamente",
+      message: isPending
+        ? `El gasto registrado excede el presupuesto disponible en (${exceededCategoriesStr}). Se ha enviado una solicitud de autorización a Dirección.`
+        : "Reporte semanal guardado exitosamente",
+      isPendingApproval: isPending,
+      exceededCategories: exceededCategoriesStr,
       report: upserted,
     });
   } catch (error: unknown) {
