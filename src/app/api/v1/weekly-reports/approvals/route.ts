@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/api-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/v1/weekly-reports/approvals
  * Obtiene el listado de reportes semanales que han requerido o están en flujo de autorización,
@@ -48,7 +50,7 @@ export async function GET(request: Request) {
     const storeIds = Array.from(new Set((reports || []).map((r) => r.store_id)));
 
     // Obtener insumos de todas las obras involucradas
-    let insumosMap: Record<number, { manoObra: number; equipo: number }> = {};
+    const insumosMap: Record<number, { manoObra: number; equipo: number }> = {};
     if (storeIds.length > 0) {
       const { data: insumos } = await supabaseAdmin
         .from("store_insumos")
@@ -68,7 +70,7 @@ export async function GET(request: Request) {
     }
 
     // Obtener reportes aprobados previos por obra para calcular acumulados
-    let approvedReportsMap: Record<number, any[]> = {};
+    const approvedReportsMap: Record<number, any[]> = {};
     if (storeIds.length > 0) {
       const { data: approvedReports } = await supabaseAdmin
         .from("store_weekly_reports")

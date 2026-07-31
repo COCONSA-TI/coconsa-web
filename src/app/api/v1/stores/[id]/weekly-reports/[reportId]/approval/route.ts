@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/api-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 /**
  * POST /api/v1/stores/[id]/weekly-reports/[reportId]/approval
  * Dirección aprueba o rechaza una solicitud de gasto semanal que excedió el presupuesto.
@@ -84,22 +86,14 @@ export async function POST(
 
     const nowISO = new Date().toISOString();
 
-    let updatedStatus: "approved" | "rejected" = "approved";
-    let updateFields: Record<string, any> = {
+    const updatedStatus: "approved" | "rejected" = action === "reject" ? "rejected" : "approved";
+    const updateFields: Record<string, any> = {
       approved_by: session!.userId,
       approval_date: nowISO,
       updated_at: nowISO,
+      status: updatedStatus,
+      rejection_reason: action === "reject" ? (rejection_reason || "Solicitud no aprobada por Dirección") : null,
     };
-
-    if (action === "approve") {
-      updatedStatus = "approved";
-      updateFields.status = "approved";
-      updateFields.rejection_reason = null;
-    } else {
-      updatedStatus = "rejected";
-      updateFields.status = "rejected";
-      updateFields.rejection_reason = rejection_reason || "Solicitud no aprobada por Dirección";
-    }
 
     const { data: updatedReport, error: updateError } = await supabaseAdmin
       .from("store_weekly_reports")

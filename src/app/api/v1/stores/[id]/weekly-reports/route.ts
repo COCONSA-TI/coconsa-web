@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/api-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/v1/stores/[id]/weekly-reports
  * Obtiene todos los reportes semanales de Mano de Obra y Equipo de una obra.
