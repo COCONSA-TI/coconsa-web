@@ -595,6 +595,10 @@ export interface NeedsListItem {
   descripcion?: string;
   justificacion?: string;
   evidencia_url?: string;
+  /** Clave del insumo del presupuesto (store_insumos.clave) — enlace presupuestal */
+  insumo_clave?: string;
+  /** Categoría del insumo: Materiales, Mano de Obra, Herramienta, Equipo */
+  categoria?: InsumoCategoria | string;
 }
 
 export interface NeedsList {
@@ -616,6 +620,8 @@ export interface NeedsList {
   is_urgent: boolean;
   urgency_justification: string | null;
   is_definitive_rejection: boolean;
+  has_extra_budget_approval?: boolean;
+  extra_budget_items_count?: number;
   created_at: string;
   updated_at: string;
 }

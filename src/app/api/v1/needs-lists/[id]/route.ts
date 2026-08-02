@@ -13,9 +13,9 @@ interface NormalizedNeedsListItem {
   subtotal: number;
   justificacion?: string;
   evidencia_url?: string;
+  insumo_clave?: string;
+  categoria?: string;
 }
-
-
 
 function toSafeNumber(value: unknown): number {
   if (typeof value === 'number') {
@@ -54,6 +54,8 @@ function normalizeNeedsListItem(item: unknown, index: number): NormalizedNeedsLi
     subtotal,
     justificacion: typeof source.justificacion === 'string' ? source.justificacion : undefined,
     evidencia_url: typeof source.evidencia_url === 'string' ? source.evidencia_url : undefined,
+    insumo_clave: typeof source.insumo_clave === 'string' ? source.insumo_clave : undefined,
+    categoria: typeof source.categoria === 'string' ? source.categoria : undefined,
   };
 }
 
