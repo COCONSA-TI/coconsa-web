@@ -164,6 +164,12 @@ export interface StoreWeeklyReport {
   mano_obra_gasto: number;
   equipo_gasto: number;
   comments: string | null;
+  status: 'approved' | 'pending_approval' | 'rejected';
+  exceeded_categories?: string | null;
+  requested_by?: string | null;
+  approved_by?: string | null;
+  rejection_reason?: string | null;
+  approval_date?: string | null;
   created_at: string;
   updated_at: string;
 }
