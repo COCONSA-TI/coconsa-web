@@ -213,6 +213,7 @@ export async function GET(request: Request) {
         current_department_name: currentDeptMap.get(order.id)?.name || null,
         machine_name: order.machine_id ? machinesMap.get(order.machine_id) || null : null,
         suppliers: Array.from(uniqueSuppliers),
+        materials: itemsArray.map(item => item.nombre).filter(Boolean),
       };
     });
 

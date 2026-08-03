@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import type { StoreInsumoSearchResult, InsumoCategoria } from "@/types/database";
 
@@ -245,6 +246,41 @@ export default function PresupuestosPage() {
   const [loadingWeeklyReports, setLoadingWeeklyReports] = useState(false);
   const [savingReportId, setSavingReportId] = useState<number | string | null>(null);
   const [deletingReportId, setDeletingReportId] = useState<number | null>(null);
+  const [approvingReportId, setApprovingReportId] = useState<number | null>(null);
+  const [rejectingReportId, setRejectingReportId] = useState<number | null>(null);
+
+  // ── Modal de Confirmación para Autorizaciones ─────────────────────────────
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean;
+    type: "approve" | "reject";
+    report: any;
+  } | null>(null);
+  const [rejectionReasonInput, setRejectionReasonInput] = useState<string>("Solicitud no aprobada por Dirección");
+
+  // ── Vista General de Autorizaciones ──────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<"presupuesto" | "autorizaciones">("presupuesto");
+  const [allApprovals, setAllApprovals] = useState<any[]>([]);
+  const [loadingApprovals, setLoadingApprovals] = useState(false);
+  const [approvalsFilter, setApprovalsFilter] = useState<"pending_approval" | "approved" | "rejected" | "all">("pending_approval");
+
+  const fetchGlobalApprovals = useCallback(async () => {
+    setLoadingApprovals(true);
+    try {
+      const res = await fetch("/api/v1/weekly-reports/approvals");
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAllApprovals(data.reports || []);
+      }
+    } catch {
+      setAllApprovals([]);
+    } finally {
+      setLoadingApprovals(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchGlobalApprovals();
+  }, [fetchGlobalApprovals]);
 
   const fetchWeeklyReports = useCallback(async (storeId: number) => {
     setLoadingWeeklyReports(true);
@@ -310,12 +346,113 @@ export default function PresupuestosPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error al guardar el reporte");
       
-      setUploadSuccess("Reporte semanal guardado correctamente.");
+      if (data.isPendingApproval) {
+        setUploadError(`Presupuesto excedido en (${data.exceededCategories}). Se ha enviado una solicitud de autorización a Dirección. Espera su aprobación.`);
+      } else {
+        setUploadSuccess("Reporte semanal guardado correctamente.");
+      }
       await fetchWeeklyReports(selectedStoreId);
+      await fetchGlobalApprovals();
     } catch (err: unknown) {
       setUploadError(err instanceof Error ? err.message : "Error al guardar");
     } finally {
       setSavingReportId(null);
+    }
+  };
+
+  const openApproveModal = (report: any) => {
+    setConfirmModal({ open: true, type: "approve", report });
+  };
+
+  const openRejectModal = (report: any) => {
+    setRejectionReasonInput("Solicitud no aprobada por Dirección");
+    setConfirmModal({ open: true, type: "reject", report });
+  };
+
+  const handleExecuteApprove = async () => {
+    if (!confirmModal?.report) return;
+    const report = confirmModal.report;
+    const storeName = report.store_name || selectedStore?.name || `Obra #${report.store_id}`;
+
+    setApprovingReportId(report.id);
+    setUploadError(null);
+    setUploadSuccess(null);
+    setConfirmModal(null);
+    try {
+      const res = await fetch(`/api/v1/stores/${report.store_id}/weekly-reports/${report.id}/approval`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "approve" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al autorizar");
+
+      setUploadSuccess(`El gasto semanal de "${storeName}" fue autorizado por Dirección.`);
+      await fetchGlobalApprovals();
+      if (selectedStoreId && selectedStoreId === report.store_id) {
+        await fetchWeeklyReports(selectedStoreId);
+      }
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : "Error al autorizar");
+    } finally {
+      setApprovingReportId(null);
+    }
+  };
+
+  const handleExecuteReject = async () => {
+    if (!confirmModal?.report) return;
+    const report = confirmModal.report;
+    const storeName = report.store_name || selectedStore?.name || `Obra #${report.store_id}`;
+    const reason = rejectionReasonInput.trim() || "Solicitud no aprobada por Dirección";
+
+    setRejectingReportId(report.id);
+    setUploadError(null);
+    setUploadSuccess(null);
+    setConfirmModal(null);
+    try {
+      const res = await fetch(`/api/v1/stores/${report.store_id}/weekly-reports/${report.id}/approval`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reject", rejection_reason: reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al rechazar");
+
+      setUploadError(`La solicitud de sobrecosto para "${storeName}" fue rechazada.`);
+      await fetchGlobalApprovals();
+      if (selectedStoreId && selectedStoreId === report.store_id) {
+        await fetchWeeklyReports(selectedStoreId);
+      }
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : "Error al rechazar");
+    } finally {
+      setRejectingReportId(null);
+    }
+  };
+
+  const handleRejectReport = async (report: any) => {
+    if (!selectedStoreId || report.isTemp) return;
+    const reason = prompt("Indica el motivo del rechazo (opcional):", "Solicitud no aprobada por Dirección");
+    if (reason === null) return;
+
+    setRejectingReportId(report.id);
+    setUploadError(null);
+    setUploadSuccess(null);
+    try {
+      const res = await fetch(`/api/v1/stores/${selectedStoreId}/weekly-reports/${report.id}/approval`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reject", rejection_reason: reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al rechazar");
+
+      setUploadError("❌ Gasto semanal rechazado por Dirección.");
+      await fetchWeeklyReports(selectedStoreId);
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : "Error al rechazar");
+    } finally {
+      setRejectingReportId(null);
     }
   };
 
@@ -370,11 +507,15 @@ export default function PresupuestosPage() {
   };
 
   const getGastoManoObraTotal = () => {
-    return weeklyReports.reduce((sum, r) => sum + (Number(r.mano_obra_gasto) || 0), 0);
+    return weeklyReports
+      .filter((r) => r.status === "approved" || !r.status)
+      .reduce((sum, r) => sum + (Number(r.mano_obra_gasto) || 0), 0);
   };
 
   const getGastoEquipoTotal = () => {
-    return weeklyReports.reduce((sum, r) => sum + (Number(r.equipo_gasto) || 0), 0);
+    return weeklyReports
+      .filter((r) => r.status === "approved" || !r.status)
+      .reduce((sum, r) => sum + (Number(r.equipo_gasto) || 0), 0);
   };
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -576,9 +717,13 @@ export default function PresupuestosPage() {
   };
 
   // Gerencia (approval_order 1) y Dirección (code contiene 'direccion') pueden editar costo_autorizado
-  // La verificación real de permisos la hace el backend; aquí solo controlamos la UI.
   const canEditCostoAutorizado = isAdmin || (isDepartmentHead && !!user?.department_code &&
     (/gerencia/i.test(user.department_code) || /direccion/i.test(user.department_code)));
+
+  const isDireccion = Boolean(
+    (user?.department_code && /dir|direccion|dirección/i.test(user.department_code)) ||
+    (user?.department_name && /direccion|dirección/i.test(user.department_name))
+  );
 
   const startEditCosto = (insumo: StoreInsumoSearchResult) => {
     setEditingCostoId(insumo.id);
@@ -712,38 +857,60 @@ export default function PresupuestosPage() {
             </p>
           </div>
 
-          {/* Selector de Obra */}
+          {/* Selector de Obra y Botón de enlace a Autorizaciones */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Centro de Costos / Obra
-            </label>
-            {loadingStores ? (
-              <div className="h-10 bg-gray-100 animate-pulse rounded-lg w-full" />
-            ) : (
-              <select
-                id="select-obra"
-                value={selectedStoreId ?? ""}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setSelectedStoreId(val ? parseInt(val, 10) : null);
-                  setSummary(null);
-                  setInsumos([]);
-                  setUploadError(null);
-                  setUploadSuccess(null);
-                  setSelectedCategoria("all");
-                  setSearchQuery("");
-                }}
-                className="w-full max-w-md px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
-              >
-                <option value="">Selecciona una obra...</option>
-                {stores.map((store) => (
-                  <option key={store.id} value={store.id}>{store.name}</option>
-                ))}
-              </select>
-            )}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex-1 max-w-md">
+                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  Centro de Costos / Obra
+                </label>
+                {loadingStores ? (
+                  <div className="h-10 bg-gray-100 animate-pulse rounded-lg w-full" />
+                ) : (
+                  <select
+                    id="select-obra"
+                    value={selectedStoreId ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedStoreId(val ? parseInt(val, 10) : null);
+                      setSummary(null);
+                      setInsumos([]);
+                      setUploadError(null);
+                      setUploadSuccess(null);
+                      setSelectedCategoria("all");
+                      setSearchQuery("");
+                    }}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white font-medium"
+                  >
+                    <option value="">Selecciona una obra...</option>
+                    {stores.map((store) => (
+                      <option key={store.id} value={store.id}>{store.name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Enlace a la página independiente de Autorizaciones (sólo para Dirección) */}
+              {isDireccion && (
+                <div className="flex items-center gap-3 pt-2 md:pt-4">
+                  <Link
+                    href="/dashboard/presupuestos/autorizaciones"
+                    className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-sm bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100"
+                  >
+                    <IconWarning className="w-4 h-4 text-amber-600" />
+                    <span>Solicitudes de Autorización</span>
+                    {allApprovals.filter((a) => a.status === "pending_approval").length > 0 && (
+                      <span className="bg-amber-600 text-white text-xs font-extrabold px-2.5 py-0.5 rounded-full shadow-sm ml-1 animate-pulse">
+                        {allApprovals.filter((a) => a.status === "pending_approval").length}
+                      </span>
+                    )}
+                  </Link>
+                </div>
+              )}
+            </div>
           </div>
 
-          {selectedStoreId && (
+          {selectedStoreId ? (
             <>
               {/* Zona de carga del PDF */}
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
@@ -1376,7 +1543,7 @@ export default function PresupuestosPage() {
                                 <span className="text-sm font-bold text-gray-800 mt-1 block">{formatCurrency(presup)}</span>
                               </div>
                               <div className="bg-white/80 rounded-lg p-2.5 shadow-sm border border-emerald-50">
-                                <span className="block text-[10px] font-semibold text-gray-400 uppercase">Gasto Reportado</span>
+                                <span className="block text-[10px] font-semibold text-gray-400 uppercase">Ejecutado</span>
                                 <span className="text-sm font-bold text-emerald-700 mt-1 block">{formatCurrency(gasto)}</span>
                               </div>
                               <div className="bg-white/80 rounded-lg p-2.5 shadow-sm border border-emerald-50">
@@ -1416,7 +1583,7 @@ export default function PresupuestosPage() {
                                 <span className="text-sm font-bold text-gray-800 mt-1 block">{formatCurrency(presup)}</span>
                               </div>
                               <div className="bg-white/80 rounded-lg p-2.5 shadow-sm border border-violet-50">
-                                <span className="block text-[10px] font-semibold text-gray-400 uppercase">Gasto Reportado</span>
+                                <span className="block text-[10px] font-semibold text-gray-400 uppercase">Ejecutado</span>
                                 <span className="text-sm font-bold text-violet-700 mt-1 block">{formatCurrency(gasto)}</span>
                               </div>
                               <div className="bg-white/80 rounded-lg p-2.5 shadow-sm border border-violet-50">
@@ -1456,15 +1623,22 @@ export default function PresupuestosPage() {
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-100">
-                              <th className="px-4 py-3 text-left w-64">Fecha / Período de la Semana</th>
-                              <th className="px-4 py-3 text-right w-44">Gasto Mano de Obra</th>
-                              <th className="px-4 py-3 text-right w-44">Gasto Equipo / Maq.</th>
+                              <th className="px-4 py-3 text-left w-56">Fecha / Período de la Semana</th>
+                              <th className="px-4 py-3 text-right w-36">Gasto Mano de Obra</th>
+                              <th className="px-4 py-3 text-right w-36">Gasto Equipo / Maq.</th>
+                              <th className="px-4 py-3 text-center w-52">Estado / Autorización</th>
                               <th className="px-4 py-3 text-left">Comentarios / Notas</th>
-                              {canEditCostoAutorizado && <th className="px-4 py-3 text-center w-36">Acciones</th>}
+                              {canEditCostoAutorizado && <th className="px-4 py-3 text-center w-40">Acciones</th>}
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100 bg-white">
                             {weeklyReports.map((report) => {
+                              const isPending = report.status === "pending_approval";
+                              const isRejected = report.status === "rejected";
+                              const isApproved = report.status === "approved" || !report.status;
+                              const canApproveThisReport = isPending && isDireccion;
+                              const isSaveDisabled = savingReportId === report.id || (isPending && !isDireccion);
+
                               return (
                                 <tr key={report.id} className="hover:bg-gray-50/50 transition-colors">
                                   {/* Selector de fecha / Label */}
@@ -1509,7 +1683,7 @@ export default function PresupuestosPage() {
                                         placeholder="0.00"
                                         value={report.mano_obra_gasto}
                                         onChange={(e) => updateReportField(report.id, "mano_obra_gasto", e.target.value)}
-                                        className="w-full max-w-[150px] px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-right text-gray-900"
+                                        className="w-full max-w-[130px] px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-right text-gray-900"
                                       />
                                     ) : (
                                       <span className="font-semibold text-gray-800 tabular-nums">{formatCurrency(report.mano_obra_gasto)}</span>
@@ -1526,10 +1700,45 @@ export default function PresupuestosPage() {
                                         placeholder="0.00"
                                         value={report.equipo_gasto}
                                         onChange={(e) => updateReportField(report.id, "equipo_gasto", e.target.value)}
-                                        className="w-full max-w-[150px] px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-right text-gray-900"
+                                        className="w-full max-w-[130px] px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-right text-gray-900"
                                       />
                                     ) : (
                                       <span className="font-semibold text-gray-800 tabular-nums">{formatCurrency(report.equipo_gasto)}</span>
+                                    )}
+                                  </td>
+
+                                  {/* Estado / Autorización */}
+                                  <td className="px-4 py-3 text-center">
+                                    {isPending ? (
+                                      <div className="flex flex-col items-center gap-1">
+                                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center gap-1">
+                                          <IconWarning className="w-3.5 h-3.5 text-amber-600" />
+                                          Pendiente Dirección
+                                        </span>
+                                        {report.exceeded_categories && (
+                                          <span className="text-[10px] text-amber-700 font-medium">Excede: {report.exceeded_categories}</span>
+                                        )}
+                                        <span className="text-[10px] text-gray-500 italic">Esperando decisión de Dirección</span>
+                                      </div>
+                                    ) : isRejected ? (
+                                      <div className="flex flex-col items-center gap-1">
+                                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800 border border-red-300 inline-flex items-center gap-1">
+                                          ❌ Rechazado
+                                        </span>
+                                        <span className="text-[10px] text-red-600 font-medium">
+                                          {report.rejection_reason || "Solicitud no aprobada por Dirección"}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <div className="flex flex-col items-center gap-0.5">
+                                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1">
+                                          <IconCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                          {report.exceeded_categories ? "Autorizado" : "Aprobado"}
+                                        </span>
+                                        {report.exceeded_categories && (
+                                          <span className="text-[10px] text-emerald-700">Autorizado por Dirección</span>
+                                        )}
+                                      </div>
                                     )}
                                   </td>
 
@@ -1551,12 +1760,57 @@ export default function PresupuestosPage() {
                                   {/* Acciones */}
                                   {canEditCostoAutorizado && (
                                     <td className="px-4 py-3 text-center">
-                                      <div className="flex justify-center gap-2">
+                                      <div className="flex justify-center items-center gap-1.5">
+                                        {/* Botones de Dirección para Aprobar / Rechazar exceso (sólo si no es la misma persona) */}
+                                        {canApproveThisReport && (
+                                          <>
+                                            <button
+                                              onClick={() => openApproveModal({ ...report, store_name: selectedStore?.name })}
+                                              disabled={approvingReportId === report.id}
+                                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-medium transition-colors flex items-center gap-1 disabled:opacity-50"
+                                              title="Autorizar exceso de presupuesto"
+                                            >
+                                              {approvingReportId === report.id ? (
+                                                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                              ) : (
+                                                <>
+                                                  <IconCheck className="w-3.5 h-3.5" />
+                                                  Autorizar
+                                                </>
+                                              )}
+                                            </button>
+
+                                            <button
+                                              onClick={() => openRejectModal({ ...report, store_name: selectedStore?.name })}
+                                              disabled={rejectingReportId === report.id}
+                                              className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-medium transition-colors flex items-center gap-1 disabled:opacity-50"
+                                              title="Rechazar exceso de presupuesto"
+                                            >
+                                              {rejectingReportId === report.id ? (
+                                                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                              ) : (
+                                                <>
+                                                  ❌ Rechazar
+                                                </>
+                                              )}
+                                            </button>
+                                          </>
+                                        )}
+
+                                        {/* Guardar / Confirmar subida */}
                                         <button
                                           onClick={() => handleSaveReport(report)}
-                                          disabled={savingReportId === report.id}
-                                          className="p-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors flex items-center justify-center disabled:opacity-50"
-                                          title="Guardar semana"
+                                          disabled={isSaveDisabled}
+                                          className={`p-2 rounded-lg transition-colors flex items-center justify-center disabled:opacity-50 ${
+                                            isPending
+                                              ? "bg-amber-500 hover:bg-amber-600 text-white"
+                                              : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                          }`}
+                                          title={
+                                            isPending
+                                              ? "Esperando autorización de Dirección para confirmar subida"
+                                              : "Guardar / Confirmar subida"
+                                          }
                                         >
                                           {savingReportId === report.id ? (
                                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -1564,6 +1818,8 @@ export default function PresupuestosPage() {
                                             <IconCheck className="w-4 h-4" />
                                           )}
                                         </button>
+
+                                        {/* Eliminar semana */}
                                         <button
                                           onClick={() => handleDeleteReport(report)}
                                           disabled={deletingReportId === report.id}
@@ -1590,7 +1846,7 @@ export default function PresupuestosPage() {
                 </>
               )}
             </>
-          )}
+          ) : null}
 
           {/* Estado vacío inicial */}
           {!selectedStoreId && !loadingStores && (
@@ -1606,6 +1862,101 @@ export default function PresupuestosPage() {
           )}
         </div>
       </div>
+
+      {/* Mini Modal Personalizado de Confirmación para Dirección */}
+      {confirmModal?.open && confirmModal.report && (
+        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-100 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-4">
+              <div
+                className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  confirmModal.type === "approve"
+                    ? "bg-emerald-100 text-emerald-600"
+                    : "bg-red-100 text-red-600"
+                }`}
+              >
+                {confirmModal.type === "approve" ? (
+                  <IconCheck className="w-6 h-6" />
+                ) : (
+                  <IconWarning className="w-6 h-6" />
+                )}
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">
+                  {confirmModal.type === "approve"
+                    ? "Confirmar Autorización de Sobrecosto"
+                    : "Rechazar Solicitud de Sobrecosto"}
+                </h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  Obra: <strong className="text-gray-800">{confirmModal.report.store_name || selectedStore?.name}</strong>
+                </p>
+                <p className="text-xs text-gray-500">
+                  Período: <strong className="text-gray-800">{getWeekRangeLabel(confirmModal.report.week_start_date)}</strong>
+                </p>
+              </div>
+            </div>
+
+            {confirmModal.type === "approve" ? (
+              <div className="bg-emerald-50/60 border border-emerald-100 rounded-xl p-3.5 text-xs text-emerald-900 space-y-1">
+                <p className="font-semibold">¿Deseas autorizar esta solicitud?</p>
+                <p className="text-emerald-700">
+                  El gasto semanal reportado quedará desbloqueado y contabilizado en el presupuesto ejecutado de la obra.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-gray-700">
+                  Motivo del rechazo para el solicitante:
+                </label>
+                <textarea
+                  rows={3}
+                  value={rejectionReasonInput}
+                  onChange={(e) => setRejectionReasonInput(e.target.value)}
+                  placeholder="Indica la razón o justificación del rechazo..."
+                  className="w-full text-xs p-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
+                />
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setConfirmModal(null)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition-all"
+              >
+                Cancelar
+              </button>
+              {confirmModal.type === "approve" ? (
+                <button
+                  onClick={handleExecuteApprove}
+                  disabled={approvingReportId === confirmModal.report.id}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow transition-all flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {approvingReportId === confirmModal.report.id ? (
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <IconCheck className="w-4 h-4" />
+                      Sí, Autorizar Exceso
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button
+                  onClick={handleExecuteReject}
+                  disabled={rejectingReportId === confirmModal.report.id}
+                  className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-extrabold shadow transition-all flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {rejectingReportId === confirmModal.report.id ? (
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    "Confirmar Rechazo"
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

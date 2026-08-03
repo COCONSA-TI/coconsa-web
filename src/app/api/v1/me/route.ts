@@ -62,6 +62,7 @@ export async function GET() {
         is_department_head: userData.is_department_head || false,
         department_id: userData.department_id || null,
         department_code: departmentCode,
+        department_name: department?.name || null,
         can_manage_suppliers: canManageSuppliers,
       }
     });

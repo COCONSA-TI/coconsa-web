@@ -11,7 +11,9 @@ async function createNeedsListApprovalsServer(
   needsListId: number, 
   applicantDepartmentId: string, 
   applicantId: string, 
-  isUrgent: boolean = false
+  isUrgent: boolean = false,
+  requiresExtraBudgetApproval: boolean = false,
+  extraBudgetItemsCount: number = 0
 ) {
   // Obtener información del solicitante
   const { data: applicant, error: applicantError } = await supabaseAdmin
@@ -39,12 +41,22 @@ async function createNeedsListApprovalsServer(
 
   const approvalsToCreate = [];
 
-  // Buscar departamentos por código (sin filtrar por approval_order, 
-  // ya que esos valores corresponden al flujo de órdenes de compra, no al de listas)
+  // Buscar departamentos por código
   const contabilidad = departments.find((d: Department) => d.code === 'contabilidad');
   const contraloria = departments.find((d: Department) => d.code === 'contraloria');
   const direccion = departments.find((d: Department) => d.code === 'direccion');
   const pagos = departments.find((d: Department) => d.code === 'pagos');
+
+  // Paso 0: Autorización extraordinaria de Dirección si hay artículos fuera de presupuesto
+  if (requiresExtraBudgetApproval && direccion) {
+    approvalsToCreate.push({
+      needs_list_id: needsListId,
+      department_id: direccion.id,
+      status: 'pending',
+      approval_order: 0,
+      comments: `Autorización extraordinaria requerida: ${extraBudgetItemsCount} concepto(s) no están en el catálogo del presupuesto de la obra.`,
+    });
+  }
 
   if (isUrgent && isApplicantDeptHead) {
     // LISTA URGENTE: Solo jefes de departamento pueden crear urgentes
@@ -403,7 +415,24 @@ export async function POST(request: Request) {
       precioTotal: item.precioTotal,
       justificacion: item.justificacion?.trim() ?? "",
       evidencia_url: item.evidencia_url || undefined,
+      insumo_clave: item.insumo_clave?.trim() || undefined,
+      categoria: item.categoria || undefined,
     }));
+
+    // Determinar si la obra tiene presupuesto y si hay ítems fuera de catálogo
+    const itemsSinClave = items.filter((item: NeedsListItem) => !item.insumo_clave?.trim());
+    let requiresExtraBudgetApproval = false;
+
+    if (finalStoreId && itemsSinClave.length > 0) {
+      const { count: insumoCount } = await supabaseAdmin
+        .from('store_insumos')
+        .select('id', { count: 'exact', head: true })
+        .eq('store_id', finalStoreId);
+
+      if ((insumoCount ?? 0) > 0) {
+        requiresExtraBudgetApproval = true;
+      }
+    }
 
     // Crear la lista de necesidades
     const { data: needsListData, error: insertError } = await supabaseAdmin
@@ -424,6 +453,8 @@ export async function POST(request: Request) {
         is_urgent: isUrgent,
         urgency_justification: isUrgent ? urgencyJustification : null,
         evidence_urls: itemEvidenceUrls.length > 0 ? itemEvidenceUrls.join(',') : null,
+        has_extra_budget_approval: requiresExtraBudgetApproval,
+        extra_budget_items_count: requiresExtraBudgetApproval ? itemsSinClave.length : 0,
       })
       .select()
       .single();
@@ -436,13 +467,53 @@ export async function POST(request: Request) {
       );
     }
 
+    // Reservar cantidades en store_insumos para los items que provienen del presupuesto
+    const itemsConClave = items.filter((item: NeedsListItem) => item.insumo_clave?.trim());
+    if (finalStoreId && itemsConClave.length > 0) {
+      try {
+        for (const item of itemsConClave) {
+          const cantidadPedida = parseFloat(String(item.cantidad)) || 0;
+          if (cantidadPedida <= 0 || !item.insumo_clave) continue;
+
+          const { error: rpcError } = await supabaseAdmin.rpc('increment_insumo_solicitado', {
+            p_store_id: finalStoreId,
+            p_clave: item.insumo_clave.trim(),
+            p_cantidad: cantidadPedida,
+          });
+
+          if (rpcError) {
+            const { data: insumoData } = await supabaseAdmin
+              .from('store_insumos')
+              .select('id, cantidad_solicitada')
+              .eq('store_id', finalStoreId)
+              .eq('clave', item.insumo_clave.trim())
+              .single();
+
+            if (insumoData) {
+              await supabaseAdmin
+                .from('store_insumos')
+                .update({
+                  cantidad_solicitada: (insumoData.cantidad_solicitada || 0) + cantidadPedida,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', insumoData.id);
+            }
+          }
+        }
+      } catch {
+        console.warn('[needs-lists/create] No se pudo reservar presupuesto para algunos insumos');
+      }
+    }
+
     // Crear flujo de aprobaciones
     try {
       await createNeedsListApprovalsServer(
         needsListData.id,
         user.department_id,
         session.userId,
-        isUrgent
+        isUrgent,
+        requiresExtraBudgetApproval,
+        itemsSinClave.length
       );
     } catch (approvalError) {
       console.error('Error al crear aprobaciones:', approvalError);

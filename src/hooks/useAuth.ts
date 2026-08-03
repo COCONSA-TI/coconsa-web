@@ -12,6 +12,7 @@ interface User {
   is_department_head?: boolean;
   department_id?: string | null;
   department_code?: string | null;
+  department_name?: string | null;
   can_manage_suppliers?: boolean;
 }
 

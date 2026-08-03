@@ -24,6 +24,7 @@ interface Order {
   current_department_name?: string | null;
   machine_name?: string | null;
   suppliers?: string[];
+  materials?: string[];
 }
 
 const statusConfig: Record<OrderStatus, { label: string; className: string; iconBg: string }> = {
@@ -75,8 +76,14 @@ function MultiSelectDropdown({
   placeholder: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // Close when clicking outside could be implemented, but for simplicity a simple toggle is used
+  const filteredOptions = useMemo(() => {
+    if (!searchQuery.trim()) return options;
+    const q = searchQuery.toLowerCase();
+    return options.filter(o => o.label.toLowerCase().includes(q));
+  }, [options, searchQuery]);
+
   const displayValue = selected.length === 0
     ? placeholder
     : selected.map(s => options.find(o => o.value === s)?.label || s).join(', ');
@@ -85,7 +92,10 @@ function MultiSelectDropdown({
     <div className="relative">
       <div
         className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 cursor-pointer flex justify-between items-center"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          setIsOpen(!isOpen);
+          if (!isOpen) setSearchQuery("");
+        }}
       >
         <span className="truncate pr-2">{displayValue}</span>
         <svg className={`w-4 h-4 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -96,27 +106,43 @@ function MultiSelectDropdown({
       {isOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)}></div>
-          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-            {options.map(option => (
-              <label key={option.value} className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer">
+          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-hidden flex flex-col">
+            <div className="p-2 border-b border-gray-100 bg-gray-50">
+              <div className="relative">
+                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
                 <input
-                  type="checkbox"
-                  checked={selected.includes(option.value)}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      onChange([...selected, option.value]);
-                    } else {
-                      onChange(selected.filter(v => v !== option.value));
-                    }
-                  }}
-                  className="rounded border-gray-300 text-red-600 focus:ring-red-500 mr-2"
+                  type="text"
+                  placeholder="Buscar en opciones..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1 bg-white border border-gray-200 rounded text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-red-500"
                 />
-                <span className="text-sm text-gray-700 truncate">{option.label}</span>
-              </label>
-            ))}
-            {options.length === 0 && (
-              <div className="px-3 py-2 text-sm text-gray-400 italic">No hay opciones</div>
-            )}
+              </div>
+            </div>
+            <div className="overflow-y-auto max-h-48">
+              {filteredOptions.map(option => (
+                <label key={option.value} className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(option.value)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        onChange([...selected, option.value]);
+                      } else {
+                        onChange(selected.filter(v => v !== option.value));
+                      }
+                    }}
+                    className="rounded border-gray-300 text-red-600 focus:ring-red-500 mr-2"
+                  />
+                  <span className="text-sm text-gray-700 truncate">{option.label}</span>
+                </label>
+              ))}
+              {filteredOptions.length === 0 && (
+                <div className="px-3 py-2 text-sm text-gray-400 italic">No hay opciones</div>
+              )}
+            </div>
           </div>
         </>
       )}
@@ -141,10 +167,15 @@ function OrdenesCompraContent() {
   const [storeFilters, setStoreFilters] = useState<string[]>([]);
   const [applicantFilters, setApplicantFilters] = useState<string[]>([]);
   const [supplierFilters, setSupplierFilters] = useState<string[]>([]);
+  const [materialFilters, setMaterialFilters] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [myApprovalFilters, setMyApprovalFilters] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Paginación
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(10);
 
   // Leer filtro de URL al cargar (para compartir enlaces)
   useEffect(() => {
@@ -165,6 +196,7 @@ function OrdenesCompraContent() {
         setStoreFilters(filters.storeFilters || (filters.storeFilter && filters.storeFilter !== "all" ? [filters.storeFilter] : []));
         setApplicantFilters(filters.applicantFilters || (filters.applicantFilter && filters.applicantFilter !== "all" ? [filters.applicantFilter] : []));
         setSupplierFilters(filters.supplierFilters || []);
+        setMaterialFilters(filters.materialFilters || []);
         setDateFrom(filters.dateFrom || "");
         setDateTo(filters.dateTo || "");
         setMyApprovalFilters(filters.myApprovalFilters || (filters.myApprovalFilter && filters.myApprovalFilter !== "all" ? [filters.myApprovalFilter] : []));
@@ -185,6 +217,7 @@ function OrdenesCompraContent() {
       storeFilters,
       applicantFilters,
       supplierFilters,
+      materialFilters,
       dateFrom,
       dateTo,
       myApprovalFilters,
@@ -198,6 +231,11 @@ function OrdenesCompraContent() {
       fetchOrders(tab);
     }
   }, [authLoading, tab]);
+
+  // Resetear página al modificar filtros
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, storeFilters, applicantFilters, supplierFilters, materialFilters, dateFrom, dateTo, myApprovalFilters, tab]);
 
   const fetchOrders = async (currentTab = tab) => {
     try {
@@ -268,6 +306,18 @@ function OrdenesCompraContent() {
     return Array.from(uniqueSuppliers).sort();
   }, [orders]);
 
+  const materials = useMemo(() => {
+    const uniqueMaterials = new Set<string>();
+    orders.forEach(o => {
+      if (o.materials) {
+        o.materials.forEach(m => uniqueMaterials.add(m));
+      } else if (o.first_item_name) {
+        uniqueMaterials.add(o.first_item_name);
+      }
+    });
+    return Array.from(uniqueMaterials).sort();
+  }, [orders]);
+
   // Aplicar todos los filtros
   const filteredOrders = useMemo(() => {
     return orders.filter(order => {
@@ -276,14 +326,17 @@ function OrdenesCompraContent() {
         return false;
       }
 
-      // Filtro por búsqueda (ID, solicitante, almacén)
+      // Filtro por búsqueda (ID, solicitante, almacén, máquina, proveedor, material)
       if (searchTerm) {
         const search = searchTerm.toLowerCase();
         const matchesId = order.id.toString().toLowerCase().includes(search);
         const matchesApplicant = order.applicant_name.toLowerCase().includes(search);
         const matchesStore = order.store_name.toLowerCase().includes(search);
         const matchesMachine = order.machine_name ? order.machine_name.toLowerCase().includes(search) : false;
-        if (!matchesId && !matchesApplicant && !matchesStore && !matchesMachine) {
+        const matchesSupplier = order.suppliers ? order.suppliers.some(s => s.toLowerCase().includes(search)) : false;
+        const matchesMaterial = order.materials ? order.materials.some(m => m.toLowerCase().includes(search)) : (order.first_item_name ? order.first_item_name.toLowerCase().includes(search) : false);
+
+        if (!matchesId && !matchesApplicant && !matchesStore && !matchesMachine && !matchesSupplier && !matchesMaterial) {
           return false;
         }
       }
@@ -301,6 +354,14 @@ function OrdenesCompraContent() {
       // Filtro por proveedor
       if (supplierFilters.length > 0) {
         if (!order.suppliers || !order.suppliers.some(s => supplierFilters.includes(s))) {
+          return false;
+        }
+      }
+
+      // Filtro por material
+      if (materialFilters.length > 0) {
+        const orderMats = order.materials || (order.first_item_name ? [order.first_item_name] : []);
+        if (!orderMats.some(m => materialFilters.includes(m))) {
           return false;
         }
       }
@@ -334,7 +395,14 @@ function OrdenesCompraContent() {
 
       return true;
     });
-  }, [orders, statusFilter, searchTerm, storeFilters, applicantFilters, supplierFilters, dateFrom, dateTo, myApprovalFilters]);
+  }, [orders, statusFilter, searchTerm, storeFilters, applicantFilters, supplierFilters, materialFilters, dateFrom, dateTo, myApprovalFilters]);
+
+  // Paginación
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage) || 1;
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredOrders.slice(start, start + itemsPerPage);
+  }, [filteredOrders, currentPage, itemsPerPage]);
 
   const stats = {
     total: orders.length,
@@ -344,7 +412,7 @@ function OrdenesCompraContent() {
     rejected: orders.filter(o => o.status === "rejected").length,
   };
 
-  const hasActiveFilters = searchTerm || storeFilters.length > 0 || applicantFilters.length > 0 || supplierFilters.length > 0 || dateFrom || dateTo || myApprovalFilters.length > 0;
+  const hasActiveFilters = searchTerm || storeFilters.length > 0 || applicantFilters.length > 0 || supplierFilters.length > 0 || materialFilters.length > 0 || dateFrom || dateTo || myApprovalFilters.length > 0;
 
   const clearAllFilters = () => {
     setStatusFilter("all");
@@ -352,6 +420,7 @@ function OrdenesCompraContent() {
     setStoreFilters([]);
     setApplicantFilters([]);
     setSupplierFilters([]);
+    setMaterialFilters([]);
     setDateFrom("");
     setDateTo("");
     setMyApprovalFilters([]);
@@ -589,7 +658,7 @@ function OrdenesCompraContent() {
             </svg>
             <input
               type="text"
-              placeholder="Buscar por ID, solicitante o centro de costos..."
+              placeholder="Buscar por ID, solicitante, centro de costos, proveedor o material..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all"
@@ -681,6 +750,19 @@ function OrdenesCompraContent() {
                   selected={supplierFilters}
                   onChange={setSupplierFilters}
                   placeholder="Todos los proveedores"
+                />
+              </div>
+
+              {/* Material / Artículo Filter */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
+                  Material / Artículo
+                </label>
+                <MultiSelectDropdown
+                  options={materials.map(mat => ({ value: mat, label: mat }))}
+                  selected={materialFilters}
+                  onChange={setMaterialFilters}
+                  placeholder="Todos los materiales"
                 />
               </div>
 
@@ -797,6 +879,17 @@ function OrdenesCompraContent() {
             </span>
           )}
 
+          {materialFilters.length > 0 && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+              Material: {materialFilters.join(", ")}
+              <button onClick={() => setMaterialFilters([])} className="hover:opacity-70">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </span>
+          )}
+
           {(dateFrom || dateTo) && (
             <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
               Fecha: {dateFrom || '...'} - {dateTo || '...'}
@@ -849,7 +942,7 @@ function OrdenesCompraContent() {
           <>
             {/* Mobile View - Cards */}
             <div className="lg:hidden divide-y divide-gray-100">
-              {filteredOrders.map((order) => {
+              {paginatedOrders.map((order) => {
                 const status = statusConfig[order.status] || statusConfig.pending;
                 const dateInfo = formatDate(order.created_at);
 
@@ -974,7 +1067,7 @@ function OrdenesCompraContent() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredOrders.map((order) => {
+                  {paginatedOrders.map((order) => {
                     const status = statusConfig[order.status] || statusConfig.pending;
                     const dateInfo = formatDate(order.created_at);
 
@@ -1081,6 +1174,83 @@ function OrdenesCompraContent() {
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3 text-sm text-gray-500">
+                <span>
+                  Mostrando <strong className="font-semibold text-gray-900">{filteredOrders.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}</strong> a{' '}
+                  <strong className="font-semibold text-gray-900">{Math.min(currentPage * itemsPerPage, filteredOrders.length)}</strong> de{' '}
+                  <strong className="font-semibold text-gray-900">{filteredOrders.length}</strong> resultados
+                </span>
+                <span className="text-gray-300">|</span>
+                <div className="flex items-center gap-1.5">
+                  <label htmlFor="itemsPerPage" className="text-xs text-gray-500">Por página:</label>
+                  <select
+                    id="itemsPerPage"
+                    value={itemsPerPage}
+                    onChange={(e) => {
+                      setItemsPerPage(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="px-2 py-1 bg-gray-50 border border-gray-200 rounded text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-red-500"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    title="Página Anterior"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter(page => page === 1 || page === totalPages || Math.abs(page - currentPage) <= 1)
+                    .map((page, idx, arr) => {
+                      const prevPage = arr[idx - 1];
+                      const showEllipsis = prevPage && page - prevPage > 1;
+                      return (
+                        <div key={page} className="flex items-center">
+                          {showEllipsis && <span className="px-2 text-gray-400 text-xs">...</span>}
+                          <button
+                            onClick={() => setCurrentPage(page)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                              currentPage === page
+                                ? "bg-red-600 text-white shadow-sm"
+                                : "text-gray-700 hover:bg-gray-100 border border-transparent"
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        </div>
+                      );
+                    })}
+
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    title="Página Siguiente"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              )}
             </div>
           </>
         )}
