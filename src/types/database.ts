@@ -174,6 +174,77 @@ export interface StoreWeeklyReport {
   updated_at: string;
 }
 
+// ── CONTROL DE OBRA (REPORTES FINANCIEROS Y DE AVANCE) ────────────────────────
+export interface StoreControlObraReport {
+  id: number;
+  store_id: number;
+  semana_numero: number;
+  fecha_inicio: string; // YYYY-MM-DD
+  fecha_fin: string; // YYYY-MM-DD
+  importe_generado: number;
+  
+  // Egresos Directos
+  egreso_maquinaria_equipo: number;
+  egreso_nomina_directa: number;
+  egreso_seguro_nomina_directa: number;
+  egreso_destajos: number;
+  egreso_materiales: number;
+  egreso_diesel: number;
+  
+  // Egresos Indirectos
+  egreso_nomina_indirecta: number;
+  egreso_seguro_nomina_indirecta: number;
+  egreso_gastos_indirectos: number;
+  
+  // Porcentajes
+  pct_indirecto_campo: number;
+  pct_indirecto_oficina: number;
+  
+  // Avance y Comentarios
+  pct_avance_programa: number;
+  comments?: string | null;
+  
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ControlObraCalculatedReport extends StoreControlObraReport {
+  total_egresos_directos: number;
+  total_egresos_indirectos: number;
+  monto_indirecto_campo: number;
+  monto_indirecto_oficina: number;
+  total_egresos: number;
+  importe_utilidad: number;
+  pct_utilidad: number;
+}
+
+export interface ControlObraSummary {
+  total_generado: number;
+  total_egresos_directos: number;
+  total_egresos_indirectos: number;
+  total_indirectos_campo: number;
+  total_indirectos_oficina: number;
+  total_egresos: number;
+  total_utilidad: number;
+  pct_utilidad_global: number;
+  semanas_count: number;
+  ultimo_pct_avance: number;
+}
+
+export interface ControlObraSettings {
+  pct_indirecto_campo: number;
+  pct_indirecto_oficina: number;
+}
+
+export interface AIAssistantMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  suggestedQuestions?: string[];
+  timestamp: string;
+}
+
+
 
 export interface Supplier {
   id: number;
