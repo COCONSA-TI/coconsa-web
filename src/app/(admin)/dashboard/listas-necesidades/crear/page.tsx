@@ -25,6 +25,7 @@ interface NeedsListItem {
   evidenciaFile: File | null;
   insumo_clave?: string;
   categoria?: string;
+  cantidad_disponible?: number;
 }
 
 interface StoreOption {
@@ -44,6 +45,7 @@ interface InsumoOption {
   descripcion: string;
   unidad: string;
   costo_unitario: number;
+  costo_autorizado?: number | null;
   cantidad_disponible: number;
   agotado: boolean;
   categoria: string;
@@ -95,32 +97,44 @@ function InsumoAutocomplete({ value, insumos, onSelect, onChange }: InsumoAutoco
       />
       {open && filtered.length > 0 && (
         <div className="absolute z-50 left-0 right-0 mt-1 bg-white rounded-lg border border-gray-200 shadow-xl max-h-60 overflow-y-auto">
-          {filtered.map((ins) => (
-            <button
-              key={ins.id}
-              type="button"
-              onClick={() => {
-                onSelect(ins);
-                setQuery(ins.descripcion);
-                setOpen(false);
-              }}
-              className={`w-full text-left px-3 py-2 hover:bg-red-50 transition-colors border-b border-gray-50 last:border-0 ${ins.agotado ? 'opacity-50' : ''}`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <span className="text-xs font-semibold text-gray-500 font-mono mr-2">{ins.clave}</span>
-                  <span className="inline-block px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-600 rounded mr-2">{ins.categoria}</span>
-                  <p className="text-sm text-gray-800 truncate mt-0.5">{ins.descripcion}</p>
+          {filtered.map((ins) => {
+            const hasCostoAut = ins.costo_autorizado != null && ins.costo_autorizado > 0;
+            const effectiveCost = hasCostoAut ? ins.costo_autorizado! : ins.costo_unitario;
+
+            return (
+              <button
+                key={ins.id}
+                type="button"
+                onClick={() => {
+                  onSelect(ins);
+                  setQuery(ins.descripcion);
+                  setOpen(false);
+                }}
+                className={`w-full text-left px-3 py-2 hover:bg-red-50 transition-colors border-b border-gray-50 last:border-0 ${ins.agotado ? 'opacity-50' : ''}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <span className="text-xs font-semibold text-gray-500 font-mono mr-2">{ins.clave}</span>
+                    <span className="inline-block px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-600 rounded mr-2">{ins.categoria}</span>
+                    <p className="text-sm text-gray-800 truncate mt-0.5">{ins.descripcion}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className={`text-xs font-medium ${ins.agotado ? 'text-red-500' : 'text-green-600'}`}>
+                      {ins.agotado ? 'Agotado' : `Disp: ${ins.cantidad_disponible.toLocaleString('es-MX', { maximumFractionDigits: 2 })} ${ins.unidad}`}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      ${effectiveCost.toLocaleString('es-MX', { maximumFractionDigits: 2 })}/{ins.unidad}
+                      {hasCostoAut && (
+                        <span className="ml-1 text-[10px] text-green-700 font-semibold bg-green-50 px-1 py-0.5 rounded border border-green-200">
+                          Autorizado
+                        </span>
+                      )}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-right flex-shrink-0">
-                  <p className={`text-xs font-medium ${ins.agotado ? 'text-red-500' : 'text-green-600'}`}>
-                    {ins.agotado ? 'Agotado' : `Disp: ${ins.cantidad_disponible.toLocaleString('es-MX', { maximumFractionDigits: 2 })} ${ins.unidad}`}
-                  </p>
-                  <p className="text-xs text-gray-400">${ins.costo_unitario.toLocaleString('es-MX', { maximumFractionDigits: 2 })}/{ins.unidad}</p>
-                </div>
-              </div>
-            </button>
-          ))}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
@@ -285,6 +299,25 @@ export default function CreateNeedsListPage() {
 
     if (items.length === 0 || !items[0].nombre) {
       toast.warning('Items requeridos', 'Debes agregar al menos un item');
+      return;
+    }
+
+    // Validar exceso de cantidad presupuestada disponible
+    const itemsExcedidos = items.filter(item => {
+      if (!item.insumo_clave) return false;
+      const insumo = storeInsumos.find(s => s.clave === item.insumo_clave);
+      const disp = insumo ? insumo.cantidad_disponible : item.cantidad_disponible;
+      return disp !== undefined && item.cantidad > disp;
+    });
+
+    if (itemsExcedidos.length > 0) {
+      const primerExcedido = itemsExcedidos[0];
+      const insumo = storeInsumos.find(s => s.clave === primerExcedido.insumo_clave);
+      const disp = insumo ? insumo.cantidad_disponible : (primerExcedido.cantidad_disponible ?? 0);
+      toast.warning(
+        'No tienes permiso para enviar esta solicitud',
+        `El concepto "${primerExcedido.insumo_clave}" excede la cantidad presupuestada disponible (Disponible: ${disp}, Solicitado: ${primerExcedido.cantidad}). Por favor solicita autorización a Dirección.`
+      );
       return;
     }
 
@@ -623,7 +656,7 @@ export default function CreateNeedsListPage() {
                         insumos={storeInsumos}
                         onChange={(val) => {
                           const newItems = [...items];
-                          newItems[index] = { ...newItems[index], nombre: val, insumo_clave: undefined, categoria: undefined };
+                          newItems[index] = { ...newItems[index], nombre: val, insumo_clave: undefined, categoria: undefined, cantidad_disponible: undefined };
                           setItems(newItems);
                         }}
                         onSelect={(insumo) => {
@@ -632,9 +665,10 @@ export default function CreateNeedsListPage() {
                             ...newItems[index],
                             nombre: insumo.descripcion,
                             unidad: insumo.unidad || newItems[index].unidad,
-                            precioUnitario: insumo.costo_unitario || newItems[index].precioUnitario,
+                            precioUnitario: (insumo.costo_autorizado != null && insumo.costo_autorizado > 0) ? insumo.costo_autorizado : (insumo.costo_unitario || newItems[index].precioUnitario),
                             insumo_clave: insumo.clave,
                             categoria: insumo.categoria,
+                            cantidad_disponible: insumo.cantidad_disponible,
                           };
                           setItems(newItems);
                         }}
@@ -663,6 +697,25 @@ export default function CreateNeedsListPage() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
                     />
                   </div>
+
+                  {(() => {
+                    const matchedInsumo = item.insumo_clave ? storeInsumos.find(s => s.clave === item.insumo_clave) : undefined;
+                    const disp = matchedInsumo ? matchedInsumo.cantidad_disponible : item.cantidad_disponible;
+                    const requestedQty = Number(item.cantidad) || 0;
+                    const exceedsLimit = item.insumo_clave !== undefined && disp !== undefined && requestedQty > disp;
+
+                    return exceedsLimit ? (
+                      <div className="md:col-span-4 mt-2 p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 font-medium flex items-start gap-2">
+                        <svg className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <div>
+                          <span className="font-semibold text-red-800">⚠️ No tienes permiso para solicitar esta cantidad:</span>
+                          <p className="mt-0.5 text-red-700">La cantidad solicitada ({requestedQty.toLocaleString('es-MX', { maximumFractionDigits: 2 })}) excede la cantidad presupuestada disponible ({disp?.toLocaleString('es-MX', { maximumFractionDigits: 2 })} {item.unidad}). Por favor solicita autorización a <strong>Dirección</strong> para incrementar el presupuesto antes de proceder.</p>
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
 
                   <div>
                     <label className="block text-sm text-gray-600 mb-1">Unidad *</label>
