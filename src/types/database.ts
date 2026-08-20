@@ -849,3 +849,40 @@ export interface UpdateMeetingRequest {
   audio_size_bytes?: number;
   status?: MeetingStatus;
 }
+
+// ============================================
+// CATÁLOGO DE AVANCES Y CONCEPTOS DE OBRA
+// ============================================
+
+export interface CatalogoConceptoSemana {
+  semana_numero: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+  cantidad_ejecutada: number;
+  importe_ejecutado: number;
+}
+
+export interface CatalogoConcepto {
+  id: number | string;
+  store_id: number;
+  clave: string;
+  descripcion: string;
+  unidad: string;
+  cantidad_presupuestada: number;
+  precio_unitario: number;
+  importe_presupuestado: number;
+  cantidad_acumulada: number;
+  importe_acumulado: number;
+  cantidad_pendiente: number;
+  importe_pendiente: number;
+  semanas: Record<number, CatalogoConceptoSemana>;
+}
+
+export interface CatalogoAvancesSummary {
+  presupuesto_total: number;
+  iva_16: number;
+  total_con_iva: number;
+  total_acumulado_ejecutado: number;
+  total_pendiente: number;
+  pct_avance_global: number;
+}
