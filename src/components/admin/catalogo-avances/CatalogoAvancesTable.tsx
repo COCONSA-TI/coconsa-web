@@ -59,27 +59,27 @@ export default function CatalogoAvancesTable({
       </div>
 
       <div className="overflow-x-auto relative scrollbar-thin scrollbar-thumb-slate-300">
-        <table className="w-full text-xs text-left border-collapse min-w-[1800px]">
+        <table className="w-full text-xs text-left border-collapse min-w-[1500px]">
           <thead>
             {/* Fila 1: Grupos de encabezados */}
             <tr className="bg-slate-100 text-gray-900 text-[11px] font-extrabold uppercase tracking-wider text-center border-b border-slate-200">
-              <th className="py-3 px-3 sticky left-0 z-20 bg-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-16">Clave</th>
-              <th className="py-3 px-3 sticky left-16 z-20 bg-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-72 border-r border-slate-200">Descripción del Concepto</th>
-              <th className="py-3 px-2 w-14">UM</th>
-              <th className="py-3 px-3 w-28 text-right">Cant. Presup.</th>
-              <th className="py-3 px-3 w-28 text-right">P. Unitario</th>
-              <th className="py-3 px-3 w-32 text-right bg-rose-50 text-[#C8102E] border-r border-rose-200">Importe Total</th>
+              <th className="py-2.5 px-2 sticky left-0 z-30 bg-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-12 min-w-[48px] max-w-[48px]">Clave</th>
+              <th className="py-2.5 px-2 sticky left-12 z-30 bg-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] w-60 min-w-[240px] max-w-[240px] border-r border-slate-200">Descripción del Concepto</th>
+              <th className="py-2.5 px-1 w-12 min-w-[48px] max-w-[48px] text-center">UM</th>
+              <th className="py-2.5 px-2 w-24 min-w-[96px] max-w-[96px] text-right">Cant. Presup.</th>
+              <th className="py-2.5 px-2 w-24 min-w-[96px] max-w-[96px] text-right">P. Unitario</th>
+              <th className="py-2.5 px-2 sticky left-[288px] z-30 w-28 min-w-[112px] max-w-[112px] text-right bg-rose-100 text-[#C8102E] border-r border-rose-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">Importe Total</th>
 
-              <th className="py-3 px-3 bg-emerald-50 text-emerald-900 border-r border-emerald-200" colSpan={2}>
+              <th className="py-2.5 px-2 sticky left-[400px] z-30 w-[176px] min-w-[176px] max-w-[176px] text-center bg-emerald-100 text-emerald-900 border-r border-emerald-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]" colSpan={2}>
                 ACUMULADO EJECUTADO
               </th>
 
-              <th className="py-3 px-3 bg-amber-50 text-amber-900 border-r border-amber-200" colSpan={2}>
+              <th className="py-2.5 px-2 sticky left-[576px] z-30 w-[208px] min-w-[208px] max-w-[208px] text-center bg-amber-100 text-amber-900 border-r border-amber-200 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.15)]" colSpan={2}>
                 PENDIENTE POR EJERCER
               </th>
 
               {WEEKS.map((semNum) => (
-                <th key={semNum} className="py-3 px-3 bg-slate-50 text-gray-900 border-r border-slate-200" colSpan={2}>
+                <th key={semNum} className="py-2.5 px-2 bg-slate-50 text-gray-900 border-r border-slate-200 text-center w-[176px] min-w-[176px]" colSpan={2}>
                   SEMANA {semNum < 10 ? `0${semNum}` : semNum}
                 </th>
               ))}
@@ -87,55 +87,56 @@ export default function CatalogoAvancesTable({
 
             {/* Fila 2: Subencabezados de columnas */}
             <tr className="bg-slate-50 text-gray-900 text-[10px] font-extrabold uppercase tracking-wider text-center border-b border-slate-200">
-              <th className="py-2.5 px-2 sticky left-0 z-20 bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">#</th>
-              <th className="py-2.5 px-2 sticky left-16 z-20 bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] border-r border-slate-200 text-left">Concepto de Obra</th>
-              <th className="py-2.5 px-1">Unidad</th>
-              <th className="py-2.5 px-2 text-right">Cantidad</th>
-              <th className="py-2.5 px-2 text-right">P.U. ($)</th>
-              <th className="py-2.5 px-2 text-right bg-rose-50 text-[#C8102E] font-black border-r border-rose-100">Importe ($)</th>
+              <th className="py-2 px-1.5 sticky left-0 z-30 bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] w-12 min-w-[48px] max-w-[48px] text-center">#</th>
+              <th className="py-2 px-2 sticky left-12 z-30 bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] border-r border-slate-200 text-left w-60 min-w-[240px] max-w-[240px]">Concepto de Obra</th>
+              <th className="py-2 px-1 w-12 min-w-[48px] max-w-[48px] text-center">Unidad</th>
+              <th className="py-2 px-1.5 w-24 min-w-[96px] max-w-[96px] text-right">Cantidad</th>
+              <th className="py-2 px-1.5 w-24 min-w-[96px] max-w-[96px] text-right">P.U. ($)</th>
+              <th className="py-2 px-1.5 sticky left-[288px] z-30 w-28 min-w-[112px] max-w-[112px] text-right bg-rose-100 text-[#C8102E] font-black border-r border-rose-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">Importe ($)</th>
 
-              <th className="py-2.5 px-2 text-right bg-emerald-50 text-emerald-900">Cant. Ej.</th>
-              <th className="py-2.5 px-2 text-right bg-emerald-50 text-emerald-900 border-r border-emerald-200">Importe Ej.</th>
+              <th className="py-2 px-1.5 sticky left-[400px] z-30 w-20 min-w-[80px] max-w-[80px] text-right bg-emerald-100 text-emerald-900 font-bold shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">Cant. Ej.</th>
+              <th className="py-2 px-1.5 sticky left-[480px] z-30 w-24 min-w-[96px] max-w-[96px] text-right bg-emerald-100 text-emerald-900 border-r border-emerald-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">Importe Ej.</th>
 
-              <th className="py-2.5 px-2 text-right bg-amber-50 text-amber-900">Cant. Pend.</th>
-              <th className="py-2.5 px-2 text-right bg-amber-50 text-amber-900 border-r border-amber-200">Importe Pend.</th>
+              <th className="py-2 px-1.5 sticky left-[576px] z-30 w-24 min-w-[96px] max-w-[96px] text-right bg-amber-100 text-amber-900 font-bold shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">Cant. Pend.</th>
+              <th className="py-2 px-1.5 sticky left-[672px] z-30 w-28 min-w-[112px] max-w-[112px] text-right bg-amber-100 text-amber-900 border-r border-amber-200 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.15)]">Importe Pend.</th>
 
               {WEEKS.map((semNum) => (
                 <Fragment key={semNum}>
-                  <th className="py-2.5 px-2 text-right bg-slate-50 text-gray-900">Cant.</th>
-                  <th className="py-2.5 px-2 text-right bg-slate-50 text-gray-900 border-r border-slate-200">Importe ($)</th>
+                  <th className="py-2 px-1.5 text-right bg-slate-50 text-gray-900 w-20 min-w-[80px]">Cant.</th>
+                  <th className="py-2 px-1.5 text-right bg-slate-50 text-gray-900 border-r border-slate-200 w-24 min-w-[96px]">Importe ($)</th>
                 </Fragment>
               ))}
             </tr>
           </thead>
 
-          <tbody className="divide-y divide-slate-100 bg-white font-mono text-xs">
+          <tbody className="divide-y divide-slate-100 bg-white font-mono text-[11px]">
             {concepts.map((item) => (
               <tr key={item.id} className="hover:bg-rose-50/30 transition-colors even:bg-slate-50/30">
-                <td className="p-2.5 text-center font-bold text-gray-900 bg-white sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                <td className="p-2 text-center font-bold text-gray-900 bg-white sticky left-0 z-20 w-12 min-w-[48px] max-w-[48px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] text-[10px]">
                   {item.clave}
                 </td>
 
-                <td className="p-2.5 text-left font-sans text-gray-900 font-semibold bg-white sticky left-16 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] border-r border-slate-200 max-w-xs">
-                  <p className="line-clamp-2">{item.descripcion}</p>
+                <td className="p-2 text-left font-sans text-gray-900 font-semibold bg-white sticky left-12 z-20 w-60 min-w-[240px] max-w-[240px] shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] border-r border-slate-200">
+                  <p className="line-clamp-2 leading-tight">{item.descripcion}</p>
                 </td>
 
-                <td className="p-2.5 text-center font-bold text-gray-500 uppercase">{item.unidad}</td>
-                <td className="p-2.5 text-right font-bold text-gray-900 tabular-nums">{item.cantidad_presupuestada.toLocaleString("es-MX", { maximumFractionDigits: 2 })}</td>
-                <td className="p-2.5 text-right text-gray-700 tabular-nums">{formatCurrency(item.precio_unitario)}</td>
-                <td className="p-2.5 text-right font-black text-[#C8102E] bg-rose-50/30 border-r border-slate-200 tabular-nums">{formatCurrency(item.importe_presupuestado)}</td>
+                <td className="p-2 text-center font-bold text-gray-500 uppercase w-12 min-w-[48px] max-w-[48px] text-[10px]">{item.unidad}</td>
+                <td className="p-2 text-right font-bold text-gray-900 tabular-nums w-24 min-w-[96px] max-w-[96px]">{item.cantidad_presupuestada.toLocaleString("es-MX", { maximumFractionDigits: 2 })}</td>
+                <td className="p-2 text-right text-gray-700 tabular-nums w-24 min-w-[96px] max-w-[96px]">{formatCurrency(item.precio_unitario)}</td>
 
-                <td className="p-2.5 text-right font-bold text-emerald-800 bg-emerald-50/40 tabular-nums">{item.cantidad_acumulada.toLocaleString("es-MX", { maximumFractionDigits: 2 })}</td>
-                <td className="p-2.5 text-right font-black text-emerald-800 bg-emerald-50/40 border-r border-slate-200 tabular-nums">{formatCurrency(item.importe_acumulado)}</td>
+                <td className="p-2 sticky left-[288px] z-20 w-28 min-w-[112px] max-w-[112px] text-right font-black text-[#C8102E] bg-[#FFF0F2] border-r border-rose-200 tabular-nums shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{formatCurrency(item.importe_presupuestado)}</td>
 
-                <td className="p-2.5 text-right font-bold text-amber-800 bg-amber-50/40 tabular-nums">{item.cantidad_pendiente.toLocaleString("es-MX", { maximumFractionDigits: 2 })}</td>
-                <td className="p-2.5 text-right font-black text-amber-800 bg-amber-50/40 border-r border-slate-200 tabular-nums">{formatCurrency(item.importe_pendiente)}</td>
+                <td className="p-2 sticky left-[400px] z-20 w-20 min-w-[80px] max-w-[80px] text-right font-bold text-emerald-800 bg-[#EDFDF5] tabular-nums shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{item.cantidad_acumulada.toLocaleString("es-MX", { maximumFractionDigits: 2 })}</td>
+                <td className="p-2 sticky left-[480px] z-20 w-24 min-w-[96px] max-w-[96px] text-right font-black text-emerald-800 bg-[#EDFDF5] border-r border-emerald-200 tabular-nums shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{formatCurrency(item.importe_acumulado)}</td>
+
+                <td className="p-2 sticky left-[576px] z-20 w-24 min-w-[96px] max-w-[96px] text-right font-bold text-amber-800 bg-[#FFFBEB] tabular-nums shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">{item.cantidad_pendiente.toLocaleString("es-MX", { maximumFractionDigits: 2 })}</td>
+                <td className="p-2 sticky left-[672px] z-20 w-28 min-w-[112px] max-w-[112px] text-right font-black text-amber-800 bg-[#FFFBEB] border-r border-amber-200 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.15)] tabular-nums">{formatCurrency(item.importe_pendiente)}</td>
 
                 {WEEKS.map((semNum) => {
                   const semData = item.semanas?.[semNum];
                   return (
                     <Fragment key={semNum}>
-                      <td className="p-1.5 text-right">
+                      <td className="p-1.5 text-right w-24 min-w-[96px]">
                         {canEdit ? (
                           <input
                             type="number"
