@@ -19,17 +19,27 @@ export default function AddConceptModal({ onClose, onAdd }: AddConceptModalProps
   const [unidad, setUnidad] = useState("M2");
   const [cantidad, setCantidad] = useState("");
   const [precio, setPrecio] = useState("");
+  const [showWarning, setShowWarning] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!clave.trim() || !descripcion.trim()) return;
 
+    const cantNum = parseFloat(cantidad) || 0;
+    const puNum = parseFloat(precio) || 0;
+
+    // Si la cantidad o el precio unitario están en 0 y no se ha mostrado la advertencia aún
+    if ((cantNum <= 0 || puNum <= 0) && !showWarning) {
+      setShowWarning(true);
+      return;
+    }
+
     onAdd({
       clave: clave.trim(),
       descripcion: descripcion.trim(),
       unidad: unidad.trim() || "M2",
-      cantidad: parseFloat(cantidad) || 0,
-      precioUnitario: parseFloat(precio) || 0,
+      cantidad: cantNum,
+      precioUnitario: puNum,
     });
   };
 
@@ -49,7 +59,10 @@ export default function AddConceptModal({ onClose, onAdd }: AddConceptModalProps
             <input
               type="text"
               value={clave}
-              onChange={(e) => setClave(e.target.value)}
+              onChange={(e) => {
+                setClave(e.target.value);
+                setShowWarning(false);
+              }}
               className="w-full px-3 py-2 border border-slate-300 rounded-xl text-gray-900 font-bold outline-none focus:ring-2 focus:ring-[#C8102E]"
               placeholder="Ej. 1, 2A, EXT-01"
               required
@@ -61,7 +74,10 @@ export default function AddConceptModal({ onClose, onAdd }: AddConceptModalProps
             <textarea
               rows={3}
               value={descripcion}
-              onChange={(e) => setDescripcion(e.target.value)}
+              onChange={(e) => {
+                setDescripcion(e.target.value);
+                setShowWarning(false);
+              }}
               className="w-full px-3 py-2 border border-slate-300 rounded-xl text-gray-900 font-semibold outline-none focus:ring-2 focus:ring-[#C8102E]"
               placeholder="Descripción detallada del concepto..."
               required
@@ -85,8 +101,15 @@ export default function AddConceptModal({ onClose, onAdd }: AddConceptModalProps
                 type="number"
                 step="0.01"
                 value={cantidad}
-                onChange={(e) => setCantidad(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-xl text-gray-900 font-bold outline-none focus:ring-2 focus:ring-[#C8102E]"
+                onChange={(e) => {
+                  setCantidad(e.target.value);
+                  setShowWarning(false);
+                }}
+                className={`w-full px-3 py-2 border rounded-xl font-bold outline-none focus:ring-2 focus:ring-[#C8102E] ${
+                  showWarning && (parseFloat(cantidad) || 0) <= 0
+                    ? "border-amber-400 bg-amber-50 text-amber-900"
+                    : "border-slate-300 text-gray-900"
+                }`}
                 placeholder="0.00"
               />
             </div>
@@ -96,12 +119,31 @@ export default function AddConceptModal({ onClose, onAdd }: AddConceptModalProps
                 type="number"
                 step="0.01"
                 value={precio}
-                onChange={(e) => setPrecio(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-xl text-gray-900 font-bold outline-none focus:ring-2 focus:ring-[#C8102E]"
+                onChange={(e) => {
+                  setPrecio(e.target.value);
+                  setShowWarning(false);
+                }}
+                className={`w-full px-3 py-2 border rounded-xl font-bold outline-none focus:ring-2 focus:ring-[#C8102E] ${
+                  showWarning && (parseFloat(precio) || 0) <= 0
+                    ? "border-amber-400 bg-amber-50 text-amber-900"
+                    : "border-slate-300 text-gray-900"
+                }`}
                 placeholder="0.00"
               />
             </div>
           </div>
+
+          {showWarning && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-900 p-2.5 rounded-xl text-[11px] font-medium space-y-0.5 animate-fadeIn">
+              <p className="font-bold flex items-center gap-1 text-amber-800">
+                <svg className="w-4 h-4 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                Advertencia: Concepto Vacío
+              </p>
+              <p>Estás agregando este concepto con Cantidad o P. Unitario en <strong>$0.00</strong>. Haz clic de nuevo en <strong>"Confirmar y Agregar"</strong> para insertarlo.</p>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
             <button
@@ -113,9 +155,13 @@ export default function AddConceptModal({ onClose, onAdd }: AddConceptModalProps
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-[#C8102E] hover:bg-[#a00d24] text-white rounded-xl text-xs font-bold shadow-sm"
+              className={`px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition-colors ${
+                showWarning
+                  ? "bg-amber-600 hover:bg-amber-700 text-white"
+                  : "bg-[#C8102E] hover:bg-[#a00d24] text-white"
+              }`}
             >
-              Agregar al Catálogo
+              {showWarning ? "⚠️ Confirmar y Agregar" : "Agregar al Catálogo"}
             </button>
           </div>
         </form>
