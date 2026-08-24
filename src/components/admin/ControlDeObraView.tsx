@@ -184,16 +184,20 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
       Number(r.egreso_seguro_nomina_indirecta || 0) +
       Number(r.egreso_gastos_indirectos || 0);
 
-    const montoCampo = (directos + indirectosBase) * (Number(r.pct_indirecto_campo || 4.33) / 100);
-    const montoOficina = Number(r.importe_generado || 0) * (Number(r.pct_indirecto_oficina || 3.00) / 100);
+    const gen = Number(r.importe_generado || 0);
 
-    const totalEgresos = directos + indirectosBase + montoCampo + montoOficina;
-    const utilidad = Number(r.importe_generado || 0) - totalEgresos;
-    const pctUtil = Number(r.importe_generado || 0) > 0 ? (utilidad / Number(r.importe_generado)) * 100 : 0;
+    // Porcentaje de campo: (Nómina Indirecta + Seguro Indirecto + Gastos Indirectos) / Importe Generado
+    const pctCampo = gen > 0 ? (indirectosBase / gen) * 100 : 0;
+    const montoOficina = gen * (Number(r.pct_indirecto_oficina || 3.00) / 100);
 
+    const totalEgresos = directos + indirectosBase + montoOficina;
+    const utilidad = gen - totalEgresos;
+    const pctUtil = gen > 0 ? (utilidad / gen) * 100 : 0;
+
+    r.pct_indirecto_campo = pctCampo;
     r.total_egresos_directos = directos;
     r.total_egresos_indirectos = indirectosBase;
-    r.monto_indirecto_campo = montoCampo;
+    r.monto_indirecto_campo = indirectosBase;
     r.monto_indirecto_oficina = montoOficina;
     r.total_egresos = totalEgresos;
     r.importe_utilidad = utilidad;
@@ -941,10 +945,10 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
                       <td className="p-2.5 text-right text-slate-800 tabular-nums">{formatCurrency(report.egreso_nomina_indirecta)}</td>
                       <td className="p-2.5 text-right text-slate-800 tabular-nums">{formatCurrency(report.egreso_seguro_nomina_indirecta)}</td>
                       <td className="p-2.5 text-right text-slate-800 tabular-nums">{formatCurrency(report.egreso_gastos_indirectos)}</td>
-                      <td className="p-2.5 text-right text-slate-700 text-[11px] tabular-nums">{formatCurrency(report.monto_indirecto_campo)}</td>
+                      <td className="p-2.5 text-right font-bold text-slate-900 text-[11px] tabular-nums">{formatPercent(report.pct_indirecto_campo)}</td>
 
                       <td className="p-2.5 text-right font-bold bg-slate-100 text-slate-900 border-r border-slate-200 tabular-nums">
-                        {formatCurrency(report.total_egresos_indirectos + report.monto_indirecto_campo + report.monto_indirecto_oficina)}
+                        {formatCurrency(report.total_egresos_indirectos + report.monto_indirecto_oficina)}
                       </td>
 
                       <td className="p-2.5 text-right font-black bg-slate-100 text-slate-950 border-r border-slate-300 tabular-nums">

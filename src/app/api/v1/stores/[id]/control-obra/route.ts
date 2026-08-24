@@ -17,21 +17,22 @@ function calculateReportTotals(report: StoreControlObraReport): ControlObraCalcu
     Number(report.egreso_seguro_nomina_indirecta || 0) +
     Number(report.egreso_gastos_indirectos || 0);
 
-  const pctCampo = Number(report.pct_indirecto_campo || 4.33);
+  const gen = Number(report.importe_generado || 0);
+
+  // Porcentaje de campo: (Nómina Indirecta + Seguro Indirecto + Gastos Indirectos) / Importe Generado
+  const pctCampo = gen > 0 ? (indirectosBase / gen) * 100 : 0;
   const pctOficina = Number(report.pct_indirecto_oficina || 3.00);
 
-  const montoCampo = (directos + indirectosBase) * (pctCampo / 100);
-  const montoOficina = Number(report.importe_generado || 0) * (pctOficina / 100);
+  const montoCampo = indirectosBase;
+  const montoOficina = gen * (pctOficina / 100);
 
-  const totalEgresos = directos + indirectosBase + montoCampo + montoOficina;
-  const importeUtilidad = Number(report.importe_generado || 0) - totalEgresos;
-  const pctUtilidad =
-    Number(report.importe_generado || 0) > 0
-      ? (importeUtilidad / Number(report.importe_generado)) * 100
-      : 0;
+  const totalEgresos = directos + indirectosBase + montoOficina;
+  const importeUtilidad = gen - totalEgresos;
+  const pctUtilidad = gen > 0 ? (importeUtilidad / gen) * 100 : 0;
 
   return {
     ...report,
+    pct_indirecto_campo: pctCampo,
     total_egresos_directos: directos,
     total_egresos_indirectos: indirectosBase,
     monto_indirecto_campo: montoCampo,
