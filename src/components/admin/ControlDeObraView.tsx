@@ -48,6 +48,7 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
 
   const [editingReport, setEditingReport] = useState<ControlObraCalculatedReport | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [loadingCatalogoAutofill, setLoadingCatalogoAutofill] = useState(false);
 
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [tempPctCampo, setTempPctCampo] = useState(4.33);
@@ -183,20 +184,110 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
       Number(r.egreso_seguro_nomina_indirecta || 0) +
       Number(r.egreso_gastos_indirectos || 0);
 
-    const montoCampo = (directos + indirectosBase) * (Number(r.pct_indirecto_campo || 4.33) / 100);
-    const montoOficina = Number(r.importe_generado || 0) * (Number(r.pct_indirecto_oficina || 3.00) / 100);
+    const gen = Number(r.importe_generado || 0);
 
-    const totalEgresos = directos + indirectosBase + montoCampo + montoOficina;
-    const utilidad = Number(r.importe_generado || 0) - totalEgresos;
-    const pctUtil = Number(r.importe_generado || 0) > 0 ? (utilidad / Number(r.importe_generado)) * 100 : 0;
+    // Porcentaje de campo: (Nómina Indirecta + Seguro Indirecto + Gastos Indirectos) / Importe Generado
+    const pctCampo = gen > 0 ? (indirectosBase / gen) * 100 : 0;
+    const montoOficina = gen * (Number(r.pct_indirecto_oficina || 3.00) / 100);
 
+    const totalEgresos = directos + indirectosBase + montoOficina;
+    const utilidad = gen - totalEgresos;
+    const pctUtil = gen > 0 ? (utilidad / gen) * 100 : 0;
+
+    r.pct_indirecto_campo = pctCampo;
     r.total_egresos_directos = directos;
     r.total_egresos_indirectos = indirectosBase;
-    r.monto_indirecto_campo = montoCampo;
+    r.monto_indirecto_campo = indirectosBase;
     r.monto_indirecto_oficina = montoOficina;
     r.total_egresos = totalEgresos;
     r.importe_utilidad = utilidad;
     r.pct_utilidad = pctUtil;
+  };
+
+  const handleAutofillFromCatalogo = async (semanaNum: number, currentReport?: ControlObraCalculatedReport) => {
+    const targetReport = currentReport || editingReport;
+    if (!targetReport) return;
+
+    setLoadingCatalogoAutofill(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(`/api/v1/stores/${storeId}/catalogo-avances`);
+      if (!res.ok) throw new Error("Error al consultar Catálogo de Avances");
+      const data = await res.json();
+
+      const conceptsList = data.concepts || [];
+      const summaryData = data.summary || {};
+
+      let importeSemana = 0;
+      let acumuladoHastaSemana = 0;
+      let presupuestoTotal = Number(summaryData.presupuesto_total || 0);
+
+      if (presupuestoTotal === 0 && conceptsList.length > 0) {
+        presupuestoTotal = conceptsList.reduce(
+          (sum: number, c: any) => sum + (Number(c.importe_presupuestado) || (Number(c.cantidad_presupuestada || 0) * Number(c.precio_unitario || 0))),
+          0
+        );
+      }
+
+      conceptsList.forEach((c: any) => {
+        const pu = Number(c.precio_unitario || 0);
+        const semanasObj = c.semanas || {};
+
+        // 1. Obtener datos de la semana seleccionada (ej. 1, "1", "01", "Semana 01")
+        const padSemKey = semanaNum < 10 ? `0${semanaNum}` : String(semanaNum);
+        const semData =
+          semanasObj[semanaNum] ||
+          semanasObj[String(semanaNum)] ||
+          semanasObj[padSemKey] ||
+          semanasObj[`Semana ${semanaNum}`] ||
+          semanasObj[`Semana ${padSemKey}`];
+
+        if (semData) {
+          const cantEjec = Number(semData.cantidad_ejecutada ?? semData.cantidad ?? 0);
+          const impEjec = semData.importe_ejecutado !== undefined && semData.importe_ejecutado !== null
+            ? Number(semData.importe_ejecutado)
+            : cantEjec * pu;
+          importeSemana += impEjec;
+        }
+
+        // 2. Obtener acumulado de avance hasta la semana seleccionada
+        Object.entries(semanasObj).forEach(([wKey, wVal]: [string, any]) => {
+          const wNum = parseInt(wKey.replace(/\D/g, ""), 10) || parseInt(wKey, 10);
+          if (!isNaN(wNum) && wNum <= semanaNum) {
+            const cantEjec = Number(wVal?.cantidad_ejecutada ?? wVal?.cantidad ?? 0);
+            const impEjec = wVal?.importe_ejecutado !== undefined && wVal?.importe_ejecutado !== null
+              ? Number(wVal.importe_ejecutado)
+              : cantEjec * pu;
+            acumuladoHastaSemana += impEjec;
+          }
+        });
+      });
+
+      // Si no hay ejecuciones específicas en esa semana pero hay acumulado global
+      if (acumuladoHastaSemana === 0 && Number(summaryData.total_acumulado_ejecutado || 0) > 0) {
+        acumuladoHastaSemana = Number(summaryData.total_acumulado_ejecutado);
+      }
+
+      const pctAvance = presupuestoTotal > 0 ? (acumuladoHastaSemana / presupuestoTotal) * 100 : 0;
+
+      const finalImporte = Number(importeSemana.toFixed(2));
+      const finalPct = Number(pctAvance.toFixed(2));
+
+      const updated = {
+        ...targetReport,
+        importe_generado: finalImporte,
+        pct_avance_programa: finalPct,
+      };
+
+      recalculateTotals(updated);
+      setEditingReport(updated);
+
+      setSuccessMsg(`Importe generado ($${finalImporte.toLocaleString("es-MX")}) y Avance (${finalPct.toFixed(2)}%) cargados desde Catálogo de Avances.`);
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : "No se pudieron obtener datos del Catálogo de Avances");
+    } finally {
+      setLoadingCatalogoAutofill(false);
+    }
   };
 
   const handleAddWeek = () => {
@@ -204,17 +295,17 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
 
     const today = new Date();
     const day = today.getDay(); // 0: Sun, 1: Mon, 2: Tue, 3: Wed, 4: Thu, 5: Fri, 6: Sat
-    const diffToWed = today.getDate() - day + (day < 3 ? -4 : 3); // Miércoles
-    const wednesday = new Date(today.setDate(diffToWed));
-    const thursday = new Date(wednesday);
-    thursday.setDate(wednesday.getDate() + 8); // Jueves (+8 días de corte)
+    const diffToThu = today.getDate() - day + (day < 4 ? -3 : 4); // Jueves
+    const thursday = new Date(today.setDate(diffToThu));
+    const wednesday = new Date(thursday);
+    wednesday.setDate(thursday.getDate() + 6); // Miércoles (+6 días)
 
     const newTempReport: ControlObraCalculatedReport & { isTemp?: boolean } = {
       id: Date.now(),
       store_id: storeId,
       semana_numero: nextSemanaNum,
-      fecha_inicio: wednesday.toISOString().split("T")[0],
-      fecha_fin: thursday.toISOString().split("T")[0],
+      fecha_inicio: thursday.toISOString().split("T")[0],
+      fecha_fin: wednesday.toISOString().split("T")[0],
       importe_generado: 0,
       egreso_maquinaria_equipo: 0,
       egreso_nomina_directa: 0,
@@ -244,6 +335,9 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
     recalculateTotals(newTempReport);
     setEditingReport(newTempReport);
     setShowEditModal(true);
+
+    // Auto-completar importe_generado y pct_avance_programa desde Catálogo de Avances
+    handleAutofillFromCatalogo(nextSemanaNum, newTempReport);
   };
 
   const openEditModal = (report: ControlObraCalculatedReport) => {
@@ -260,7 +354,6 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
     setSuccessMsg(null);
     try {
       recalculateTotals(report);
-
       const res = await fetch(`/api/v1/stores/${storeId}/control-obra`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -852,10 +945,10 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
                       <td className="p-2.5 text-right text-slate-800 tabular-nums">{formatCurrency(report.egreso_nomina_indirecta)}</td>
                       <td className="p-2.5 text-right text-slate-800 tabular-nums">{formatCurrency(report.egreso_seguro_nomina_indirecta)}</td>
                       <td className="p-2.5 text-right text-slate-800 tabular-nums">{formatCurrency(report.egreso_gastos_indirectos)}</td>
-                      <td className="p-2.5 text-right text-slate-700 text-[11px] tabular-nums">{formatCurrency(report.monto_indirecto_campo)}</td>
+                      <td className="p-2.5 text-right font-bold text-slate-900 text-[11px] tabular-nums">{formatPercent(report.pct_indirecto_campo)}</td>
 
                       <td className="p-2.5 text-right font-bold bg-slate-100 text-slate-900 border-r border-slate-200 tabular-nums">
-                        {formatCurrency(report.total_egresos_indirectos + report.monto_indirecto_campo + report.monto_indirecto_oficina)}
+                        {formatCurrency(report.total_egresos_indirectos + report.monto_indirecto_oficina)}
                       </td>
 
                       <td className="p-2.5 text-right font-black bg-slate-100 text-slate-950 border-r border-slate-300 tabular-nums">
@@ -1052,13 +1145,30 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
             <div className="space-y-6">
               {/* Sección 1: Fechas y Período */}
               <div className="bg-rose-50/40 p-4 rounded-2xl border border-rose-100 space-y-3">
-                <h4 className="text-xs font-bold text-[#C8102E] uppercase tracking-wider flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-[#C8102E] text-white flex items-center justify-center text-[10px]">1</span>
-                  Período de Corte (Miércoles a Jueves)
-                </h4>
+                <div className="flex justify-between items-center">
+                  <h4 className="text-xs font-bold text-[#C8102E] uppercase tracking-wider flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-[#C8102E] text-white flex items-center justify-center text-[10px]">1</span>
+                    Período de Corte (Jueves a Miércoles)
+                  </h4>
+                  <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-xl border border-rose-200 shadow-sm">
+                    <label className="text-xs font-extrabold text-[#C8102E]">Semana #:</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={editingReport.semana_numero}
+                      onChange={(e) => {
+                        const semNum = parseInt(e.target.value, 10) || 1;
+                        const updated = { ...editingReport, semana_numero: semNum };
+                        setEditingReport(updated);
+                        handleAutofillFromCatalogo(semNum, updated);
+                      }}
+                      className="w-14 h-7 px-1 bg-rose-50 border border-rose-300 rounded-lg text-xs font-black text-[#C8102E] text-center outline-none focus:ring-2 focus:ring-[#C8102E]"
+                    />
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de Inicio (Miércoles)</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de Inicio (Jueves)</label>
                     <input
                       type="date"
                       value={editingReport.fecha_inicio}
@@ -1071,7 +1181,7 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de Fin (Jueves)</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de Fin (Miércoles)</label>
                     <input
                       type="date"
                       value={editingReport.fecha_fin}
@@ -1088,10 +1198,33 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
 
               {/* Sección 2: Ingresos y Avance */}
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
-                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-slate-800 text-white flex items-center justify-center text-[10px]">2</span>
-                  Ingresos Generados y Avance Físico
-                </h4>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-slate-800 text-white flex items-center justify-center text-[10px]">2</span>
+                    Ingresos Generados y Avance Físico
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => handleAutofillFromCatalogo(editingReport.semana_numero)}
+                    disabled={loadingCatalogoAutofill}
+                    className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-[#C8102E] border border-rose-200 rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                    title="Obtener importe generado y % de avance automáticamente desde el Catálogo de Avances"
+                  >
+                    {loadingCatalogoAutofill ? (
+                      <>
+                        <div className="w-3 h-3 border-2 border-[#C8102E] border-t-transparent rounded-full animate-spin" />
+                        Obteniendo...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-3.5 h-3.5 text-[#C8102E]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        🔄 Traer de Catálogo de Avances
+                      </>
+                    )}
+                  </button>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">Importe Generado ($ MXN)</label>
@@ -1100,7 +1233,7 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
                       min="0"
                       step="0.01"
                       inputMode="decimal"
-                      value={editingReport.importe_generado || ""}
+                      value={editingReport.importe_generado ?? ""}
                       onChange={(e) => {
                         const updated = { ...editingReport, importe_generado: parseFloat(e.target.value) || 0 };
                         recalculateTotals(updated);
@@ -1118,7 +1251,7 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
                       max="100"
                       step="0.1"
                       inputMode="decimal"
-                      value={editingReport.pct_avance_programa || ""}
+                      value={editingReport.pct_avance_programa ?? ""}
                       onChange={(e) => {
                         const updated = { ...editingReport, pct_avance_programa: parseFloat(e.target.value) || 0 };
                         recalculateTotals(updated);
@@ -1129,6 +1262,13 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
                     />
                   </div>
                 </div>
+
+                <p className="text-[11px] text-slate-500 bg-white p-2.5 rounded-xl border border-slate-200 flex items-center gap-1.5">
+                  <span className="text-amber-500">💡</span>
+                  <span>
+                    <strong>Cálculo Automático:</strong> Importe Generado = Suma de importes ejecutados en Semana #{editingReport.semana_numero} del Catálogo de Avances. Avance % = Acumulado total ejecutado ÷ Presupuesto total.
+                  </span>
+                </p>
               </div>
 
               {/* Sección 3: Egresos Directos */}
