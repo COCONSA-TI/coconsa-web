@@ -9,6 +9,7 @@ import type {
 import CatalogoAvancesKPICards from "./catalogo-avances/CatalogoAvancesKPICards";
 import CatalogoAvancesTable from "./catalogo-avances/CatalogoAvancesTable";
 import AddConceptModal from "./catalogo-avances/AddConceptModal";
+import ConfirmEmptyConceptsModal from "./catalogo-avances/ConfirmEmptyConceptsModal";
 
 interface CatalogoAvancesViewProps {
   storeId: number;
@@ -31,6 +32,8 @@ export default function CatalogoAvancesView({ storeId, storeName, canEdit }: Cat
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showWeeksModal, setShowWeeksModal] = useState(false);
+  const [showConfirmEmptyModal, setShowConfirmEmptyModal] = useState(false);
+  const [emptyConceptsList, setEmptyConceptsList] = useState<CatalogoConcepto[]>([]);
   const [tempWeeksInput, setTempWeeksInput] = useState<string>("5");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -299,7 +302,7 @@ export default function CatalogoAvancesView({ storeId, storeName, canEdit }: Cat
     setSuccessMsg("Concepto agregado al catálogo.");
   };
 
-  const handleSaveCatalog = async () => {
+  const executeSaveCatalog = async () => {
     setSavingData(true);
     setErrorMsg(null);
     try {
@@ -311,10 +314,25 @@ export default function CatalogoAvancesView({ storeId, storeName, canEdit }: Cat
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Error al guardar el catálogo");
       setSuccessMsg("Catálogo de Avances guardado con éxito en la base de datos.");
+      setShowConfirmEmptyModal(false);
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : "Error al guardar datos en BD");
     } finally {
       setSavingData(false);
+    }
+  };
+
+  const handleSaveCatalog = () => {
+    // Detectar conceptos vacíos (cantidad <= 0 o precio_unitario <= 0)
+    const empties = concepts.filter(
+      (c) => Number(c.cantidad_presupuestada || 0) <= 0 || Number(c.precio_unitario || 0) <= 0
+    );
+
+    if (empties.length > 0) {
+      setEmptyConceptsList(empties);
+      setShowConfirmEmptyModal(true);
+    } else {
+      executeSaveCatalog();
     }
   };
 
@@ -529,6 +547,16 @@ export default function CatalogoAvancesView({ storeId, storeName, canEdit }: Cat
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN DE CONCEPTOS VACÍOS */}
+      {showConfirmEmptyModal && (
+        <ConfirmEmptyConceptsModal
+          emptyConcepts={emptyConceptsList}
+          onClose={() => setShowConfirmEmptyModal(false)}
+          onConfirm={executeSaveCatalog}
+          isSaving={savingData}
+        />
       )}
     </div>
   );
