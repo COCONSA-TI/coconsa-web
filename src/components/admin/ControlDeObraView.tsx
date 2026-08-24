@@ -295,17 +295,17 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
 
     const today = new Date();
     const day = today.getDay(); // 0: Sun, 1: Mon, 2: Tue, 3: Wed, 4: Thu, 5: Fri, 6: Sat
-    const diffToWed = today.getDate() - day + (day < 3 ? -4 : 3); // Miércoles
-    const wednesday = new Date(today.setDate(diffToWed));
-    const thursday = new Date(wednesday);
-    thursday.setDate(wednesday.getDate() + 8); // Jueves (+8 días de corte)
+    const diffToThu = today.getDate() - day + (day < 4 ? -3 : 4); // Jueves
+    const thursday = new Date(today.setDate(diffToThu));
+    const wednesday = new Date(thursday);
+    wednesday.setDate(thursday.getDate() + 6); // Miércoles (+6 días)
 
     const newTempReport: ControlObraCalculatedReport & { isTemp?: boolean } = {
       id: Date.now(),
       store_id: storeId,
       semana_numero: nextSemanaNum,
-      fecha_inicio: wednesday.toISOString().split("T")[0],
-      fecha_fin: thursday.toISOString().split("T")[0],
+      fecha_inicio: thursday.toISOString().split("T")[0],
+      fecha_fin: wednesday.toISOString().split("T")[0],
       importe_generado: 0,
       egreso_maquinaria_equipo: 0,
       egreso_nomina_directa: 0,
@@ -1148,7 +1148,7 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
                 <div className="flex justify-between items-center">
                   <h4 className="text-xs font-bold text-[#C8102E] uppercase tracking-wider flex items-center gap-2">
                     <span className="w-5 h-5 rounded-full bg-[#C8102E] text-white flex items-center justify-center text-[10px]">1</span>
-                    Período de Corte (Miércoles a Jueves)
+                    Período de Corte (Jueves a Miércoles)
                   </h4>
                   <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-xl border border-rose-200 shadow-sm">
                     <label className="text-xs font-extrabold text-[#C8102E]">Semana #:</label>
@@ -1168,7 +1168,7 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de Inicio (Miércoles)</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de Inicio (Jueves)</label>
                     <input
                       type="date"
                       value={editingReport.fecha_inicio}
@@ -1181,7 +1181,7 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de Fin (Jueves)</label>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de Fin (Miércoles)</label>
                     <input
                       type="date"
                       value={editingReport.fecha_fin}
