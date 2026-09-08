@@ -19,6 +19,7 @@ interface Order {
   items_count: number;
   first_item_name: string | null;
   is_urgent: boolean;
+  is_piecework: boolean;
   is_definitive_rejection: boolean;
   my_department_status?: 'pending' | 'approved' | 'rejected' | null;
   current_department_name?: string | null;
@@ -966,6 +967,14 @@ function OrdenesCompraContent() {
                               Urgente
                             </span>
                           )}
+                          {order.is_piecework && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-50 text-red-700 border border-red-200 rounded text-xs font-semibold">
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                              </svg>
+                              Destajo
+                            </span>
+                          )}
                           <span className="text-gray-400">·</span>
                           <span className="text-sm text-gray-500">{dateInfo.relative}</span>
                         </div>
@@ -1083,6 +1092,14 @@ function OrdenesCompraContent() {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                                 </svg>
                                 Urgente
+                              </span>
+                            )}
+                            {order.is_piecework && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-50 text-red-700 border border-red-200 rounded text-xs font-semibold">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                                Destajo
                               </span>
                             )}
                           </div>

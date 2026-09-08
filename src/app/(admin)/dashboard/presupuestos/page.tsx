@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import type { StoreInsumoSearchResult, InsumoCategoria } from "@/types/database";
+import ControlDeObraView from "@/components/admin/ControlDeObraView";
+import CatalogoAvancesView from "@/components/admin/CatalogoAvancesView";
 
 interface Store {
   id: number;
@@ -152,6 +154,14 @@ function IconChartBar({ className = "w-8 h-8" }: { className?: string }) {
   );
 }
 
+function IconX({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  );
+}
+
 // ─── Modal de confirmación de borrado ────────────────────────────────────────
 
 function DeleteConfirmModal({
@@ -258,10 +268,21 @@ export default function PresupuestosPage() {
   const [rejectionReasonInput, setRejectionReasonInput] = useState<string>("Solicitud no aprobada por Dirección");
 
   // ── Vista General de Autorizaciones ──────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<"presupuesto" | "autorizaciones">("presupuesto");
+  const [activeTab, setActiveTab] = useState<"presupuesto" | "autorizaciones" | "control_obra" | "catalogo_avances">("presupuesto");
   const [allApprovals, setAllApprovals] = useState<any[]>([]);
   const [loadingApprovals, setLoadingApprovals] = useState(false);
   const [approvalsFilter, setApprovalsFilter] = useState<"pending_approval" | "approved" | "rejected" | "all">("pending_approval");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("coconsa_presupuestos_active_tab");
+    if (saved && (saved === "presupuesto" || saved === "autorizaciones" || saved === "control_obra" || saved === "catalogo_avances")) {
+      setActiveTab(saved as any);
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("coconsa_presupuestos_active_tab", activeTab);
+  }, [activeTab]);
 
   const fetchGlobalApprovals = useCallback(async () => {
     setLoadingApprovals(true);
@@ -299,10 +320,10 @@ export default function PresupuestosPage() {
   const handleAddWeek = () => {
     if (!selectedStoreId) return;
     const today = new Date();
-    const day = today.getDay();
-    const diff = today.getDate() - day + (day === 0 ? -6 : 1); // lunes de esta semana
-    const monday = new Date(today.setDate(diff));
-    const formattedDate = monday.toISOString().split("T")[0];
+    const day = today.getDay(); // 0: Sun, 1: Mon, 2: Tue, 3: Wed, 4: Thu, 5: Fri, 6: Sat
+    const diffToWednesday = today.getDate() - day + (day < 3 ? -4 : 3); // Miércoles de esta semana
+    const wednesday = new Date(today.setDate(diffToWednesday));
+    const formattedDate = wednesday.toISOString().split("T")[0];
 
     if (weeklyReports.some((r) => r.week_start_date === formattedDate)) {
       setUploadError("Ya existe un reporte para esta semana.");
@@ -562,14 +583,13 @@ export default function PresupuestosPage() {
   // ── Fetch del resumen ───────────────────────────────────────────────────
   const fetchSummary = useCallback(async (storeId: number) => {
     setLoadingSummary(true);
-    setSummary(null);
     try {
       const res = await fetch(`/api/v1/stores/${storeId}/budget`);
       if (!res.ok) throw new Error("Error");
       const data = await res.json();
       setSummary(data);
     } catch {
-      setSummary(null);
+      // mantener estado anterior en falla
     } finally {
       setLoadingSummary(false);
     }
@@ -849,19 +869,160 @@ export default function PresupuestosPage() {
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-          {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Control de Presupuesto por Obra</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Carga el PDF de Explosión de Insumos para habilitar el control presupuestal de materiales y compras.
-            </p>
+          {/* Banner del Módulo con Diseño Oficial COCONSA */}
+          <div className="bg-gradient-to-r from-[#C8102E] to-red-700 rounded-2xl shadow-lg p-6 text-white mb-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-bold">
+                  {activeTab === "control_obra"
+                    ? "Control Financiero de Obra"
+                    : activeTab === "catalogo_avances"
+                    ? "Catálogo de Conceptos y Avances"
+                    : "Control de Presupuesto por Obra"}
+                </h1>
+                <p className="text-red-100 text-sm mt-1">
+                  {activeTab === "control_obra"
+                    ? "Plantilla ejecutiva semanal de ingresos, egresos directos/indirectos y margen de utilidad."
+                    : activeTab === "catalogo_avances"
+                    ? "Programa de obra, conceptos presupuestados y seguimiento semanal de ejecuciones."
+                    : "Gestión presupuestal de insumos por centro de costos y control de costos autorizados."}
+                </p>
+              </div>
+
+              {/* Pestañas Superiores integradas en el Banner */}
+              <div className="flex bg-white/20 backdrop-blur-md p-1.5 rounded-xl gap-1.5 text-xs font-bold border border-white/30 self-start md:self-auto flex-wrap sm:flex-nowrap">
+                <button
+                  onClick={() => setActiveTab("presupuesto")}
+                  className={`px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
+                    activeTab === "presupuesto"
+                      ? "bg-white text-[#C8102E] shadow-md font-extrabold"
+                      : "text-white/90 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  <IconDocument className="w-4 h-4" />
+                  <span>Explosión de Insumos</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("catalogo_avances")}
+                  className={`px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
+                    activeTab === "catalogo_avances"
+                      ? "bg-white text-[#C8102E] shadow-md font-extrabold"
+                      : "text-white/90 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  <IconDocument className="w-4 h-4" />
+                  <span>Catálogo de Avances</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab("control_obra")}
+                  className={`px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
+                    activeTab === "control_obra"
+                      ? "bg-white text-[#C8102E] shadow-md font-extrabold"
+                      : "text-white/90 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  <IconChartBar className="w-4 h-4" />
+                  <span>Control de Obra</span>
+                </button>
+              </div>
+            </div>
           </div>
 
-          {/* Selector de Obra y Botón de enlace a Autorizaciones */}
+          {/* Renderear Vista según Pestaña Activa */}
+          {activeTab === "control_obra" ? (
+            <div className="space-y-6">
+              {/* Selector de Obra en Control de Obra */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="max-w-md">
+                  <label className="block text-sm font-semibold text-gray-900 mb-1.5">
+                    Centro de Costos / Obra
+                  </label>
+                  <select
+                    value={selectedStoreId ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedStoreId(val ? parseInt(val, 10) : null);
+                    }}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#C8102E] focus:border-transparent text-sm font-medium text-gray-900 bg-white shadow-sm outline-none"
+                  >
+                    <option value="">-- Selecciona una obra --</option>
+                    {stores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {selectedStoreId && selectedStore ? (
+                <ControlDeObraView
+                  storeId={selectedStoreId}
+                  storeName={selectedStore.name}
+                  canEdit={canEditCostoAutorizado}
+                />
+              ) : (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-16 text-center">
+                  <div className="w-14 h-14 rounded-full bg-rose-50 text-[#C8102E] flex items-center justify-center mx-auto mb-3">
+                    <IconChartBar className="w-7 h-7 text-[#C8102E]" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">Selecciona una Obra</h3>
+                  <p className="text-xs text-gray-500 mt-1">Elige un Centro de Costos en el menú desplegable para abrir su panel financiero de Control de Obra.</p>
+                </div>
+              )}
+            </div>
+          ) : activeTab === "catalogo_avances" ? (
+            <div className="space-y-6">
+              {/* Selector de Obra en Catálogo de Avances */}
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <div className="max-w-md">
+                  <label className="block text-sm font-semibold text-gray-900 mb-1.5">
+                    Centro de Costos / Obra
+                  </label>
+                  <select
+                    value={selectedStoreId ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedStoreId(val ? parseInt(val, 10) : null);
+                    }}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#C8102E] focus:border-transparent text-sm font-medium text-gray-900 bg-white shadow-sm outline-none"
+                  >
+                    <option value="">-- Selecciona una obra --</option>
+                    {stores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {selectedStoreId && selectedStore ? (
+                <CatalogoAvancesView
+                  storeId={selectedStoreId}
+                  storeName={selectedStore.name}
+                  canEdit={canEditCostoAutorizado}
+                />
+              ) : (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-16 text-center">
+                  <div className="w-14 h-14 rounded-full bg-rose-50 text-[#C8102E] flex items-center justify-center mx-auto mb-3">
+                    <IconDocument className="w-7 h-7 text-[#C8102E]" />
+                  </div>
+                  <h3 className="text-lg font-bold text-gray-900">Selecciona una Obra</h3>
+                  <p className="text-xs text-gray-500 mt-1">Elige un Centro de Costos en el menú desplegable para abrir su Catálogo de Avances.</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Selector de Obra y Botón de enlace a Autorizaciones */}
+
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex-1 max-w-md">
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                <label className="block text-sm font-semibold text-gray-900 mb-1.5">
                   Centro de Costos / Obra
                 </label>
                 {loadingStores ? (
@@ -873,14 +1034,12 @@ export default function PresupuestosPage() {
                     onChange={(e) => {
                       const val = e.target.value;
                       setSelectedStoreId(val ? parseInt(val, 10) : null);
-                      setSummary(null);
-                      setInsumos([]);
                       setUploadError(null);
                       setUploadSuccess(null);
                       setSelectedCategoria("all");
                       setSearchQuery("");
                     }}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white font-medium"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#C8102E] focus:border-transparent text-sm font-medium text-gray-900 bg-white shadow-sm outline-none"
                   >
                     <option value="">Selecciona una obra...</option>
                     {stores.map((store) => (
@@ -1085,15 +1244,15 @@ export default function PresupuestosPage() {
                     onClick={() => setSelectedCategoria("all")}
                     className={`bg-white rounded-xl shadow-sm border-2 p-5 text-left hover:shadow-md transition-all ${
                       selectedCategoria === "all"
-                        ? "border-indigo-400 shadow-md"
+                        ? "border-[#C8102E] shadow-md"
                         : "border-gray-200"
                     }`}
                   >
                     <div className="flex items-center justify-between mb-3">
-                      <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-indigo-50 text-indigo-700">
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-rose-50 text-[#C8102E]">
                         <IconChartBar className="w-5 h-5" />
                       </div>
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                      <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-rose-100 text-[#C8102E]">
                         {summary.totalInsumos}
                       </span>
                     </div>
@@ -1186,8 +1345,8 @@ export default function PresupuestosPage() {
                     <div className="flex flex-wrap gap-2">
                       <button
                         onClick={() => setSelectedCategoria("all")}
-                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${selectedCategoria === "all"
-                          ? "bg-gray-900 text-white"
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${selectedCategoria === "all"
+                          ? "bg-[#C8102E] text-white shadow-sm"
                           : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                           }`}
                       >
@@ -1201,7 +1360,7 @@ export default function PresupuestosPage() {
                             key={cat}
                             onClick={() => setSelectedCategoria(selectedCategoria === cat ? "all" : cat)}
                             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${selectedCategoria === cat
-                              ? `${cfg.bg} ${cfg.text} ring-2 ring-offset-1 ring-current`
+                              ? `${cfg.bg} ${cfg.text} ring-2 ring-offset-1 ring-current font-bold`
                               : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                               }`}
                           >
@@ -1222,7 +1381,7 @@ export default function PresupuestosPage() {
                         placeholder="Buscar por clave o descripción..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                        className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C8102E] focus:border-transparent text-gray-900"
                       />
                     </div>
                   </div>
@@ -1231,7 +1390,7 @@ export default function PresupuestosPage() {
                   <div className="overflow-x-auto">
                     {loadingInsumos ? (
                       <div className="p-10 text-center">
-                        <div className="inline-block w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                        <div className="inline-block w-6 h-6 border-2 border-[#C8102E] border-t-transparent rounded-full animate-spin" />
                         <p className="text-sm text-gray-500 mt-2">Cargando insumos...</p>
                       </div>
                     ) : insumos.length === 0 ? (
@@ -1244,7 +1403,7 @@ export default function PresupuestosPage() {
                     ) : (
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                          <tr className="bg-slate-50 text-slate-700 font-sans text-xs font-extrabold uppercase tracking-wider border-b border-slate-200">
                             <th className="px-4 py-3 text-left">Clave / Cat.</th>
                             <th className="px-4 py-3 text-left">Descripción</th>
                             <th className="px-4 py-3 text-center">Unidad</th>
@@ -1645,24 +1804,35 @@ export default function PresupuestosPage() {
                                   <td className="px-4 py-3">
                                     {report.isTemp ? (
                                       <div className="flex flex-col gap-1">
-                                        <label className="text-[10px] font-semibold text-indigo-600 uppercase">Selecciona el lunes de inicio:</label>
+                                        <label className="text-[10px] font-semibold text-indigo-600 uppercase">Selecciona el miércoles de inicio:</label>
                                         <input
                                           type="date"
                                           value={report.week_start_date}
                                           onChange={(e) => {
-                                            const chosenDate = new Date(e.target.value + "T00:00:00");
-                                            const day = chosenDate.getDay();
-                                            const diff = chosenDate.getDate() - day + (day === 0 ? -6 : 1);
-                                            const monday = new Date(chosenDate.setDate(diff));
-                                            const formatted = monday.toISOString().split("T")[0];
-                                            
+                                            const val = e.target.value;
+                                            if (!val) return;
+                                            const parts = val.split("-").map(Number);
+                                            if (parts.length !== 3) return;
+                                            const [year, month, dayStr] = parts;
+                                            const chosen = new Date(year, month - 1, dayStr);
+                                            if (isNaN(chosen.getTime())) return;
+
+                                            const dayOfWeek = chosen.getDay(); // 0: Sun, 1: Mon, 2: Tue, 3: Wed, 4: Thu, 5: Fri, 6: Sat
+                                            const diffToWed = chosen.getDate() - dayOfWeek + (dayOfWeek < 3 ? -4 : 3);
+                                            const wednesday = new Date(year, month - 1, diffToWed);
+
+                                            const y = wednesday.getFullYear();
+                                            const m = String(wednesday.getMonth() + 1).padStart(2, "0");
+                                            const d = String(wednesday.getDate()).padStart(2, "0");
+                                            const formatted = `${y}-${m}-${d}`;
+
                                             if (weeklyReports.some((r) => r.id !== report.id && r.week_start_date === formatted)) {
                                               setUploadError("Ya existe un reporte registrado para esa semana.");
                                               return;
                                             }
                                             updateReportField(report.id, "week_start_date", formatted);
                                           }}
-                                          className="px-2 py-1.5 border border-indigo-300 rounded focus:ring-2 focus:ring-indigo-300 outline-none text-gray-900 bg-indigo-50/30"
+                                          className="px-2 py-1.5 border border-indigo-300 rounded focus:ring-2 focus:ring-indigo-300 outline-none text-gray-900 bg-indigo-50/30 text-xs font-semibold"
                                         />
                                         <span className="text-[10px] text-gray-400 mt-1">{getWeekRangeLabel(report.week_start_date)}</span>
                                       </div>
@@ -1713,17 +1883,17 @@ export default function PresupuestosPage() {
                                       <div className="flex flex-col items-center gap-1">
                                         <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300 inline-flex items-center gap-1">
                                           <IconWarning className="w-3.5 h-3.5 text-amber-600" />
-                                          Pendiente Dirección
+                                          Pendiente
                                         </span>
                                         {report.exceeded_categories && (
                                           <span className="text-[10px] text-amber-700 font-medium">Excede: {report.exceeded_categories}</span>
                                         )}
-                                        <span className="text-[10px] text-gray-500 italic">Esperando decisión de Dirección</span>
                                       </div>
                                     ) : isRejected ? (
                                       <div className="flex flex-col items-center gap-1">
                                         <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800 border border-red-300 inline-flex items-center gap-1">
-                                          ❌ Rechazado
+                                          <IconX className="w-3.5 h-3.5 text-red-600" />
+                                          Rechazado
                                         </span>
                                         <span className="text-[10px] text-red-600 font-medium">
                                           {report.rejection_reason || "Solicitud no aprobada por Dirección"}
@@ -1750,7 +1920,7 @@ export default function PresupuestosPage() {
                                         placeholder="ej. Avance de cimentación..."
                                         value={report.comments || ""}
                                         onChange={(e) => updateReportField(report.id, "comments", e.target.value)}
-                                        className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900"
+                                        className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 bg-white text-xs"
                                       />
                                     ) : (
                                       <span className="text-gray-500 text-xs">{report.comments || "—"}</span>
@@ -1767,7 +1937,7 @@ export default function PresupuestosPage() {
                                             <button
                                               onClick={() => openApproveModal({ ...report, store_name: selectedStore?.name })}
                                               disabled={approvingReportId === report.id}
-                                              className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-medium transition-colors flex items-center gap-1 disabled:opacity-50"
+                                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition-colors flex items-center gap-1 disabled:opacity-50"
                                               title="Autorizar exceso de presupuesto"
                                             >
                                               {approvingReportId === report.id ? (
@@ -1847,6 +2017,9 @@ export default function PresupuestosPage() {
               )}
             </>
           ) : null}
+
+            </>
+          )}
 
           {/* Estado vacío inicial */}
           {!selectedStoreId && !loadingStores && (

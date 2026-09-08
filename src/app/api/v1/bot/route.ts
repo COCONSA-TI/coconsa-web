@@ -63,6 +63,7 @@ DATOS REQUERIDOS PARA UNA ORDEN:
    - Ret. ISR 1.25% (RESICO / Fletes) - clave: ret_isr_1.25
    Si el usuario no necesita retenciones, no las incluyas.
 9. Evidencia: Opcional - el usuario puede adjuntar imagenes o PDFs con el boton de clip
+10. Destajo: Indica si la orden corresponde a un destajo (mano de obra o subcontrato a destajo). Si el usuario menciona que es destajo o trabajo a destajo, se marca como destajo. Por defecto no es destajo.
 
 REGLAS DE COMPORTAMIENTO:
 1. Si el usuario proporciona toda la informacion de una vez, confirma los datos mostrando un resumen en texto plano.
@@ -345,7 +346,8 @@ async function extractOrderDataWithAI(
          Claves válidas: "ret_iva_10.6667", "ret_iva_4", "ret_iva_6", "ret_iva_100", "ret_iva_8_frontera", "ret_isr_10", "ret_isr_1.25"
          Si el usuario no mencionó retenciones, usa un array vacío [].
          Si el usuario mencionó retenciones específicas, mapea a las claves correspondientes.
-      10. REGLA CRITICA para isComplete: Determina 'isComplete' como true SOLO SI TODOS estos campos tienen valor (no null):
+      10. Extrae si es destajo (is_piecework): boolean. Si el usuario menciona que es destajo, trabajo a destajo, o mano de obra a destajo, asigna true. En caso contrario, asigna false.
+      11. REGLA CRITICA para isComplete: Determina 'isComplete' como true SOLO SI TODOS estos campos tienen valor (no null):
           - store_name (almacén)
           - supplier_name (proveedor, UNO para toda la orden)
           - justification (DEBE ser una cadena no vacía que el usuario haya proporcionado explícitamente)
@@ -378,6 +380,7 @@ async function extractOrderDataWithAI(
         "payment_type": "credito o de_contado o null",
         "tax_type": "sin_iva o con_iva o null",
         "iva_percentage": 0,
+        "is_piecework": false,
         "applicant_name": "${userData.full_name}",
         "applicant_id": "${userData.id}",
         "isComplete": false
@@ -406,6 +409,7 @@ async function extractOrderDataWithAI(
       reply: "Disculpa, hubo un problema al procesar tu mensaje. ¿Puedes intentarlo de nuevo?",
       store_name: null,
       items: [],
+      is_piecework: false,
       isComplete: false,
       applicant_name: userData.full_name,
       applicant_id: userData.id

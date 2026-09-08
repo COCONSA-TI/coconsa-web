@@ -174,6 +174,77 @@ export interface StoreWeeklyReport {
   updated_at: string;
 }
 
+// ── CONTROL DE OBRA (REPORTES FINANCIEROS Y DE AVANCE) ────────────────────────
+export interface StoreControlObraReport {
+  id: number;
+  store_id: number;
+  semana_numero: number;
+  fecha_inicio: string; // YYYY-MM-DD
+  fecha_fin: string; // YYYY-MM-DD
+  importe_generado: number;
+  
+  // Egresos Directos
+  egreso_maquinaria_equipo: number;
+  egreso_nomina_directa: number;
+  egreso_seguro_nomina_directa: number;
+  egreso_destajos: number;
+  egreso_materiales: number;
+  egreso_diesel: number;
+  
+  // Egresos Indirectos
+  egreso_nomina_indirecta: number;
+  egreso_seguro_nomina_indirecta: number;
+  egreso_gastos_indirectos: number;
+  
+  // Porcentajes
+  pct_indirecto_campo: number;
+  pct_indirecto_oficina: number;
+  
+  // Avance y Comentarios
+  pct_avance_programa: number;
+  comments?: string | null;
+  
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ControlObraCalculatedReport extends StoreControlObraReport {
+  total_egresos_directos: number;
+  total_egresos_indirectos: number;
+  monto_indirecto_campo: number;
+  monto_indirecto_oficina: number;
+  total_egresos: number;
+  importe_utilidad: number;
+  pct_utilidad: number;
+}
+
+export interface ControlObraSummary {
+  total_generado: number;
+  total_egresos_directos: number;
+  total_egresos_indirectos: number;
+  total_indirectos_campo: number;
+  total_indirectos_oficina: number;
+  total_egresos: number;
+  total_utilidad: number;
+  pct_utilidad_global: number;
+  semanas_count: number;
+  ultimo_pct_avance: number;
+}
+
+export interface ControlObraSettings {
+  pct_indirecto_campo: number;
+  pct_indirecto_oficina: number;
+}
+
+export interface AIAssistantMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  suggestedQuestions?: string[];
+  timestamp: string;
+}
+
+
 
 export interface Supplier {
   id: number;
@@ -349,6 +420,7 @@ export interface Order {
   urgency_justification: string | null;
   is_definitive_rejection: boolean;
   payment_proof_url: string | null;
+  is_piecework: boolean;
 }
 
 export interface OrderApproval {
@@ -472,6 +544,7 @@ export interface CreateOrderRequest {
   iva_percentage?: number;
   is_urgent?: boolean;
   urgency_justification?: string;
+  is_piecework?: boolean;
   evidenceUrls?: string[];
 }
 
@@ -777,4 +850,41 @@ export interface UpdateMeetingRequest {
   audio_path?: string;
   audio_size_bytes?: number;
   status?: MeetingStatus;
+}
+
+// ============================================
+// CATÁLOGO DE AVANCES Y CONCEPTOS DE OBRA
+// ============================================
+
+export interface CatalogoConceptoSemana {
+  semana_numero: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+  cantidad_ejecutada: number;
+  importe_ejecutado: number;
+}
+
+export interface CatalogoConcepto {
+  id: number | string;
+  store_id: number;
+  clave: string;
+  descripcion: string;
+  unidad: string;
+  cantidad_presupuestada: number;
+  precio_unitario: number;
+  importe_presupuestado: number;
+  cantidad_acumulada: number;
+  importe_acumulado: number;
+  cantidad_pendiente: number;
+  importe_pendiente: number;
+  semanas: Record<number, CatalogoConceptoSemana>;
+}
+
+export interface CatalogoAvancesSummary {
+  presupuesto_total: number;
+  iva_16: number;
+  total_con_iva: number;
+  total_acumulado_ejecutado: number;
+  total_pendiente: number;
+  pct_avance_global: number;
 }

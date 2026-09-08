@@ -229,6 +229,7 @@ export async function POST(request: Request) {
       iva_percentage,
       is_urgent = false,
       urgency_justification,
+      is_piecework = false,
       evidenceUrls = [],
     } = body;
 
@@ -440,10 +441,40 @@ export async function POST(request: Request) {
       status: 'pending',
       is_urgent: is_urgent || false,
       urgency_justification: is_urgent ? urgency_justification : null,
+      is_piecework: is_piecework || false,
       // Campos de presupuesto extraordinario (se actualizan abajo si aplica)
       has_extra_budget_approval: false,
       extra_budget_items_count: 0,
     };
+
+    // ── Validar que ningún artículo supere la cantidad disponible en presupuesto ──
+    const itemsConClaveVal = items.filter((item: OrderItem) => item.insumo_clave?.trim());
+    if (storeIdToUse && itemsConClaveVal.length > 0) {
+      const claves = itemsConClaveVal.map((i: OrderItem) => i.insumo_clave!.trim());
+      const { data: dbInsumos } = await supabaseAdmin
+        .from('store_insumos')
+        .select('clave, cantidad_presupuestada, cantidad_solicitada, cantidad_comprada')
+        .eq('store_id', storeIdToUse)
+        .in('clave', claves);
+
+      if (dbInsumos && dbInsumos.length > 0) {
+        for (const item of itemsConClaveVal) {
+          const matched = dbInsumos.find((di) => di.clave.trim().toLowerCase() === item.insumo_clave!.trim().toLowerCase());
+          if (matched) {
+            const disponible = matched.cantidad_presupuestada - matched.cantidad_solicitada - matched.cantidad_comprada;
+            const requestedQty = parseFloat(String(item.cantidad)) || 0;
+            if (requestedQty > disponible) {
+              return NextResponse.json(
+                {
+                  error: `No tienes permiso para solicitar ${requestedQty} unidades del concepto "${item.insumo_clave}". Excede la cantidad disponible (${Math.max(0, disponible)}). Por favor solicita autorización a Dirección.`,
+                },
+                { status: 400 }
+              );
+            }
+          }
+        }
+      }
+    }
 
     const { data: orderCreated, error: orderError } = await supabaseAdmin
       .from('orders')
