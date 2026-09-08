@@ -27,6 +27,7 @@ type SupabaseOrder = {
   is_urgent: boolean;
   is_definitive_rejection: boolean;
   machine_id: number | null;
+  is_piecework: boolean;
 };
 
 export async function GET(request: Request) {
@@ -46,7 +47,7 @@ export async function GET(request: Request) {
 
     let query = supabaseAdmin
       .from('orders')
-      .select('id, created_at, store_id, machine_id, total, currency, status, applicant_id, items, payment_type, is_urgent, is_definitive_rejection');
+      .select('id, created_at, store_id, machine_id, total, currency, status, applicant_id, items, payment_type, is_urgent, is_definitive_rejection, is_piecework');
 
     if (session!.role !== 'admin') {
       if (currentUserData?.is_department_head && currentUserData?.department_id) {
@@ -209,6 +210,7 @@ export async function GET(request: Request) {
         payment_type: order.payment_type || null,
         is_urgent: order.is_urgent || false,
         is_definitive_rejection: order.is_definitive_rejection || false,
+        is_piecework: order.is_piecework || false,
         my_department_status: userDeptApprovals.get(order.id) || null,
         current_department_name: currentDeptMap.get(order.id)?.name || null,
         machine_name: order.machine_id ? machinesMap.get(order.machine_id) || null : null,

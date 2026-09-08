@@ -59,6 +59,7 @@ interface OrderDetail {
   items: OrderItem[];
   is_urgent: boolean;
   urgency_justification: string | null;
+  is_piecework?: boolean;
   is_definitive_rejection: boolean;
   payment_proof_url: string | null;
   current_department_name?: string | null;
@@ -792,6 +793,14 @@ export default function OrdenDetallesPage() {
                     Urgente
                   </span>
                 )}
+                {order.is_piecework && (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-white text-red-700 flex items-center gap-1 shadow-sm">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    Destajo
+                  </span>
+                )}
                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusInfo.className}`}>
                   {(order.status === 'pending' || order.status === 'in_progress') && order.current_department_name ? `${statusInfo.label} | ${order.current_department_name}` : statusInfo.label}
                 </span>
@@ -853,6 +862,25 @@ export default function OrdenDetallesPage() {
                     <p className="text-sm text-gray-900">{order.urgency_justification}</p>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Banner de destajo */}
+        {order.is_piecework && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-5 mt-4">
+            <div className="flex items-start gap-4">
+              <div className="bg-red-100 rounded-full p-2">
+                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-red-900 font-semibold">Orden por Destajo</h3>
+                <p className="text-red-700 text-sm mt-1">
+                  Esta orden está marcada como trabajo o mano de obra a destajo.
+                </p>
               </div>
             </div>
           </div>
@@ -1349,10 +1377,10 @@ export default function OrdenDetallesPage() {
 
                         return (
                           <div key={index} className="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
-                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isImage ? 'bg-purple-100' : isPdf ? 'bg-red-100' : 'bg-gray-200'
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isImage || isPdf ? 'bg-red-100' : 'bg-gray-200'
                               }`}>
                               {isImage ? (
-                                <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                 </svg>
                               ) : isPdf ? (

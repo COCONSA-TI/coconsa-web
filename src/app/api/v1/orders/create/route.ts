@@ -229,6 +229,7 @@ export async function POST(request: Request) {
       iva_percentage,
       is_urgent = false,
       urgency_justification,
+      is_piecework = false,
       evidenceUrls = [],
     } = body;
 
@@ -440,6 +441,7 @@ export async function POST(request: Request) {
       status: 'pending',
       is_urgent: is_urgent || false,
       urgency_justification: is_urgent ? urgency_justification : null,
+      is_piecework: is_piecework || false,
       // Campos de presupuesto extraordinario (se actualizan abajo si aplica)
       has_extra_budget_approval: false,
       extra_budget_items_count: 0,

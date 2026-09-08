@@ -420,6 +420,7 @@ export interface Order {
   urgency_justification: string | null;
   is_definitive_rejection: boolean;
   payment_proof_url: string | null;
+  is_piecework: boolean;
 }
 
 export interface OrderApproval {
@@ -543,6 +544,7 @@ export interface CreateOrderRequest {
   iva_percentage?: number;
   is_urgent?: boolean;
   urgency_justification?: string;
+  is_piecework?: boolean;
   evidenceUrls?: string[];
 }
 

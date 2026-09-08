@@ -80,7 +80,7 @@ export default function CrearOrdenPage() {
                 whitespace-nowrap py-3 sm:py-4 px-1 border-b-2 font-medium text-sm transition-colors flex-shrink-0
                 ${
                   activeTab === "asistido"
-                    ? "border-blue-600 text-blue-600"
+                    ? "border-red-600 text-red-600 font-semibold"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                 }
               `}
@@ -89,7 +89,7 @@ export default function CrearOrdenPage() {
                 <span>Modo Asistido</span>
               </span>
               <span className="block text-xs text-gray-500 mt-1">
-                Con ayuda del chatbot
+                Con ayuda del asistente COCONSA
               </span>
             </button>
 
@@ -99,7 +99,7 @@ export default function CrearOrdenPage() {
                 whitespace-nowrap py-3 sm:py-4 px-1 border-b-2 font-medium text-sm transition-colors flex-shrink-0
                 ${
                   activeTab === "manual"
-                    ? "border-blue-600 text-blue-600"
+                    ? "border-red-600 text-red-600 font-semibold"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                 }
               `}
@@ -116,17 +116,21 @@ export default function CrearOrdenPage() {
       </div>
 
       {/* Content */}
-      <div className="bg-gray-50 rounded-lg p-4 sm:p-6">
+      <div className="bg-gray-50 rounded-xl p-4 sm:p-6 border border-gray-200">
         {activeTab === "asistido" ? (
           <div>
-            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
+            <div className="mb-4 bg-red-50/80 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-red-600 text-white flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+              </div>
               <div>
-                <h3 className="font-semibold text-blue-900 mb-1 text-sm sm:text-base">
-                  Modo Asistido
+                <h3 className="font-bold text-red-900 text-sm sm:text-base">
+                  Modo Asistido COCONSA
                 </h3>
-                <p className="text-xs sm:text-sm text-blue-800">
-                  El asistente virtual te guiará paso a paso para crear tu orden de compra. 
-                  Tu nombre se detecta automáticamente.
+                <p className="text-xs sm:text-sm text-red-800 mt-0.5">
+                  El asistente te guiará paso a paso para recopilar todos los datos de tu orden de compra (materiales o destajo).
                 </p>
               </div>
             </div>
@@ -136,14 +140,18 @@ export default function CrearOrdenPage() {
           </div>
         ) : (
           <div>
-            <div className="mb-4 sm:mb-6 bg-green-50 border border-green-200 rounded-lg p-3 sm:p-4">
+            <div className="mb-4 sm:mb-6 bg-red-50/80 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-red-600 text-white flex items-center justify-center flex-shrink-0 mt-0.5">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </div>
               <div>
-                <h3 className="font-semibold text-green-900 mb-1 text-sm sm:text-base">
-                  Modo Manual
+                <h3 className="font-bold text-red-900 text-sm sm:text-base">
+                  Formulario Manual de Orden
                 </h3>
-                <p className="text-xs sm:text-sm text-green-800">
-                  Completa todos los campos del formulario directamente. Ideal para
-                  crear órdenes rápidamente cuando conoces todos los detalles.
+                <p className="text-xs sm:text-sm text-red-800 mt-0.5">
+                  Completa todos los campos del formulario directamente para enviar tu solicitud a aprobación.
                 </p>
               </div>
             </div>
@@ -156,12 +164,17 @@ export default function CrearOrdenPage() {
 
       {/* Notificación de orden creada */}
       {lastOrderCreated && (
-        <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 bg-green-600 text-white p-4 rounded-lg shadow-lg max-w-md animate-slide-up z-50">
-          <div>
-            <h4 className="font-bold mb-1 text-sm sm:text-base">&iexcl;Orden Creada!</h4>
-            <p className="text-xs sm:text-sm">
-              Redirigiendo al hub de órdenes...
-            </p>
+        <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 bg-red-700 text-white p-4 rounded-xl shadow-2xl max-w-md animate-slide-up z-50 border border-red-500">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-white text-red-700 flex items-center justify-center font-bold">
+              ✓
+            </div>
+            <div>
+              <h4 className="font-bold text-sm sm:text-base">¡Orden Creada!</h4>
+              <p className="text-xs sm:text-sm text-red-100">
+                Redirigiendo al hub de órdenes...
+              </p>
+            </div>
           </div>
         </div>
       )}

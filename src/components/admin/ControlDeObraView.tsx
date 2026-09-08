@@ -269,9 +269,41 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
       }
 
       const pctAvance = presupuestoTotal > 0 ? (acumuladoHastaSemana / presupuestoTotal) * 100 : 0;
-
       const finalImporte = Number(importeSemana.toFixed(2));
       const finalPct = Number(pctAvance.toFixed(2));
+
+      // 3. Obtener egresos de Materiales, Diesel y Destajos desde Órdenes de Compra para esta obra
+      try {
+        const syncRes = await fetch(`/api/v1/stores/${storeId}/control-obra/auto-sync`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fecha_inicio: targetReport.fecha_inicio,
+            fecha_fin: targetReport.fecha_fin,
+          }),
+        });
+        if (syncRes.ok) {
+          const syncData = await syncRes.json();
+          if (syncData.weekCalculation) {
+            targetReport.egreso_materiales = syncData.weekCalculation.egreso_materiales ?? targetReport.egreso_materiales ?? 0;
+            targetReport.egreso_diesel = syncData.weekCalculation.egreso_diesel ?? targetReport.egreso_diesel ?? 0;
+            targetReport.egreso_destajos = syncData.weekCalculation.egreso_destajos ?? targetReport.egreso_destajos ?? 0;
+          } else {
+            const freshDataRes = await fetch(`/api/v1/stores/${storeId}/control-obra`);
+            if (freshDataRes.ok) {
+              const freshData = await freshDataRes.json();
+              const freshReport = (freshData.reports || []).find((r: any) => r.semana_numero === semanaNum);
+              if (freshReport) {
+                targetReport.egreso_materiales = freshReport.egreso_materiales ?? targetReport.egreso_materiales ?? 0;
+                targetReport.egreso_diesel = freshReport.egreso_diesel ?? targetReport.egreso_diesel ?? 0;
+                targetReport.egreso_destajos = freshReport.egreso_destajos ?? targetReport.egreso_destajos ?? 0;
+              }
+            }
+          }
+        }
+      } catch {
+        // Si no hay órdenes registradas, se conservan los valores existentes
+      }
 
       const updated = {
         ...targetReport,
@@ -282,9 +314,9 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
       recalculateTotals(updated);
       setEditingReport(updated);
 
-      setSuccessMsg(`Importe generado ($${finalImporte.toLocaleString("es-MX")}) y Avance (${finalPct.toFixed(2)}%) cargados desde Catálogo de Avances.`);
+      setSuccessMsg(`Datos autocompletados para la Obra: Importe Generado ($${finalImporte.toLocaleString("es-MX")}), Avance (${finalPct.toFixed(2)}%), Materiales, Diesel y Destajos desde Órdenes de Compra.`);
     } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "No se pudieron obtener datos del Catálogo de Avances");
+      setErrorMsg(err instanceof Error ? err.message : "No se pudieron obtener datos del Catálogo de Avances y Órdenes de Compra");
     } finally {
       setLoadingCatalogoAutofill(false);
     }
@@ -1333,7 +1365,10 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Destajos</label>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                      <span>Destajos</span>
+                      <span className="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">Auto Órdenes</span>
+                    </label>
                     <input
                       type="number"
                       step="0.01"
@@ -1344,12 +1379,15 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
                         recalculateTotals(updated);
                         setEditingReport(updated);
                       }}
-                      className="w-full h-10 px-3 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900"
+                      className="w-full h-10 px-3 bg-white border border-emerald-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500"
                       placeholder="0.00"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Materiales</label>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                      <span>Materiales</span>
+                      <span className="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">Auto Órdenes</span>
+                    </label>
                     <input
                       type="number"
                       step="0.01"
@@ -1360,12 +1398,15 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
                         recalculateTotals(updated);
                         setEditingReport(updated);
                       }}
-                      className="w-full h-10 px-3 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900"
+                      className="w-full h-10 px-3 bg-white border border-emerald-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500"
                       placeholder="0.00"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Diesel</label>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                      <span>Diesel</span>
+                      <span className="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded">Auto Órdenes</span>
+                    </label>
                     <input
                       type="number"
                       step="0.01"
@@ -1376,7 +1417,7 @@ export default function ControlDeObraView({ storeId, storeName, canEdit }: Contr
                         recalculateTotals(updated);
                         setEditingReport(updated);
                       }}
-                      className="w-full h-10 px-3 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900"
+                      className="w-full h-10 px-3 bg-white border border-emerald-300 rounded-xl text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500"
                       placeholder="0.00"
                     />
                   </div>

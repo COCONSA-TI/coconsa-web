@@ -52,7 +52,7 @@ function SearchableSupplierSelect({
   value,
   suppliers,
   onChange,
-  focusColor = "blue",
+  focusColor = "red",
 }: {
   value: string;
   suppliers: string[];
@@ -93,7 +93,7 @@ function SearchableSupplierSelect({
     setIsOpen(false);
   };
 
-  const ringColor = focusColor === "red" ? "focus:ring-red-500" : "focus:ring-blue-500";
+  const ringColor = "focus:ring-red-500";
 
   return (
     <div ref={containerRef} className="relative">
@@ -156,7 +156,7 @@ function SearchableSupplierSelect({
                 key={supplier}
                 type="button"
                 onClick={() => handleSelect(supplier)}
-                className={`w-full px-3 py-2 text-left text-sm hover:bg-blue-50 transition-colors ${supplier === value ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-900"
+                className={`w-full px-3 py-2 text-left text-sm hover:bg-red-50 transition-colors ${supplier === value ? "bg-red-50 text-red-700 font-medium" : "text-gray-900"
                   }`}
               >
                 {supplier}
@@ -226,7 +226,7 @@ function InsumoAutocomplete({ value, insumos, onSelect, onChange }: InsumoAutoco
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
-        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900"
+        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm text-gray-900"
         placeholder="Busca por clave o descripción del presupuesto..."
         autoComplete="off"
       />
@@ -245,7 +245,7 @@ function InsumoAutocomplete({ value, insumos, onSelect, onChange }: InsumoAutoco
                   setQuery(ins.descripcion);
                   setOpen(false);
                 }}
-                className={`w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0 ${ins.agotado ? 'opacity-50' : ''}`}
+                className={`w-full text-left px-3 py-2 hover:bg-red-50 transition-colors border-b border-gray-50 last:border-0 ${ins.agotado ? 'opacity-50' : ''}`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
@@ -295,6 +295,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     iva_percentage: 16,
     is_urgent: false,
     urgency_justification: "",
+    is_piecework: false,
   });
 
   const [items, setItems] = useState<Item[]>([
@@ -585,6 +586,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
       iva_percentage: formData.tax_type === 'con_iva' ? formData.iva_percentage : 0,
       is_urgent: formData.is_urgent,
       urgency_justification: formData.is_urgent ? formData.urgency_justification : '',
+      is_piecework: formData.is_piecework,
       items: validItems.map((item) => ({
         nombre: item.nombre,
         cantidad: parseFloat(item.cantidad),
@@ -660,6 +662,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
         iva_percentage: 16,
         is_urgent: false,
         urgency_justification: "",
+        is_piecework: false,
       });
       setItems([{ id: "1", nombre: "", cantidad: "", unidad: "", precioUnitario: "" }]);
       setEvidenceFiles([]);
@@ -712,7 +715,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
               name="store_name"
               value={formData.store_name || ""}
               onChange={handleInputChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
               required
             >
               <option value="">Selecciona un centro de costos</option>
@@ -730,7 +733,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                 name="machine_name"
                 value={formData.machine_name || ""}
                 onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
                 required={formData.store_name.toLowerCase() === 'maquinaria'}
               >
                 <option value="">Selecciona una máquina</option>
@@ -804,6 +807,34 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
           )}
         </div>
       )}
+      
+      {/* Destajo */}
+      <div className={`p-6 rounded-lg shadow-sm border ${formData.is_piecework ? 'bg-red-50/70 border-red-300' : 'bg-white border-gray-200'} transition-colors`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${formData.is_piecework ? 'bg-red-600' : 'bg-gray-200'} transition-colors`}>
+              <svg className={`w-5 h-5 ${formData.is_piecework ? 'text-white' : 'text-gray-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Destajo</h3>
+              <p className="text-sm text-gray-500">
+                Marca esta orden si corresponde a trabajos o mano de obra a destajo
+              </p>
+            </div>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={formData.is_piecework}
+              onChange={(e) => setFormData(prev => ({ ...prev, is_piecework: e.target.checked }))}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+          </label>
+        </div>
+      </div>
 
       {/* Artículos */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
@@ -814,7 +845,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
           <button
             type="button"
             onClick={addItem}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium shadow-sm"
           >
             + Agregar Artículo
           </button>
@@ -929,7 +960,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                       type="text"
                       value={item.nombre}
                       onChange={(e) => handleItemChange(item.id, "nombre", e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm text-gray-900"
                       placeholder="Ej: Cemento gris 50kg"
                     />
                   )}
@@ -951,7 +982,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                     step="0.01"
                     value={item.cantidad}
                     onChange={(e) => handleItemChange(item.id, "cantidad", e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm text-gray-900"
                     placeholder="100"
                   />
                 </div>
@@ -983,7 +1014,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                   <select
                     value={item.unidad}
                     onChange={(e) => handleItemChange(item.id, "unidad", e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm text-gray-900"
                   >
                     <option value="" disabled>Seleccionar</option>
                     {availableUnits.map((u) => (
@@ -1004,7 +1035,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                     onChange={(e) =>
                       handleItemChange(item.id, "precioUnitario", e.target.value)
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm text-gray-900"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm text-gray-900"
                     placeholder="150.00"
                   />
                 </div>
@@ -1052,7 +1083,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
             )}
             <div className="flex justify-between items-center pt-2 border-t border-gray-200">
               <span className="text-lg font-bold text-gray-900">Total General:</span>
-              <span className="text-2xl font-bold text-blue-600">
+              <span className="text-2xl font-bold text-red-600">
                 {formData.currency} ${calculateGrandTotal().toFixed(2)}
               </span>
             </div>
@@ -1075,7 +1106,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
               value={formData.justification}
               onChange={handleInputChange}
               rows={3}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
               placeholder="Describe el motivo de esta compra..."
               required
             />
@@ -1084,7 +1115,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Evidencias / Comprobantes <span className="text-red-500">*</span>
             </label>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-400 transition-colors">
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-red-400 transition-colors">
               <input
                 type="file"
                 id="evidence-upload"
@@ -1147,7 +1178,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                 name="currency"
                 value={formData.currency}
                 onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
               >
                 <option value="MXN">MXN - Pesos Mexicanos</option>
                 <option value="USD">USD - Dolares</option>
@@ -1161,7 +1192,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                 name="payment_type"
                 value={formData.payment_type}
                 onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
                 required
               >
                 <option value="">Selecciona tipo de pago</option>
@@ -1188,7 +1219,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                     selectedRetentions: newTaxType === 'sin_iva' ? [] : prev.selectedRetentions,
                   }));
                 }}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
               >
                 <option value="sin_iva">Sin IVA</option>
                 <option value="con_iva">Con IVA</option>
@@ -1203,7 +1234,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                   name="iva_percentage"
                   value={formData.iva_percentage}
                   onChange={(e) => setFormData(prev => ({ ...prev, iva_percentage: parseInt(e.target.value) }))}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
                 >
                   <option value={16}>16%</option>
                   <option value={8}>8%</option>
@@ -1238,7 +1269,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                                   : prev.selectedRetentions.filter(k => k !== option.key),
                               }));
                             }}
-                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
                           />
                           <span className="text-sm text-gray-700 group-hover:text-gray-900">{option.label}</span>
                         </label>
@@ -1261,7 +1292,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
                                   : prev.selectedRetentions.filter(k => k !== option.key),
                               }));
                             }}
-                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
                           />
                           <span className="text-sm text-gray-700 group-hover:text-gray-900">{option.label}</span>
                         </label>
@@ -1293,6 +1324,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
               iva_percentage: 16,
               is_urgent: false,
               urgency_justification: "",
+              is_piecework: false,
             });
             setItems([{ id: "1", nombre: "", cantidad: "", unidad: "", precioUnitario: "" }]);
             setEvidenceFiles([]);
@@ -1304,9 +1336,9 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
         <button
           type="submit"
           disabled={loading}
-          className={`px-8 py-3 text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-semibold ${formData.is_urgent
+          className={`px-8 py-3 text-white rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-semibold shadow-md ${formData.is_urgent
             ? 'bg-orange-600 hover:bg-orange-700'
-            : 'bg-blue-600 hover:bg-blue-700'
+            : 'bg-red-600 hover:bg-red-700'
             }`}
         >
           {loading

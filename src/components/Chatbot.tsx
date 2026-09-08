@@ -382,36 +382,38 @@ export default function Chatbot({ onFormDataExtracted, onOrderCreated }: Chatbot
 
       {/* Botón para crear orden cuando está completa */}
       {extractedData.isComplete === true && !orderCreated && (
-        <div className={`border-t p-4 ${attachedFiles.length > 0 ? 'bg-green-50' : 'bg-amber-50'}`}>
-          <div className="flex items-center justify-between">
+        <div className={`border-t p-4 ${attachedFiles.length > 0 ? 'bg-red-50/60 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex-1">
-              {attachedFiles.length > 0 ? (
-                <>
-                  <p className="text-sm font-semibold text-green-900 mb-1">
-                    Informacion completa - {attachedFiles.length} archivo(s) de evidencia
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                {extractedData.is_piecework && (
+                  <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700 border border-red-200">
+                    Destajo
+                  </span>
+                )}
+                {attachedFiles.length > 0 ? (
+                  <p className="text-sm font-semibold text-gray-900">
+                    Información completa · {attachedFiles.length} archivo(s) de evidencia
                   </p>
-                  <p className="text-xs text-green-700">
-                    Toda la informacion necesaria ha sido recopilada. Puedes crear la orden.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-sm font-semibold text-amber-900 mb-1">
+                ) : (
+                  <p className="text-sm font-semibold text-amber-900">
                     Falta adjuntar evidencia (obligatorio)
                   </p>
-                  <p className="text-xs text-amber-700">
-                    Usa el boton de clip para adjuntar al menos un archivo de evidencia antes de crear la orden.
-                  </p>
-                </>
-              )}
+                )}
+              </div>
+              <p className="text-xs text-gray-600">
+                {attachedFiles.length > 0
+                  ? 'Toda la información necesaria ha sido recopilada. Puedes crear la orden.'
+                  : 'Usa el botón de clip para adjuntar al menos un archivo de evidencia antes de crear la orden.'}
+              </p>
             </div>
             <button
               onClick={createOrder}
               disabled={isCreatingOrder || attachedFiles.length === 0}
-              className={`px-6 py-2 rounded-lg transition-colors font-semibold ${
+              className={`px-6 py-2.5 rounded-lg transition-colors font-semibold shadow-sm ${
                 attachedFiles.length > 0
-                  ? 'bg-green-600 text-white hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  ? 'bg-red-600 text-white hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed'
+                  : 'bg-gray-200 text-gray-500 cursor-not-allowed'
               }`}
             >
               {isCreatingOrder ? 'Creando...' : 'Crear Orden'}
@@ -422,16 +424,16 @@ export default function Chatbot({ onFormDataExtracted, onOrderCreated }: Chatbot
 
       {/* Opciones disponibles */}
       {(availableStores.length > 0 || availableSuppliers.length > 0) && !orderCreated && (
-        <div className="border-t p-4 bg-blue-50">
+        <div className="border-t p-4 bg-red-50/30">
           <details className="text-xs">
-            <summary className="cursor-pointer font-semibold text-blue-900 mb-2">
-              📋 Ver opciones disponibles
+            <summary className="cursor-pointer font-semibold text-gray-800 hover:text-red-700 transition-colors mb-2">
+              Ver opciones disponibles (Centros de Costos y Proveedores)
             </summary>
             <div className="space-y-3 mt-2">
               {availableStores.length > 0 && (
                 <div>
-                  <p className="font-semibold text-blue-800 mb-1">Almacenes/Obras:</p>
-                  <ul className="text-blue-700 space-y-1 max-h-32 overflow-y-auto">
+                  <p className="font-semibold text-red-800 mb-1">Centros de Costos / Almacenes:</p>
+                  <ul className="text-gray-700 space-y-1 max-h-32 overflow-y-auto pl-2">
                     {availableStores.map((store) => (
                       <li key={store.id}>• {store.name}</li>
                     ))}
@@ -440,8 +442,8 @@ export default function Chatbot({ onFormDataExtracted, onOrderCreated }: Chatbot
               )}
               {availableSuppliers.length > 0 && (
                 <div>
-                  <p className="font-semibold text-blue-800 mb-1">Proveedores:</p>
-                  <ul className="text-blue-700 space-y-1 max-h-32 overflow-y-auto">
+                  <p className="font-semibold text-red-800 mb-1">Proveedores:</p>
+                  <ul className="text-gray-700 space-y-1 max-h-32 overflow-y-auto pl-2">
                     {availableSuppliers.map((supplier) => (
                       <li key={supplier.id}>• {supplier.commercial_name}</li>
                     ))}

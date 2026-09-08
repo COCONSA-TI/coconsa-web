@@ -36,6 +36,7 @@ type DBOrderDetail = {
   urgency_justification: string | null;
   is_definitive_rejection: boolean;
   payment_proof_url: string | null;
+  is_piecework: boolean;
 };
 
 // Función para recrear aprobaciones
@@ -286,6 +287,7 @@ export async function GET(
       is_urgent: typedOrder.is_urgent || false,
       urgency_justification: typedOrder.urgency_justification,
       is_definitive_rejection: typedOrder.is_definitive_rejection || false,
+      is_piecework: typedOrder.is_piecework || false,
       payment_proof_url: typedOrder.payment_proof_url || null,
       machine_id: typedOrder.machine_id || null,
       machine_name: machineName,
@@ -376,7 +378,7 @@ export async function PUT(
 
     const body = await request.json();
 
-    const { items, justification, store_name, currency = 'MXN', retention, payment_type, tax_type, iva_percentage, evidenceUrls = [] } = body;
+    const { items, justification, store_name, currency = 'MXN', retention, payment_type, tax_type, iva_percentage, is_piecework, evidenceUrls = [] } = body;
 
     // Validaciones
     if (!items || items.length === 0) {
@@ -510,6 +512,10 @@ export async function PUT(
 
     if (retention !== undefined) {
       updateData.retention = retention;
+    }
+
+    if (is_piecework !== undefined) {
+      updateData.is_piecework = is_piecework;
     }
 
     // Las URLs de evidencia ya vienen del frontend (presigned URLs)

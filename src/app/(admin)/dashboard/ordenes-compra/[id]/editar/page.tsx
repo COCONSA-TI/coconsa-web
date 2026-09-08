@@ -40,6 +40,7 @@ interface OrderDetail {
   iva: number | null;
   subtotal: number | null;
   is_definitive_rejection?: boolean;
+  is_piecework?: boolean;
   items: {
     id: string;
     name: string;
@@ -198,6 +199,7 @@ export default function EditarOrdenPage() {
     payment_type: "",
     tax_type: "sin_iva",
     iva_percentage: 16,
+    is_piecework: false,
   });
 
   const [selectedRetentions, setSelectedRetentions] = useState<string[]>([]);
@@ -278,6 +280,7 @@ export default function EditarOrdenPage() {
           payment_type: order.payment_type || "",
           tax_type: effectiveTaxType,
           iva_percentage: order.iva_percentage || 16,
+          is_piecework: order.is_piecework || false,
         });
 
         // Parse retention: could be JSON array of keys or legacy free text
@@ -459,6 +462,7 @@ export default function EditarOrdenPage() {
       payment_type: formData.payment_type,
       tax_type: formData.tax_type,
       iva_percentage: formData.tax_type === 'con_iva' ? formData.iva_percentage : 0,
+      is_piecework: formData.is_piecework,
       items: validItems.map((item) => ({
         nombre: item.nombre,
         cantidad: parseFloat(item.cantidad),
@@ -668,6 +672,34 @@ export default function EditarOrdenPage() {
           </div>
         </div>
 
+        {/* Destajo */}
+        <div className={`p-6 rounded-xl shadow-sm border ${formData.is_piecework ? 'bg-red-50/70 border-red-300' : 'bg-white border-gray-200'} transition-colors`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${formData.is_piecework ? 'bg-red-600' : 'bg-gray-200'} transition-colors`}>
+                <svg className={`w-5 h-5 ${formData.is_piecework ? 'text-white' : 'text-gray-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Destajo</h3>
+                <p className="text-sm text-gray-500">
+                  Marca esta orden si corresponde a trabajos o mano de obra a destajo
+                </p>
+              </div>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formData.is_piecework}
+                onChange={(e) => setFormData(prev => ({ ...prev, is_piecework: e.target.checked }))}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
+            </label>
+          </div>
+        </div>
+
         {/* Artículos */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between mb-4">
@@ -843,11 +875,11 @@ export default function EditarOrdenPage() {
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           <div
                             className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                              isImage ? "bg-purple-100" : isPdf ? "bg-red-100" : "bg-gray-200"
+                              isImage || isPdf ? "bg-red-100" : "bg-gray-200"
                             }`}
                           >
                             {isImage ? (
-                              <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                               </svg>
                             ) : isPdf ? (

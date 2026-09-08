@@ -67,6 +67,7 @@ export const PurchaseOrderExtractedDataSchema = z.object({
     payment_type: z.string().nullable().optional(),
     tax_type: z.string().nullable().optional(),
     iva_percentage: z.number().nullable().optional(),
+    is_piecework: z.boolean().nullable().optional(),
     isComplete: z.boolean().optional(),
 });
 
