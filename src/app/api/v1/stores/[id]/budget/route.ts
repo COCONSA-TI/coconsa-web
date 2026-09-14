@@ -255,13 +255,20 @@ export async function POST(
     // Claves que llegan en el nuevo PDF
     const newClaves = new Set(geminiInsumos.map((i) => i.clave?.trim() || "SIN_CLAVE"));
 
-    // Paso 2a: Separar en actualizaciones e inserciones
+    // Paso 2a: Separar en actualizaciones e inserciones desduplicando claves repetidas del PDF
     const toUpdate: Array<{ id: number; fields: Record<string, unknown> }> = [];
     const toInsert: Array<Record<string, unknown>> = [];
+    const seenClavesInBatch = new Map<string, number>();
 
     for (const insumo of geminiInsumos) {
-      const clave = insumo.clave?.trim() || "SIN_CLAVE";
-      const existing = existingMap.get(clave);
+      let rawClave = insumo.clave?.trim() || "SIN_CLAVE";
+
+      // Si la clave ya fue usada en este mismo lote, agregar un sufijo único (_2, _3, etc.)
+      const count = seenClavesInBatch.get(rawClave) || 0;
+      seenClavesInBatch.set(rawClave, count + 1);
+      const clave = count > 0 ? `${rawClave}_${count + 1}` : rawClave;
+
+      const existing = existingMap.get(clave) || (count === 0 ? existingMap.get(rawClave) : undefined);
 
       if (existing) {
         // El insumo ya existe: actualizar solo los campos que vienen del PDF.
