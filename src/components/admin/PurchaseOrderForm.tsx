@@ -408,8 +408,8 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
       if (!res.ok) throw new Error('Error');
       const data = await res.json();
       setHasPresupuesto(data.hasPresupuesto);
-      // Permitir todas las categorías del presupuesto en Órdenes de Compra (Materiales, Herramienta, Equipo, Mano de Obra)
-      const CATEGORIAS_COMPRABLES = ['Materiales', 'Herramienta', 'Equipo', 'Mano de Obra'];
+      // Materiales, Herramienta y Equipo son comprables vía orden de compra (se excluye Mano de Obra)
+      const CATEGORIAS_COMPRABLES = ['Materiales', 'Herramienta', 'Equipo'];
       setStoreInsumos(
         (data.insumos || []).filter((i: { categoria: string }) =>
           CATEGORIAS_COMPRABLES.includes(i.categoria)
