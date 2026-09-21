@@ -96,7 +96,7 @@ export default function OrdenDeCompra() {
         .order('name');
 
       if (storesError) throw storesError;
-      setStores(storesData || []);
+      setStores((storesData || []).filter((s) => !s.name?.trim().startsWith("[INACTIVO]")));
 
       // Cargar proveedores
       const { data: suppliersData, error: suppliersError } = await supabase
