@@ -180,7 +180,7 @@ export default function CreateNeedsListPage() {
       if (!res.ok) throw new Error('Error');
       const data = await res.json();
       setHasPresupuesto(data.hasPresupuesto);
-      const CATEGORIAS_SOLICITABLES = ['Materiales', 'Herramienta'];
+      const CATEGORIAS_SOLICITABLES = ['Materiales', 'Herramienta', 'Equipo', 'Mano de Obra'];
       setStoreInsumos(
         (data.insumos || []).filter((i: { categoria: string }) =>
           CATEGORIAS_SOLICITABLES.includes(i.categoria)

@@ -66,7 +66,11 @@ export async function GET() {
         .filter((machine): machine is { id: string | number; name: string } => machine !== null);
     }
 
-    const filteredStores = (stores || []).filter(store => !isMachineStore(store.name));
+    const filteredStores = (stores || []).filter(store => 
+      !isMachineStore(store.name) && 
+      !store.name.trim().startsWith("[INACTIVO]") &&
+      (store as any).is_active !== false
+    );
 
     return NextResponse.json({
       stores: filteredStores,

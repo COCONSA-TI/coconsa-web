@@ -5,10 +5,11 @@ import { services } from '@/data/servicesData'; // Importamos nuestra fuente de 
 import { notFound } from 'next/navigation'; // Para manejar servicios no encontrados
 
 // Esta función recibe los parámetros de la URL, en este caso el "slug"
-export default function ServicioDetallePage({ params }: { params: { slug: string } }) {
+export default async function ServicioDetallePage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   
   // 1. Buscamos el servicio correspondiente al slug de la URL
-  const service = services.find(s => s.href === `/servicios/${params.slug}`);
+  const service = services.find(s => s.href === `/servicios/${slug}`);
 
   // 2. Si no se encuentra el servicio, mostramos una página 404
   if (!service) {

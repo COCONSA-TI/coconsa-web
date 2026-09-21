@@ -213,8 +213,13 @@ export async function POST(request: Request) {
     // Antes: 2 llamadas secuenciales → O(2 × LLM_latency) ≈ 10-30 s
     // Ahora: 1 llamada con JSON envelope  → O(1 × LLM_latency) ≈ 5-15 s
     // Ahorro estimado: ~50 % del tiempo de respuesta y ~50 % de tokens facturados.
-    // Filter out machines from stores list
-    const filteredStores = (stores || []).filter(store => !isMachineStore(store.name));
+    // Filter out machines and inactive stores from stores list
+    const filteredStores = (stores || []).filter(
+      (store) =>
+        !isMachineStore(store.name) &&
+        !store.name?.trim().startsWith("[INACTIVO]") &&
+        (store as any).is_active !== false
+    );
 
     let botMessage: string;
     let extractedData: ReturnType<typeof JSON.parse>;
