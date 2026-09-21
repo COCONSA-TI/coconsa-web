@@ -261,7 +261,7 @@ export async function POST(
     const seenClavesInBatch = new Map<string, number>();
 
     for (const insumo of geminiInsumos) {
-      let rawClave = insumo.clave?.trim() || "SIN_CLAVE";
+      const rawClave = insumo.clave?.trim() || "SIN_CLAVE";
 
       // Si la clave ya fue usada en este mismo lote, agregar un sufijo único (_2, _3, etc.)
       const count = seenClavesInBatch.get(rawClave) || 0;
