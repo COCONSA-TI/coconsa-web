@@ -47,16 +47,9 @@ async function createNeedsListApprovalsServer(
   const direccion = departments.find((d: Department) => d.code === 'direccion');
   const pagos = departments.find((d: Department) => d.code === 'pagos');
 
-  // Paso 0: Autorización extraordinaria de Dirección si hay artículos fuera de presupuesto
-  if (requiresExtraBudgetApproval && direccion) {
-    approvalsToCreate.push({
-      needs_list_id: needsListId,
-      department_id: direccion.id,
-      status: 'pending',
-      approval_order: 0,
-      comments: `Autorización extraordinaria requerida: ${extraBudgetItemsCount} concepto(s) no están en el catálogo del presupuesto de la obra.`,
-    });
-  }
+  const extraBudgetComment = requiresExtraBudgetApproval
+    ? `Autorización extraordinaria requerida: ${extraBudgetItemsCount} concepto(s) no están en el catálogo del presupuesto de la obra.`
+    : undefined;
 
   if (isUrgent && isApplicantDeptHead) {
     // LISTA URGENTE: Solo jefes de departamento pueden crear urgentes
@@ -87,6 +80,7 @@ async function createNeedsListApprovalsServer(
         department_id: direccion.id,
         status: 'pending',
         approval_order: 4,
+        ...(extraBudgetComment && { comments: extraBudgetComment }),
       });
     }
 
@@ -150,6 +144,7 @@ async function createNeedsListApprovalsServer(
           department_id: direccion.id,
           status: 'pending',
           approval_order: 4,
+          ...(extraBudgetComment && { comments: extraBudgetComment }),
         });
       }
 
@@ -193,6 +188,7 @@ async function createNeedsListApprovalsServer(
           department_id: direccion.id,
           status: 'pending',
           approval_order: 4,
+          ...(extraBudgetComment && { comments: extraBudgetComment }),
         });
       }
 
