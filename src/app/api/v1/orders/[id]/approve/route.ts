@@ -140,8 +140,18 @@ export async function POST(
       );
     }
 
-    // 3. Encontrar la aprobación del usuario
-    const myApproval = approvals.find((a: OrderApprovalWithRelations) => a.department_id === user.department_id);
+    const userDept = Array.isArray(user.department) ? user.department[0] : user.department;
+    const userDeptCode = (userDept?.code || '').toLowerCase();
+
+    // 3. Encontrar la aprobación PENDING del usuario (por ID o por código de departamento)
+    // Priorizar pending porque puede haber múltiples entradas del mismo departamento
+    const matchesUserDeptApprove = (a: OrderApprovalWithRelations) => {
+      const aDept = Array.isArray(a.department) ? (a.department as unknown as Array<{ code?: string }>)[0] : a.department;
+      const aDeptCode = (aDept?.code || '').toLowerCase();
+      return a.department_id === user.department_id || (Boolean(aDeptCode) && Boolean(userDeptCode) && aDeptCode === userDeptCode);
+    };
+    const myApproval = approvals.find((a) => matchesUserDeptApprove(a) && a.status === 'pending')
+      ?? approvals.find((a) => matchesUserDeptApprove(a));
 
     if (!myApproval) {
       return NextResponse.json(
