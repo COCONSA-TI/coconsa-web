@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 import { OrdersPageSkeleton } from "@/components/ui/Skeletons";
+import { getDepartmentBadgeStyle } from "@/lib/approvalFlow";
 
 type OrderStatus = "pending" | "approved" | "rejected" | "in_progress" | "completed";
 
@@ -165,6 +166,7 @@ function OrdenesCompraContent() {
   // Filtros
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [departmentFilters, setDepartmentFilters] = useState<string[]>([]);
   const [storeFilters, setStoreFilters] = useState<string[]>([]);
   const [applicantFilters, setApplicantFilters] = useState<string[]>([]);
   const [supplierFilters, setSupplierFilters] = useState<string[]>([]);
@@ -194,6 +196,7 @@ function OrdenesCompraContent() {
         const filters = JSON.parse(savedFilters);
         setStatusFilter(filters.statusFilter || "all");
         setSearchTerm(filters.searchTerm || "");
+        setDepartmentFilters(filters.departmentFilters || []);
         setStoreFilters(filters.storeFilters || (filters.storeFilter && filters.storeFilter !== "all" ? [filters.storeFilter] : []));
         setApplicantFilters(filters.applicantFilters || (filters.applicantFilter && filters.applicantFilter !== "all" ? [filters.applicantFilter] : []));
         setSupplierFilters(filters.supplierFilters || []);
@@ -215,6 +218,7 @@ function OrdenesCompraContent() {
     const filters = {
       statusFilter,
       searchTerm,
+      departmentFilters,
       storeFilters,
       applicantFilters,
       supplierFilters,
@@ -236,7 +240,7 @@ function OrdenesCompraContent() {
   // Resetear página al modificar filtros
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, storeFilters, applicantFilters, supplierFilters, materialFilters, dateFrom, dateTo, myApprovalFilters, tab]);
+  }, [searchTerm, statusFilter, departmentFilters, storeFilters, applicantFilters, supplierFilters, materialFilters, dateFrom, dateTo, myApprovalFilters, tab]);
 
   const fetchOrders = async (currentTab = tab) => {
     try {
@@ -287,6 +291,11 @@ function OrdenesCompraContent() {
   };
 
   // Obtener listas únicas para filtros
+  const departments = useMemo(() => {
+    const uniqueDepts = [...new Set(orders.map(o => o.current_department_name).filter(Boolean))] as string[];
+    return uniqueDepts.sort();
+  }, [orders]);
+
   const stores = useMemo(() => {
     const uniqueStores = [...new Set(orders.map(o => o.store_name))];
     return uniqueStores.sort();
@@ -338,6 +347,13 @@ function OrdenesCompraContent() {
         const matchesMaterial = order.materials ? order.materials.some(m => m.toLowerCase().includes(search)) : (order.first_item_name ? order.first_item_name.toLowerCase().includes(search) : false);
 
         if (!matchesId && !matchesApplicant && !matchesStore && !matchesMachine && !matchesSupplier && !matchesMaterial) {
+          return false;
+        }
+      }
+
+      // Filtro por departamento actual
+      if (departmentFilters.length > 0) {
+        if (!order.current_department_name || !departmentFilters.includes(order.current_department_name)) {
           return false;
         }
       }
@@ -396,7 +412,7 @@ function OrdenesCompraContent() {
 
       return true;
     });
-  }, [orders, statusFilter, searchTerm, storeFilters, applicantFilters, supplierFilters, materialFilters, dateFrom, dateTo, myApprovalFilters]);
+  }, [orders, statusFilter, searchTerm, departmentFilters, storeFilters, applicantFilters, supplierFilters, materialFilters, dateFrom, dateTo, myApprovalFilters]);
 
   // Paginación
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage) || 1;
@@ -413,11 +429,12 @@ function OrdenesCompraContent() {
     rejected: orders.filter(o => o.status === "rejected").length,
   };
 
-  const hasActiveFilters = searchTerm || storeFilters.length > 0 || applicantFilters.length > 0 || supplierFilters.length > 0 || materialFilters.length > 0 || dateFrom || dateTo || myApprovalFilters.length > 0;
+  const hasActiveFilters = searchTerm || departmentFilters.length > 0 || storeFilters.length > 0 || applicantFilters.length > 0 || supplierFilters.length > 0 || materialFilters.length > 0 || dateFrom || dateTo || myApprovalFilters.length > 0;
 
   const clearAllFilters = () => {
     setStatusFilter("all");
     setSearchTerm("");
+    setDepartmentFilters([]);
     setStoreFilters([]);
     setApplicantFilters([]);
     setSupplierFilters([]);
@@ -715,6 +732,19 @@ function OrdenesCompraContent() {
                 />
               </div>
 
+              {/* Departamento Actual Filter */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
+                  Departamento Actual
+                </label>
+                <MultiSelectDropdown
+                  options={departments.map(dept => ({ value: dept, label: dept }))}
+                  selected={departmentFilters}
+                  onChange={setDepartmentFilters}
+                  placeholder="Todos los departamentos"
+                />
+              </div>
+
               {/* Centro de Costos Filter */}
               <div>
                 <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
@@ -836,6 +866,17 @@ function OrdenesCompraContent() {
             </span>
           )}
 
+          {departmentFilters.length > 0 && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+              Departamento: {departmentFilters.join(", ")}
+              <button onClick={() => setDepartmentFilters([])} className="hover:opacity-70">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </span>
+          )}
+
           {searchTerm && (
             <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium">
               Búsqueda: {searchTerm}
@@ -946,6 +987,7 @@ function OrdenesCompraContent() {
               {paginatedOrders.map((order) => {
                 const status = statusConfig[order.status] || statusConfig.pending;
                 const dateInfo = formatDate(order.created_at);
+                const deptStyle = getDepartmentBadgeStyle(order.current_department_name);
 
                 return (
                   <Link
@@ -954,35 +996,39 @@ function OrdenesCompraContent() {
                     className="block p-4 hover:bg-gray-50 transition-colors"
                     onClick={saveFiltersToSession}
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
-                      <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2.5 mb-3">
+                      <div className="flex flex-wrap items-center gap-2">
                         <div className={`w-2 h-2 flex-shrink-0 rounded-full ${status.iconBg}`}></div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-gray-900 break-all">#{order.id}</span>
-                          {order.is_urgent && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-medium">
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                              </svg>
-                              Urgente
-                            </span>
-                          )}
-                          {order.is_piecework && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-50 text-red-700 border border-red-200 rounded text-xs font-semibold">
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                              </svg>
-                              Destajo
-                            </span>
-                          )}
-                          <span className="text-gray-400">·</span>
-                          <span className="text-sm text-gray-500">{dateInfo.relative}</span>
-                        </div>
+                        <span className="font-semibold text-gray-900 break-all">#{order.id}</span>
+                        {order.is_urgent && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-medium">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            Urgente
+                          </span>
+                        )}
+                        {order.is_piecework && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-50 text-red-700 border border-red-200 rounded text-xs font-semibold">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                            Destajo
+                          </span>
+                        )}
+                        <span className="text-gray-400">·</span>
+                        <span className="text-xs text-gray-500">{dateInfo.relative}</span>
                       </div>
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${status.className}`}>
-                          {(order.status === 'pending' || order.status === 'in_progress') && order.current_department_name ? `${status.label} | ${order.current_department_name}` : status.label}
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${status.className}`}>
+                          {status.label}
                         </span>
+                        {(order.status === 'pending' || order.status === 'in_progress') && order.current_department_name && (
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border ${deptStyle.badge}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${deptStyle.dot}`}></span>
+                            {order.current_department_name}
+                          </span>
+                        )}
                         {order.status === 'rejected' && order.is_definitive_rejection && (
                           <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-700 text-white">
                             Definitiva
@@ -991,19 +1037,47 @@ function OrdenesCompraContent() {
                       </div>
                     </div>
 
-                    <div className="ml-5 space-y-1.5">
+                    <div className="ml-4 space-y-1.5">
+                      <div className="flex items-start justify-between text-sm gap-2">
+                        <span className="text-gray-500 flex-shrink-0">Artículos</span>
+                        <div className="text-right">
+                          <span className="text-gray-900 font-medium block truncate max-w-[200px] sm:max-w-xs" title={order.first_item_name || 'Sin artículos'}>
+                            {order.first_item_name || 'Sin artículos'}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {order.items_count === 1
+                              ? '1 artículo'
+                              : `${order.items_count} artículos (${order.items_count - 1} más)`}
+                          </span>
+                        </div>
+                      </div>
+
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-500">Solicitante</span>
                         <span className="text-gray-900 font-medium">{order.applicant_name}</span>
                       </div>
+
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-500">Almacén</span>
-                        <span className="text-gray-900">{order.store_name}</span>
+                        <span className="text-gray-500">Centro de Costos</span>
+                        <div className="text-right">
+                          <span className="text-gray-900">{order.store_name}</span>
+                          {order.machine_name && (
+                            <span className="text-xs text-gray-500 block">
+                              M: {order.machine_name}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-500">Items</span>
-                        <span className="text-gray-900">{order.items_count} artículos</span>
-                      </div>
+
+                      {order.suppliers && order.suppliers.length > 0 && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-500">Proveedor</span>
+                          <span className="text-gray-900 truncate max-w-[200px]" title={order.suppliers.join(', ')}>
+                            {order.suppliers.join(', ')}
+                          </span>
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-between text-sm pt-2 border-t border-gray-100">
                         <span className="text-gray-500">Total</span>
                         <span className="text-gray-900 font-bold">{formatCurrency(order.total, order.currency)}</span>
@@ -1012,7 +1086,7 @@ function OrdenesCompraContent() {
 
                     {/* Badge de estado de aprobación del usuario */}
                     {order.my_department_status === 'pending' && order.status === 'pending' && (
-                      <div className="mt-3 ml-5">
+                      <div className="mt-3 ml-4">
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium">
                           <span className="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse"></span>
                           Requiere tu aprobación
@@ -1020,7 +1094,7 @@ function OrdenesCompraContent() {
                       </div>
                     )}
                     {order.my_department_status === 'approved' && (
-                      <div className="mt-3 ml-5">
+                      <div className="mt-3 ml-4">
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -1030,7 +1104,7 @@ function OrdenesCompraContent() {
                       </div>
                     )}
                     {order.my_department_status === 'rejected' && (
-                      <div className="mt-3 ml-5">
+                      <div className="mt-3 ml-4">
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1079,6 +1153,7 @@ function OrdenesCompraContent() {
                   {paginatedOrders.map((order) => {
                     const status = statusConfig[order.status] || statusConfig.pending;
                     const dateInfo = formatDate(order.created_at);
+                    const deptStyle = getDepartmentBadgeStyle(order.current_department_name);
 
                     return (
                       <tr key={order.id} className="hover:bg-gray-50 transition-colors">
@@ -1138,11 +1213,17 @@ function OrdenesCompraContent() {
                           <span className="font-semibold text-gray-900">{formatCurrency(order.total, order.currency)}</span>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-1.5">
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
                               <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${status.className} w-fit`}>
-                                {(order.status === 'pending' || order.status === 'in_progress') && order.current_department_name ? `${status.label} | ${order.current_department_name}` : status.label}
+                                {status.label}
                               </span>
+                              {(order.status === 'pending' || order.status === 'in_progress') && order.current_department_name && (
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${deptStyle.badge} w-fit`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${deptStyle.dot}`}></span>
+                                  {order.current_department_name}
+                                </span>
+                              )}
                               {order.status === 'rejected' && order.is_definitive_rejection && (
                                 <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-700 text-white w-fit">
                                   Definitiva
