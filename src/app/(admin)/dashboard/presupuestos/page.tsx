@@ -25,7 +25,7 @@ interface BudgetSummary {
   } | null;
 }
 
-const CATEGORIAS: InsumoCategoria[] = ["Materiales", "Mano de Obra", "Herramienta", "Equipo"];
+const CATEGORIAS: InsumoCategoria[] = ["Materiales", "Mano de Obra", "Herramienta", "Equipo", "Adicionales"];
 
 const CATEGORIA_CONFIG: Record<InsumoCategoria, {
   bg: string; text: string; badge: string; borderActive: string;
@@ -69,6 +69,16 @@ const CATEGORIA_CONFIG: Record<InsumoCategoria, {
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
           d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+      </svg>
+    ),
+  },
+  Adicionales: {
+    bg: "bg-purple-50", text: "text-purple-700", badge: "bg-purple-100 text-purple-700",
+    borderActive: "border-purple-400",
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+          d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
   },
@@ -223,6 +233,7 @@ export default function PresupuestosPage() {
   const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null);
   const [summary, setSummary] = useState<BudgetSummary | null>(null);
   const [insumos, setInsumos] = useState<StoreInsumoSearchResult[]>([]);
+  const [allInsumos, setAllInsumos] = useState<StoreInsumoSearchResult[]>([]);
   const [selectedCategoria, setSelectedCategoria] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -518,12 +529,14 @@ export default function PresupuestosPage() {
   };
 
   const getPresupuestoManoObra = () => {
-    const manoObraInsumos = insumos.filter((i) => i.categoria === "Mano de Obra");
+    const source = allInsumos.length > 0 ? allInsumos : insumos;
+    const manoObraInsumos = source.filter((i) => i.categoria === "Mano de Obra");
     return manoObraInsumos.reduce((sum, i) => sum + (i.monto_autorizado ?? i.monto_presupuestado), 0);
   };
 
   const getPresupuestoEquipo = () => {
-    const equipoInsumos = insumos.filter((i) => i.categoria === "Equipo");
+    const source = allInsumos.length > 0 ? allInsumos : insumos;
+    const equipoInsumos = source.filter((i) => i.categoria === "Equipo");
     return equipoInsumos.reduce((sum, i) => sum + (i.monto_autorizado ?? i.monto_presupuestado), 0);
   };
 
@@ -605,7 +618,11 @@ export default function PresupuestosPage() {
       const res = await fetch(`/api/v1/stores/${storeId}/insumos?${params}`);
       if (!res.ok) throw new Error("Error");
       const data = await res.json();
-      setInsumos(data.insumos || []);
+      const list = data.insumos || [];
+      setInsumos(list);
+      if (categoria === "all" && !query) {
+        setAllInsumos(list);
+      }
     } catch {
       setInsumos([]);
     } finally {
@@ -714,6 +731,7 @@ export default function PresupuestosPage() {
       if (!res.ok) throw new Error("Error al eliminar");
       setShowDeleteModal(false);
       setInsumos([]);
+      setAllInsumos([]);
       setUploadSuccess(null);
       setUploadError(null);
       await fetchSummary(selectedStoreId);
@@ -729,7 +747,8 @@ export default function PresupuestosPage() {
   const selectedStore = stores.find((s) => s.id === selectedStoreId);
 
   const getPorcentajeComprometido = (cat: string) => {
-    const cat_insumos = cat === "all" ? insumos : insumos.filter((i) => i.categoria === cat);
+    const source = allInsumos.length > 0 ? allInsumos : insumos;
+    const cat_insumos = cat === "all" ? source : source.filter((i) => i.categoria === cat);
     const presup = cat_insumos.reduce((a, i) => a + i.monto_presupuestado, 0);
     if (presup === 0) return 0;
     const solicitado = cat_insumos.reduce((a, i) => a + i.costo_unitario * i.cantidad_solicitada, 0);
@@ -789,6 +808,13 @@ export default function PresupuestosPage() {
           return { ...ins, costo_autorizado: val, monto_autorizado: montoAut };
         })
       );
+      setAllInsumos((prev) =>
+        prev.map((ins) => {
+          if (ins.id !== insumoId) return ins;
+          const montoAut = val != null ? val * ins.cantidad_presupuestada : null;
+          return { ...ins, costo_autorizado: val, monto_autorizado: montoAut };
+        })
+      );
       setEditingCostoId(null);
       setEditingCostoValue("");
     } catch (err: unknown) {
@@ -837,6 +863,15 @@ export default function PresupuestosPage() {
       if (!res.ok) throw new Error(data.error || "Error al guardar");
       // Actualizar localmente: recalcular costo_autorizado desde el monto
       setInsumos((prev) =>
+        prev.map((ins) => {
+          if (ins.id !== insumoId) return ins;
+          const costoAut = val != null && ins.cantidad_presupuestada > 0
+            ? val / ins.cantidad_presupuestada
+            : null;
+          return { ...ins, monto_autorizado: val, costo_autorizado: costoAut };
+        })
+      );
+      setAllInsumos((prev) =>
         prev.map((ins) => {
           if (ins.id !== insumoId) return ins;
           const costoAut = val != null && ins.cantidad_presupuestada > 0

@@ -237,7 +237,7 @@ export async function POST(
     // Paso 1: Obtener registros actuales de la obra
     const { data: existingInsumos, error: fetchExistingError } = await supabaseAdmin
       .from("store_insumos")
-      .select("id, clave, costo_autorizado, cantidad_solicitada, cantidad_comprada")
+      .select("id, clave, categoria, costo_autorizado, cantidad_solicitada, cantidad_comprada")
       .eq("store_id", storeId);
 
     if (fetchExistingError) {
@@ -342,9 +342,9 @@ export async function POST(
       );
     }
 
-    // Paso 3: Marcar como inactivos los insumos que ya no están en el PDF
+    // Paso 3: Marcar como inactivos los insumos que ya no están en el PDF (excepto los Adicionales aprobados)
     const orphanIds = (existingInsumos ?? [])
-      .filter((ins) => !newClaves.has(ins.clave.trim()))
+      .filter((ins) => ins.categoria !== "Adicionales" && !newClaves.has(ins.clave.trim()))
       .map((ins) => ins.id);
 
     if (orphanIds.length > 0) {
@@ -371,6 +371,13 @@ export async function POST(
       total_reporte: totalReporte,
       insumos_count: totalActivos,
     });
+
+    // Recalcular y emparejar automáticamente el histórico de órdenes y listas de necesidades con el nuevo presupuesto
+    try {
+      await supabaseAdmin.rpc("recalcular_presupuesto_obra", { p_store_id: storeId });
+    } catch (rpcErr) {
+      console.warn("[stores/budget] No se pudo ejecutar recalcular_presupuesto_obra vía RPC:", rpcErr);
+    }
 
     return NextResponse.json({
       success: true,
@@ -441,6 +448,7 @@ export async function GET(
       "Mano de Obra": { monto: 0, count: 0 },
       Herramienta: { monto: 0, count: 0 },
       Equipo: { monto: 0, count: 0 },
+      Adicionales: { monto: 0, count: 0 },
     } as Record<string, { monto: number; count: number }>;
 
     for (const ins of insumos ?? []) {
