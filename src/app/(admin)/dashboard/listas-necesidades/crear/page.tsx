@@ -271,6 +271,9 @@ export default function CreateNeedsListPage() {
 
   const updateItem = (index: number, field: keyof NeedsListItem, value: string | number | File | null) => {
     const newItems = [...items];
+    if (field === 'precioUnitario' && newItems[index].insumo_clave) {
+      return;
+    }
     newItems[index] = { ...newItems[index], [field]: value };
     setItems(newItems);
   };
@@ -661,10 +664,16 @@ export default function CreateNeedsListPage() {
                         }}
                         onSelect={(insumo) => {
                           const newItems = [...items];
+                          const matchedUnit = availableUnits.find(
+                            u => u.abbreviation.toLowerCase() === (insumo.unidad || '').toLowerCase() ||
+                                 u.name.toLowerCase() === (insumo.unidad || '').toLowerCase()
+                          );
+                          const finalUnit = matchedUnit ? matchedUnit.abbreviation : (insumo.unidad || newItems[index].unidad);
+
                           newItems[index] = {
                             ...newItems[index],
                             nombre: insumo.descripcion,
-                            unidad: insumo.unidad || newItems[index].unidad,
+                            unidad: finalUnit,
                             precioUnitario: (insumo.costo_autorizado != null && insumo.costo_autorizado > 0) ? insumo.costo_autorizado : (insumo.costo_unitario || newItems[index].precioUnitario),
                             insumo_clave: insumo.clave,
                             categoria: insumo.categoria,
@@ -726,6 +735,9 @@ export default function CreateNeedsListPage() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
                     >
                       <option value="" disabled>Seleccionar</option>
+                      {item.unidad && !availableUnits.some(u => u.abbreviation.toLowerCase() === item.unidad.toLowerCase()) && (
+                        <option value={item.unidad}>{item.unidad}</option>
+                      )}
                       {availableUnits.map((u) => (
                         <option key={u.id} value={u.abbreviation}>
                           {u.name}
@@ -735,16 +747,38 @@ export default function CreateNeedsListPage() {
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="block text-sm text-gray-600 mb-1">Precio Unitario *</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-sm text-gray-600">Precio Unitario *</label>
+                      {item.insumo_clave && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+                          <svg className="w-3 h-3 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                          Fijo por presupuesto
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="number"
                       value={item.precioUnitario}
+                      readOnly={Boolean(item.insumo_clave)}
+                      disabled={Boolean(item.insumo_clave)}
                       onChange={(e) => updateItem(index, 'precioUnitario', Number(e.target.value))}
                       required
                       min="0"
                       step="0.01"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
+                      className={`w-full px-3 py-2 border rounded-lg text-sm transition-colors ${
+                        item.insumo_clave
+                          ? "bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed select-none font-medium"
+                          : "border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
+                      }`}
+                      title={item.insumo_clave ? "El precio está establecido por el presupuesto cargado y no puede modificarse." : undefined}
                     />
+                    {item.insumo_clave && (
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        El precio unitario no es editable porque proviene del catálogo de presupuesto de la obra.
+                      </p>
+                    )}
                   </div>
 
                   <div className="md:col-span-2">

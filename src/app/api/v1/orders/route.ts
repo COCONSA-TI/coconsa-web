@@ -132,36 +132,39 @@ export async function GET(request: Request) {
         : Promise.resolve({ data: [] as { id: number; name: string }[] }),
       supabaseAdmin.from('departments').select('id, name'),
       orderIds.length > 0
-        ? supabaseAdmin.from('order_approvals').select('order_id, department_id, approval_order').in('order_id', orderIds).eq('status', 'pending')
-        : Promise.resolve({ data: [] as { order_id: string; department_id: string; approval_order: number }[] }),
+        ? supabaseAdmin.from('order_approvals').select('order_id, department_id, approval_order, status').in('order_id', orderIds).in('status', ['pending', 'PENDIENTE'])
+        : Promise.resolve({ data: [] as { order_id: string; department_id: string; approval_order: number; status: string }[] }),
       currentUserData?.is_department_head && currentUserData?.department_id && orderIds.length > 0
         ? supabaseAdmin.from('order_approvals').select('order_id, status, department_id').eq('department_id', currentUserData.department_id).in('order_id', orderIds)
         : Promise.resolve({ data: [] as { order_id: string; status: string; department_id: string }[] }),
     ]);
 
-    const storesMap = new Map(stores?.map(s => [s.id, s.name]) || []);
-    const usersMap = new Map(users?.map(u => [u.id, u.full_name]) || []);
-    const machinesMap = new Map(machines?.map(m => [m.id, m.name]) || []);
-    const allDeptsMap = new Map(allDepts?.map(d => [d.id, d.name]) || []);
+    const storesMap = new Map(stores?.map(s => [String(s.id), s.name]) || []);
+    const usersMap = new Map(users?.map(u => [String(u.id), u.full_name]) || []);
+    const userDeptIdMap = new Map(users?.map(u => [String(u.id), u.department_id ? String(u.department_id) : null]) || []);
+    const machinesMap = new Map(machines?.map(m => [String(m.id), m.name]) || []);
+    const allDeptsMap = new Map(allDepts?.map(d => [String(d.id), d.name]) || []);
 
     const currentDeptMap = new Map<string, { order: number, name: string }>();
     if (allPendingApprovals) {
       allPendingApprovals.forEach((a: any) => {
-        const existing = currentDeptMap.get(a.order_id);
-        if (!existing || a.approval_order < existing.order) {
-           currentDeptMap.set(a.order_id, {
-             order: a.approval_order,
-             name: allDeptsMap.get(a.department_id) || 'Desconocido'
+        const orderKey = String(a.order_id);
+        const existing = currentDeptMap.get(orderKey);
+        const orderVal = Number(a.approval_order ?? 999);
+        if (!existing || orderVal < existing.order) {
+           currentDeptMap.set(orderKey, {
+             order: orderVal,
+             name: allDeptsMap.get(String(a.department_id)) || 'Desconocido'
            });
         }
       });
     }
 
-    const userDeptApprovals = new Map();
+    const userDeptApprovals = new Map<string, string>();
     const deptApprovals = 'data' in deptApprovalsResult ? deptApprovalsResult.data : deptApprovalsResult;
     if (deptApprovals) {
       (deptApprovals as any[]).forEach(a => {
-        userDeptApprovals.set(a.order_id, a.status);
+        userDeptApprovals.set(String(a.order_id), a.status);
       });
     }
 
@@ -191,29 +194,45 @@ export async function GET(request: Request) {
         itemsArray = [];
       }
       
-        const uniqueSuppliers = new Set<string>();
-        itemsArray.forEach(item => {
-          if (item.proveedor) uniqueSuppliers.add(item.proveedor);
-          if (item.supplier_name) uniqueSuppliers.add(item.supplier_name);
-        });
+      const uniqueSuppliers = new Set<string>();
+      itemsArray.forEach(item => {
+        if (item.proveedor) uniqueSuppliers.add(item.proveedor);
+        if (item.supplier_name) uniqueSuppliers.add(item.supplier_name);
+      });
+
+      const orderIdStr = String(order.id);
+      const normalizedStatus = statusMap[order.status] || 'pending';
+      let deptName = currentDeptMap.get(orderIdStr)?.name || null;
+
+      // Si la orden está pendiente o en proceso pero no tiene aprobación pendiente registrada (ej. órdenes históricas),
+      // resolver el departamento inicial de forma inteligente para que siempre esté etiquetada al 100%
+      if ((normalizedStatus === 'pending' || normalizedStatus === 'in_progress') && !deptName) {
+        const applicantDeptId = userDeptIdMap.get(String(order.applicant_id));
+        const applicantDeptName = applicantDeptId ? allDeptsMap.get(applicantDeptId) : null;
+        if (applicantDeptName && applicantDeptName.toLowerCase().includes('gerencia')) {
+          deptName = applicantDeptName;
+        } else {
+          deptName = 'Contraloría';
+        }
+      }
 
       return {
         id: order.id,
         created_at: order.created_at,
-        store_name: storesMap.get(order.store_id) || 'N/A',
+        store_name: storesMap.get(String(order.store_id)) || 'N/A',
         total: order.total,
         currency: order.currency,
-        status: statusMap[order.status] || 'pending',
-        applicant_name: usersMap.get(order.applicant_id) || 'N/A',
+        status: normalizedStatus,
+        applicant_name: usersMap.get(String(order.applicant_id)) || 'N/A',
         items_count: itemsArray.length,
         first_item_name: itemsArray.length > 0 ? itemsArray[0].nombre : null,
         payment_type: order.payment_type || null,
         is_urgent: order.is_urgent || false,
         is_definitive_rejection: order.is_definitive_rejection || false,
         is_piecework: order.is_piecework || false,
-        my_department_status: userDeptApprovals.get(order.id) || null,
-        current_department_name: currentDeptMap.get(order.id)?.name || null,
-        machine_name: order.machine_id ? machinesMap.get(order.machine_id) || null : null,
+        my_department_status: userDeptApprovals.get(orderIdStr) || null,
+        current_department_name: (normalizedStatus === 'pending' || normalizedStatus === 'in_progress') ? deptName : null,
+        machine_name: order.machine_id ? machinesMap.get(String(order.machine_id)) || null : null,
         suppliers: Array.from(uniqueSuppliers),
         materials: itemsArray.map(item => item.nombre).filter(Boolean),
       };

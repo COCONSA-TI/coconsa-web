@@ -262,33 +262,227 @@ export function ConfigPageSkeleton() {
 }
 
 /**
- * Skeleton para la lista de ordenes de compra (con filtros y paginacion)
+/**
+ * Skeleton para la lista de ordenes de compra (con banner rojo, tabs, 5 stats cards y tabla)
  */
 export function OrdersPageSkeleton() {
   return (
-    <SkeletonWrapper>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <Skeleton width={250} height={28} />
-          <Skeleton width={180} height={36} borderRadius={8} />
-        </div>
-        {/* Filters */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-          <div className="flex flex-wrap gap-4">
-            <div className="flex-1 min-w-[200px]"><Skeleton height={40} borderRadius={8} /></div>
-            <Skeleton width={150} height={40} borderRadius={8} />
-            <Skeleton width={150} height={40} borderRadius={8} />
+    <div className="max-w-7xl mx-auto space-y-6">
+      {/* Header Banner Skeleton */}
+      <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-xl shadow-lg p-6 text-white animate-pulse">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <div className="h-8 w-56 bg-white/20 rounded"></div>
+            <div className="h-4 w-72 bg-white/10 rounded mt-2"></div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="h-10 w-24 bg-white/10 rounded-lg"></div>
+            <div className="h-10 w-36 bg-white/20 rounded-lg"></div>
           </div>
         </div>
-        <TableSkeleton rows={8} cols={6} />
-        {/* Pagination */}
-        <div className="flex justify-center gap-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} width={36} height={36} borderRadius={8} />
+      </div>
+
+      {/* Tabs Skeleton */}
+      <div className="border-b border-gray-200">
+        <div className="flex space-x-8 pb-4">
+          <div className="h-5 w-20 bg-gray-200 rounded animate-pulse"></div>
+          <div className="h-5 w-40 bg-gray-100 rounded animate-pulse"></div>
+        </div>
+      </div>
+
+      {/* Stats Grid Skeleton (5 cards) */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="bg-white rounded-xl shadow p-4 animate-pulse">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="h-3 w-16 bg-gray-200 rounded mb-2"></div>
+                <div className="h-7 w-12 bg-gray-200 rounded"></div>
+              </div>
+              <div className="w-10 h-10 rounded-full bg-gray-100"></div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Search & Filters Skeleton */}
+      <div className="bg-white rounded-xl shadow p-4 animate-pulse">
+        <div className="flex flex-wrap gap-4 items-center">
+          <div className="flex-1 min-w-[200px] h-10 bg-gray-100 rounded-lg"></div>
+          <div className="w-28 h-10 bg-gray-100 rounded-lg"></div>
+          <div className="w-28 h-10 bg-gray-100 rounded-lg"></div>
+        </div>
+      </div>
+
+      {/* Table / List Skeleton */}
+      <div className="bg-white rounded-xl shadow overflow-hidden animate-pulse">
+        <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between">
+          <div className="h-4 w-24 bg-gray-200 rounded"></div>
+          <div className="h-4 w-20 bg-gray-200 rounded"></div>
+          <div className="h-4 w-24 bg-gray-200 rounded"></div>
+          <div className="h-4 w-32 bg-gray-200 rounded"></div>
+          <div className="h-4 w-20 bg-gray-200 rounded"></div>
+          <div className="h-4 w-20 bg-gray-200 rounded"></div>
+        </div>
+        <div className="divide-y divide-gray-100">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="p-5 flex items-center justify-between gap-4">
+              <div className="h-4 w-24 bg-gray-200 rounded"></div>
+              <div className="h-4 w-20 bg-gray-100 rounded"></div>
+              <div className="h-4 w-28 bg-gray-100 rounded"></div>
+              <div className="h-4 w-36 bg-gray-100 rounded"></div>
+              <div className="h-4 w-20 bg-gray-200 rounded font-bold"></div>
+              <div className="h-6 w-24 bg-gray-100 rounded-full"></div>
+            </div>
           ))}
         </div>
       </div>
-    </SkeletonWrapper>
+    </div>
+  );
+}
+
+/**
+ * Skeleton para la pagina de Presupuestos (con banner rojo, tabs, selector, 6 cards y tabla)
+ */
+export function PresupuestosPageSkeleton() {
+  return (
+    <div className="max-w-7xl mx-auto space-y-6">
+      {/* Header Banner Skeleton */}
+      <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-xl shadow-lg p-6 text-white animate-pulse">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <div className="h-8 w-56 bg-white/20 rounded"></div>
+            <div className="h-4 w-72 bg-white/10 rounded mt-2"></div>
+          </div>
+          <div className="h-10 w-36 bg-white/20 rounded-lg"></div>
+        </div>
+      </div>
+
+      {/* Tabs Skeleton */}
+      <div className="border-b border-gray-200">
+        <div className="flex space-x-8 pb-4">
+          <div className="h-5 w-36 bg-gray-200 rounded animate-pulse"></div>
+          <div className="h-5 w-36 bg-gray-100 rounded animate-pulse"></div>
+          <div className="h-5 w-32 bg-gray-100 rounded animate-pulse"></div>
+        </div>
+      </div>
+
+      {/* Selector de Obra Skeleton */}
+      <div className="bg-white rounded-xl shadow p-4 sm:p-5 border border-gray-100 animate-pulse">
+        <div className="max-w-md space-y-2">
+          <div className="h-4 w-40 bg-gray-200 rounded"></div>
+          <div className="h-10 w-full bg-gray-100 rounded-lg"></div>
+        </div>
+      </div>
+
+      {/* Financial Summary Category Cards Skeleton (6 cards) */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        {[...Array(6)].map((_, i) => (
+          <div key={i} className="bg-white rounded-xl shadow p-4 border border-gray-100 animate-pulse">
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-8 h-8 rounded-lg bg-gray-100"></div>
+              <div className="w-8 h-4 rounded-full bg-gray-100"></div>
+            </div>
+            <div className="h-3 w-16 bg-gray-200 rounded mb-2"></div>
+            <div className="h-6 w-24 bg-gray-200 rounded mb-3"></div>
+            <div className="h-1.5 w-full bg-gray-100 rounded-full"></div>
+          </div>
+        ))}
+      </div>
+
+      {/* Content / Table Skeleton */}
+      <div className="bg-white rounded-xl shadow overflow-hidden animate-pulse">
+        <div className="p-4 border-b border-gray-100 flex justify-between items-center">
+          <div className="flex gap-2">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-7 w-20 bg-gray-100 rounded-full"></div>
+            ))}
+          </div>
+          <div className="w-64 h-9 bg-gray-100 rounded-lg"></div>
+        </div>
+        <div className="divide-y divide-gray-100">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="p-4 flex items-center justify-between gap-4">
+              <div className="h-4 w-24 bg-gray-200 rounded"></div>
+              <div className="h-4 w-48 bg-gray-100 rounded"></div>
+              <div className="h-4 w-12 bg-gray-100 rounded"></div>
+              <div className="h-4 w-20 bg-gray-100 rounded"></div>
+              <div className="h-4 w-20 bg-gray-100 rounded"></div>
+              <div className="h-4 w-20 bg-gray-200 rounded font-bold"></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Skeleton para la pagina de catalogo de proveedores
+ */
+export function ProveedoresPageSkeleton() {
+  return (
+    <div className="max-w-7xl mx-auto space-y-6">
+      {/* Header Banner Skeleton */}
+      <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-xl shadow-lg p-6 text-white animate-pulse">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-2">
+            <div className="h-7 w-64 bg-white/20 rounded"></div>
+            <div className="h-4 w-80 bg-white/20 rounded"></div>
+          </div>
+          <div className="h-10 w-44 bg-white/20 rounded-lg"></div>
+        </div>
+      </div>
+
+      {/* KPI Stats Grid Skeleton */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="bg-white rounded-xl shadow p-4 animate-pulse">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="h-3 w-24 bg-gray-200 rounded mb-2"></div>
+                <div className="h-7 w-12 bg-gray-200 rounded"></div>
+              </div>
+              <div className="w-10 h-10 rounded-full bg-gray-100"></div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Search & Filters Skeleton */}
+      <div className="bg-white rounded-xl shadow p-4 animate-pulse space-y-3">
+        <div className="h-9 w-full max-w-md bg-gray-100 rounded-lg"></div>
+        <div className="flex gap-2">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-7 w-20 bg-gray-100 rounded-full"></div>
+          ))}
+        </div>
+      </div>
+
+      {/* Table Skeleton */}
+      <div className="bg-white rounded-xl shadow overflow-hidden animate-pulse">
+        <div className="p-4 border-b border-gray-100">
+          <div className="h-5 w-36 bg-gray-200 rounded"></div>
+        </div>
+        <div className="divide-y divide-gray-100">
+          {[...Array(5)].map((_, i) => (
+            <div key={i} className="p-4 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gray-200 rounded-lg"></div>
+                <div className="space-y-1">
+                  <div className="h-4 w-40 bg-gray-200 rounded"></div>
+                  <div className="h-3 w-24 bg-gray-100 rounded"></div>
+                </div>
+              </div>
+              <div className="h-5 w-28 bg-gray-100 rounded"></div>
+              <div className="h-5 w-20 bg-gray-100 rounded-full"></div>
+              <div className="h-4 w-28 bg-gray-100 rounded"></div>
+              <div className="h-8 w-16 bg-gray-100 rounded"></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 

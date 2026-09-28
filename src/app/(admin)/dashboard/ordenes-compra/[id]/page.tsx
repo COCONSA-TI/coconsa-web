@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
-import { getOrderApprovals, canUserApprove, getApprovalIconType, type OrderApproval, type ApprovalIconType } from "@/lib/approvalFlow";
+import { getOrderApprovals, canUserApprove, getApprovalIconType, getDepartmentBadgeStyle, type OrderApproval, type ApprovalIconType } from "@/lib/approvalFlow";
 import { useToast } from "@/components/ui/Toast";
-import { ConfirmModal, InputModal, Modal } from "@/components/ui/Modal";
+import { ConfirmModal, Modal } from "@/components/ui/Modal";
 import { RETENTION_OPTIONS, calculateRetentions } from "@/types/database";
 import { OrderDetailSkeleton } from "@/components/ui/Skeletons";
 import { mergeUrlsToPdf } from "@/lib/pdfUtils";
@@ -97,6 +97,12 @@ export default function OrdenDetallesPage() {
   const orderId = params.id as string;
   const { isAdmin, user } = useAuth();
   const toast = useToast();
+
+  const deptCode = (user?.department_code || '').toLowerCase();
+  const isDirection = deptCode === 'direccion' || deptCode.includes('dir');
+  const isConstruccionHead = Boolean(user?.is_department_head) && (deptCode === 'gerencia_construccion' || deptCode.includes('construccion'));
+  const isContraloriaHead = Boolean(user?.is_department_head) && (deptCode === 'contraloria' || deptCode.includes('contralor'));
+  const canSpecialEditOrder = isAdmin || isDirection || isConstruccionHead || isContraloriaHead;
 
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -801,9 +807,15 @@ export default function OrdenDetallesPage() {
                     Destajo
                   </span>
                 )}
-                <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusInfo.className}`}>
-                  {(order.status === 'pending' || order.status === 'in_progress') && order.current_department_name ? `${statusInfo.label} | ${order.current_department_name}` : statusInfo.label}
+                <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${statusInfo.className}`}>
+                  {statusInfo.label}
                 </span>
+                {(order.status === 'pending' || order.status === 'in_progress') && order.current_department_name && (
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium border flex items-center gap-1.5 shadow-sm ${getDepartmentBadgeStyle(order.current_department_name).badge}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${getDepartmentBadgeStyle(order.current_department_name).dot}`}></span>
+                    {order.current_department_name}
+                  </span>
+                )}
                 {order.status === 'rejected' && order.is_definitive_rejection && (
                   <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-700 text-white">
                     Definitiva
@@ -820,25 +832,39 @@ export default function OrdenDetallesPage() {
               </p>
             </div>
 
-            <button
-              onClick={handleDownloadPdf}
-              disabled={downloadingPdf}
-              className="inline-flex items-center justify-center gap-2 bg-white text-red-600 px-5 py-2.5 rounded-lg font-medium hover:bg-red-50 transition-colors shadow-sm disabled:opacity-50"
-            >
-              {downloadingPdf ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-                  <span>Generando...</span>
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            <div className="flex flex-wrap items-center gap-2.5">
+              {canSpecialEditOrder && (
+                <Link
+                  href={`/dashboard/ordenes-compra/${order.id}/editar`}
+                  className="inline-flex items-center justify-center gap-2 bg-white/20 text-white border border-white/40 px-4 py-2.5 rounded-lg font-medium hover:bg-white/30 transition-colors shadow-sm whitespace-nowrap text-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
-                  <span>Descargar PDF</span>
-                </>
+                  <span>Editar Orden</span>
+                </Link>
               )}
-            </button>
+
+              <button
+                onClick={handleDownloadPdf}
+                disabled={downloadingPdf}
+                className="inline-flex items-center justify-center gap-2 bg-white text-red-600 px-5 py-2.5 rounded-lg font-medium hover:bg-red-50 transition-colors shadow-sm disabled:opacity-50"
+              >
+                {downloadingPdf ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+                    <span>Generando...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span>Descargar PDF</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
 

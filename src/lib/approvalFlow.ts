@@ -157,3 +157,84 @@ export function getApprovalIconType(status: 'pending' | 'approved' | 'rejected',
   if (isActive) return 'active';
   return 'pending';
 }
+
+export interface DepartmentBadgeStyle {
+  badge: string;
+  dot: string;
+  className: string;
+}
+
+export function getDepartmentBadgeStyle(deptName: string | null | undefined): DepartmentBadgeStyle {
+  if (!deptName) {
+    return {
+      badge: 'bg-gray-100 text-gray-700 border-gray-200',
+      dot: 'bg-gray-400',
+      className: 'bg-gray-100 text-gray-700 border-gray-200',
+    };
+  }
+
+  const normalized = deptName
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (normalized.includes('direccion')) {
+    // Dirección: Púrpura elegante
+    return {
+      badge: 'bg-purple-100 text-purple-800 border-purple-200',
+      dot: 'bg-purple-600',
+      className: 'bg-purple-100 text-purple-800 border-purple-200',
+    };
+  }
+
+  if (normalized.includes('contralor')) {
+    // Contraloría: Índigo profesional
+    return {
+      badge: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+      dot: 'bg-indigo-600',
+      className: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    };
+  }
+
+  if (
+    normalized.includes('gerencia') ||
+    normalized.includes('construccion') ||
+    normalized.includes('maquinaria') ||
+    normalized.includes('seguridad') ||
+    normalized.includes('recursos humanos') ||
+    normalized.includes('rh') ||
+    normalized.includes('administracion')
+  ) {
+    // Gerencias operativas: Esmeralda / Verde azulado
+    return {
+      badge: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+      dot: 'bg-emerald-600',
+      className: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    };
+  }
+
+  if (normalized.includes('contabil')) {
+    // Contabilidad: Ámbar / Dorado
+    return {
+      badge: 'bg-amber-100 text-amber-800 border-amber-200',
+      dot: 'bg-amber-600',
+      className: 'bg-amber-100 text-amber-800 border-amber-200',
+    };
+  }
+
+  if (normalized.includes('pago')) {
+    // Pagos: Celeste / Cian
+    return {
+      badge: 'bg-sky-100 text-sky-800 border-sky-200',
+      dot: 'bg-sky-600',
+      className: 'bg-sky-100 text-sky-800 border-sky-200',
+    };
+  }
+
+  // Fallback por defecto
+  return {
+    badge: 'bg-slate-100 text-slate-800 border-slate-200',
+    dot: 'bg-slate-500',
+    className: 'bg-slate-100 text-slate-800 border-slate-200',
+  };
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 
 interface AdminSidebarProps {
@@ -20,7 +20,7 @@ const menuItems = [
     ),
   },
   {
-    name: 'Ordenes de compra',
+    name: 'Órdenes de compra',
     href: '/dashboard/ordenes-compra',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -48,24 +48,6 @@ const menuItems = [
     ),
   },
   {
-    name: 'Proyectos',
-    href: '/dashboard/proyectos',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-      </svg>
-    ),
-  },
-  {
-    name: 'Clientes',
-    href: '/dashboard/clientes',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-      </svg>
-    ),
-  },
-  {
     name: 'Proveedores',
     href: '/dashboard/proveedores',
     icon: (
@@ -88,24 +70,6 @@ const menuItems = [
     badge: 'IA',
   },
   {
-    name: 'Mensajes',
-    href: '/dashboard/mensajes',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-      </svg>
-    ),
-  },
-  {
-    name: 'Reportes',
-    href: '/dashboard/reportes',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-      </svg>
-    ),
-  },
-  {
     name: 'Configuración',
     href: '/dashboard/configuracion',
     icon: (
@@ -119,14 +83,31 @@ const menuItems = [
 
 export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarProps) {
   const pathname = usePathname();
-  // TODO: Descomentar 'user' cuando las demás secciones estén listas
-  const { isAdmin, isDepartmentHead } = useAuth();
+  const router = useRouter();
+  const { user, isAdmin, isDepartmentHead } = useAuth();
 
-  // Filtrar items según rol
-  // TEMPORAL: Solo mostrar Órdenes de compra, Listas de necesidades y Configuración durante el desarrollo
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/v1/logout', { method: 'POST' });
+      router.push('/login');
+      router.refresh();
+    } catch {
+      // Error silencioso - el usuario será redirigido al login
+    }
+  };
+
+  // Filtrar items según rol (asegurar paridad 100% con la versión desktop)
   const allowedItems = menuItems.filter(item => {
-    // Solo mostrar estas secciones por ahora (las demás están en desarrollo)
+    // Dashboard principal
+    if (item.href === '/dashboard') {
+      return true;
+    }
+    // Órdenes de compra y Listas de necesidades
     if (item.href === '/dashboard/ordenes-compra' || item.href === '/dashboard/listas-necesidades') {
+      return true;
+    }
+    // Presupuestos
+    if (item.href === '/dashboard/presupuestos') {
       return true;
     }
     // Proveedores: todos pueden ver
@@ -166,7 +147,7 @@ export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarPr
       >
         {/* Header del sidebar */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
-          <span className="font-semibold text-gray-900">Menú</span>
+          <span className="font-semibold text-gray-900">Menú de Navegación</span>
           <button
             onClick={onClose}
             className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors"
@@ -181,7 +162,10 @@ export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarPr
         {/* Navegación */}
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {allowedItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive =
+              pathname === item.href ||
+              (item.href !== '/dashboard' && pathname?.startsWith(item.href));
+
             return (
               <Link
                 key={item.name}
@@ -189,12 +173,12 @@ export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarPr
                 onClick={handleLinkClick}
                 className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                   isActive
-                    ? 'bg-red-50 text-red-600 font-medium'
+                    ? 'bg-red-50 text-red-600 font-semibold'
                     : 'text-gray-700 hover:bg-gray-50 hover:text-red-600'
                 }`}
               >
                 {item.icon}
-                <span className="flex-1">{item.name}</span>
+                <span className="flex-1 text-sm">{item.name}</span>
                 {item.badge && (
                   <span className="px-2 py-0.5 text-xs font-semibold bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-full">
                     {item.badge}
@@ -205,18 +189,36 @@ export default function AdminSidebar({ isOpen = false, onClose }: AdminSidebarPr
           })}
         </nav>
 
-        {/* Sección de ayuda */}
-        {/* <div className="p-4 border-t border-gray-200">
-          <div className="p-4 bg-gray-50 rounded-lg">
-            <h3 className="text-sm font-semibold text-gray-900 mb-2">¿Necesitas ayuda?</h3>
-            <p className="text-xs text-gray-600 mb-3">
-              Contacta al equipo de soporte técnico
-            </p>
-            <button className="w-full bg-red-600 text-white text-sm py-2 rounded-lg hover:bg-red-700 transition-colors">
-              Soporte
+        {/* Usuario y Cierre de Sesión en móvil */}
+        {user && (
+          <div className="p-4 border-t border-gray-200 bg-gray-50">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-full bg-red-100 text-red-700 flex items-center justify-center font-bold text-sm flex-shrink-0">
+                {(user.full_name || user.email || 'U').charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-900 truncate">
+                  {user.full_name || 'Usuario'}
+                </p>
+                <p className="text-xs text-gray-500 truncate">
+                  {user.email}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                if (onClose) onClose();
+                handleLogout();
+              }}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-900 hover:bg-gray-800 text-white text-xs font-semibold rounded-lg transition-colors shadow-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              Cerrar Sesión
             </button>
           </div>
-        </div> */}
+        )}
       </aside>
     </>
   );

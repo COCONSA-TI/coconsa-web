@@ -6,10 +6,10 @@ import { z } from 'zod';
 const supplierSchema = z.object({
   commercial_name: z.string().min(2, 'El nombre comercial requiere al menos 2 caracteres'),
   social_reason: z.string().min(2, 'La razón social requiere al menos 2 caracteres'),
-  rfc: z.string().min(12, 'El RFC debe tener 12 o 13 caracteres').max(13, 'El RFC no puede exceder 13 caracteres').toUpperCase(),
+  rfc: z.string().min(3, 'El RFC o identificador es requerido').max(50, 'El RFC no puede exceder 50 caracteres').toUpperCase(),
   address: z.string().nullable().optional(),
   phone: z.string().nullable().optional(),
-  clabe: z.string().length(18, 'La CLABE interbancaria debe tener exactamente 18 dígitos'),
+  clabe: z.string().min(4, 'La CLABE o identificador es requerido').max(30, 'La CLABE no puede exceder 30 caracteres'),
   bank: z.string().min(2, 'El nombre del banco es requerido'),
   contact: z.string().nullable().optional(),
   category: z.string().min(2, 'La categoría es requerida'),

@@ -198,7 +198,7 @@ export async function GET(
 
     const { data: user } = await supabaseAdmin
       .from('users')
-      .select('full_name, email')
+      .select('full_name, email, department_id')
       .eq('id', typedOrder.applicant_id)
       .single();
 
@@ -218,25 +218,6 @@ export async function GET(
       machineName = machine?.name || null;
     }
 
-    // Obtener las aprobaciones pendientes para saber en qué departamento está la orden (la de menor approval_order)
-    const { data: pendingApprovals } = await supabaseAdmin
-      .from('order_approvals')
-      .select('department_id, approval_order')
-      .eq('order_id', orderId)
-      .eq('status', 'pending')
-      .order('approval_order', { ascending: true })
-      .limit(1);
-
-    let currentDepartmentName = null;
-    if (pendingApprovals && pendingApprovals.length > 0) {
-      const { data: dept } = await supabaseAdmin
-        .from('departments')
-        .select('name')
-        .eq('id', pendingApprovals[0].department_id)
-        .single();
-      currentDepartmentName = dept?.name || null;
-    }
-
     // Mapear status de español a inglés (soporta ambos formatos)
     const statusMap: Record<string, string> = {
       // Español
@@ -252,6 +233,48 @@ export async function GET(
       'in_progress': 'in_progress',
       'completed': 'completed'
     };
+
+    const normalizedStatus = statusMap[typedOrder.status] || 'pending';
+
+    // Obtener las aprobaciones pendientes para saber en qué departamento está la orden (la de menor approval_order)
+    const { data: pendingApprovals } = await supabaseAdmin
+      .from('order_approvals')
+      .select('department_id, approval_order')
+      .eq('order_id', orderId)
+      .in('status', ['pending', 'PENDIENTE'])
+      .order('approval_order', { ascending: true })
+      .limit(1);
+
+    let currentDepartmentName: string | null = null;
+    if (pendingApprovals && pendingApprovals.length > 0) {
+      const { data: dept } = await supabaseAdmin
+        .from('departments')
+        .select('name')
+        .eq('id', pendingApprovals[0].department_id)
+        .single();
+      currentDepartmentName = dept?.name || null;
+    }
+
+    // Si la orden está pendiente o en proceso pero no tiene aprobación pendiente registrada,
+    // resolver de forma inteligente para garantizar que esté etiquetada al 100% de las veces
+    if ((normalizedStatus === 'pending' || normalizedStatus === 'in_progress') && !currentDepartmentName) {
+      if (user?.department_id) {
+        const { data: uDept } = await supabaseAdmin
+          .from('departments')
+          .select('name')
+          .eq('id', user.department_id)
+          .single();
+        if (uDept?.name && uDept.name.toLowerCase().includes('gerencia')) {
+          currentDepartmentName = uDept.name;
+        } else {
+          currentDepartmentName = 'Contraloría';
+        }
+      } else {
+        currentDepartmentName = 'Contraloría';
+      }
+    } else if (normalizedStatus !== 'pending' && normalizedStatus !== 'in_progress') {
+      currentDepartmentName = null;
+    }
 
     let itemsArray: OrderItem[] = [];
     try {
@@ -332,7 +355,7 @@ export async function PUT(
     // Obtener la orden actual
     const { data: existingOrder, error: orderError } = await supabaseAdmin
       .from('orders')
-      .select('id, status, applicant_id, is_urgent, is_definitive_rejection')
+      .select('id, status, applicant_id, is_urgent, is_definitive_rejection, store_id')
       .eq('id', orderId)
       .single();
 
@@ -343,29 +366,46 @@ export async function PUT(
       );
     }
 
-    // Verificar que la orden esté rechazada (puede venir en español o inglés)
-    const isRejected = existingOrder.status === 'RECHAZADA' || existingOrder.status === 'rejected';
-    if (!isRejected) {
-      return NextResponse.json(
-        { error: "Solo se pueden editar órdenes rechazadas" },
-        { status: 400 }
-      );
-    }
+    // Consultar información del usuario autenticado para verificar permisos gerenciales
+    const { data: userData } = await supabaseAdmin
+      .from('users')
+      .select('id, email, is_department_head, department:departments(id, code, name)')
+      .eq('id', session!.userId)
+      .single();
 
-    // Verificar que no sea un rechazo definitivo
-    if (existingOrder.is_definitive_rejection) {
-      return NextResponse.json(
-        { error: "Esta orden fue rechazada de forma definitiva y no puede ser editada ni reenviada" },
-        { status: 400 }
-      );
-    }
+    const userDept = Array.isArray(userData?.department) ? userData?.department[0] : userData?.department;
+    const deptCode = (userDept?.code || '').toLowerCase();
+    const isDirection = deptCode === 'direccion' || deptCode.includes('dir');
+    const isConstruccionHead = Boolean(userData?.is_department_head) && (deptCode === 'gerencia_construccion' || deptCode.includes('construccion'));
+    const isContraloriaHead = Boolean(userData?.is_department_head) && (deptCode === 'contraloria' || deptCode.includes('contralor'));
+    const isAdminUser = session!.role === 'admin';
 
-    // Verificar que el usuario sea el solicitante original o admin
-    if (existingOrder.applicant_id !== session!.userId && session!.role !== 'admin') {
-      return NextResponse.json(
-        { error: "Solo el solicitante original puede editar esta orden" },
-        { status: 403 }
-      );
+    // Permiso especial: Dirección, Gerente de Construcción, Gerente/Jefe de Contraloría y Admin pueden editar en cualquier momento
+    const canSpecialEdit = isAdminUser || isDirection || isConstruccionHead || isContraloriaHead;
+
+    if (!canSpecialEdit) {
+      // Flujo normal: solo se pueden editar órdenes rechazadas que no sean definitivas y por el solicitante
+      const isRejected = existingOrder.status === 'RECHAZADA' || existingOrder.status === 'rejected';
+      if (!isRejected) {
+        return NextResponse.json(
+          { error: "Solo se pueden editar órdenes rechazadas" },
+          { status: 400 }
+        );
+      }
+
+      if (existingOrder.is_definitive_rejection) {
+        return NextResponse.json(
+          { error: "Esta orden fue rechazada de forma definitiva y no puede ser editada ni reenviada" },
+          { status: 400 }
+        );
+      }
+
+      if (existingOrder.applicant_id !== session!.userId) {
+        return NextResponse.json(
+          { error: "Solo el solicitante original puede editar esta orden" },
+          { status: 403 }
+        );
+      }
     }
 
     // Procesar el body (JSON-only con presigned URLs)
@@ -494,9 +534,14 @@ export async function PUT(
       payment_type: payment_type || '',
       tax_type: effectiveTaxType || 'sin_iva',
       iva_percentage: effectiveIvaPercentage || null,
-      status: 'PENDIENTE', // Cambiar estado a pendiente
       updated_at: new Date().toISOString(),
     };
+
+    // Si es edición normal del solicitante tras rechazo, cambiar estado a pendiente
+    // Si es edición especial gerencial/dirección, se preserva el estado original
+    if (!canSpecialEdit) {
+      updateData.status = 'PENDIENTE';
+    }
 
     if (justification) {
       updateData.justification = justification;
@@ -539,25 +584,37 @@ export async function PUT(
       );
     }
 
-    // Recrear el flujo de aprobaciones
-    try {
-      const isAutoApproved = await recreateOrderApprovals(orderId, existingOrder.applicant_id, existingOrder.is_urgent || false);
-      
-      // Si se auto-aprobó el primer nivel, actualizar estado
-      if (isAutoApproved) {
-        await supabaseAdmin
-          .from('orders')
-          .update({ status: 'EN_PROCESO' })
-          .eq('id', orderId);
+    // Si NO es edición especial (es el solicitante original tras rechazo), recrear el flujo de aprobaciones
+    if (!canSpecialEdit) {
+      try {
+        const isAutoApproved = await recreateOrderApprovals(orderId, existingOrder.applicant_id, existingOrder.is_urgent || false);
+        
+        // Si se auto-aprobó el primer nivel, actualizar estado
+        if (isAutoApproved) {
+          await supabaseAdmin
+            .from('orders')
+            .update({ status: 'EN_PROCESO' })
+            .eq('id', orderId);
+        }
+      } catch (approvalError) {
+        console.error('Error recreando aprobaciones:', approvalError);
+        // No fallar la actualización si falla la creación de aprobaciones
       }
-    } catch (approvalError) {
-      console.error('Error recreando aprobaciones:', approvalError);
-      // No fallar la actualización si falla la creación de aprobaciones
+    }
+
+    // Recalcular automáticamente el presupuesto de la obra para mantener consistencia
+    const storeIdForRecalc = storeIdToUse || existingOrder.store_id;
+    if (storeIdForRecalc) {
+      try {
+        await supabaseAdmin.rpc('recalcular_presupuesto_obra', { p_store_id: storeIdForRecalc });
+      } catch (rpcErr) {
+        console.warn('[orders/PUT] No se pudo recalcular presupuesto de obra:', rpcErr);
+      }
     }
 
     return NextResponse.json({
       success: true,
-      message: "Orden actualizada y reenviada para aprobación",
+      message: canSpecialEdit ? "Orden de compra actualizada exitosamente" : "Orden actualizada y reenviada para aprobación",
       order: updatedOrder
     });
 

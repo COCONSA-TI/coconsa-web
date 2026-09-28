@@ -179,8 +179,13 @@ export default function EditarOrdenPage() {
   const router = useRouter();
   const params = useParams();
   const orderId = params.id as string;
-  // Auth hook - user and isAdmin used for future permission checks
-  useAuth();
+  const { user, isAdmin, loading: authLoading } = useAuth();
+
+  const deptCode = (user?.department_code || '').toLowerCase();
+  const isDirection = deptCode === 'direccion' || deptCode.includes('dir');
+  const isConstruccionHead = Boolean(user?.is_department_head) && (deptCode === 'gerencia_construccion' || deptCode.includes('construccion'));
+  const isContraloriaHead = Boolean(user?.is_department_head) && (deptCode === 'contraloria' || deptCode.includes('contralor'));
+  const canSpecialEdit = isAdmin || isDirection || isConstruccionHead || isContraloriaHead;
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -214,9 +219,12 @@ export default function EditarOrdenPage() {
 
   // Cargar datos iniciales
   useEffect(() => {
+    if (authLoading) return;
+
     const fetchData = async () => {
       try {
         setLoading(true);
+        setError(null);
 
         // Obtener la orden existente
         const orderResponse = await fetch(`/api/v1/orders/${orderId}`);
@@ -229,16 +237,22 @@ export default function EditarOrdenPage() {
         const order = orderData.order as OrderDetail;
         setOriginalOrder(order);
 
-        // Verificar que la orden esté rechazada
-        if (order.status !== "rejected") {
-          setError("Solo se pueden editar órdenes rechazadas");
-          return;
-        }
+        // Si NO es edición especial de gerencia/dirección, validar que esté rechazada y pertenezca al usuario
+        if (!canSpecialEdit) {
+          if (order.status !== "rejected") {
+            setError("Solo se pueden editar órdenes rechazadas");
+            return;
+          }
 
-        // Verificar que no sea un rechazo definitivo
-        if (order.is_definitive_rejection) {
-          setError("Esta orden fue rechazada de forma definitiva y no puede ser editada ni reenviada");
-          return;
+          if (order.is_definitive_rejection) {
+            setError("Esta orden fue rechazada de forma definitiva y no puede ser editada ni reenviada");
+            return;
+          }
+
+          if (user && user.email !== order.applicant_email) {
+            setError("Solo el solicitante original puede editar esta orden");
+            return;
+          }
         }
 
         // Cargar evidencias existentes
@@ -316,7 +330,7 @@ export default function EditarOrdenPage() {
     };
 
     fetchData();
-  }, [orderId]);
+  }, [orderId, authLoading, canSpecialEdit, user]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -589,32 +603,57 @@ export default function EditarOrdenPage() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold">Editar Orden #{orderId}</h1>
-              <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                Rechazada
-              </span>
+              {canSpecialEdit ? (
+                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-white/20 text-white border border-white/40">
+                  Edición Gerencial
+                </span>
+              ) : (
+                <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                  Rechazada
+                </span>
+              )}
             </div>
             <p className="text-red-100 text-sm mt-1">
-              Modifica los datos y reenvía la orden para aprobación
+              {canSpecialEdit
+                ? "Modifica datos, cantidades, insumos o clasifica esta orden como destajo"
+                : "Modifica los datos y reenvía la orden para aprobación"}
             </p>
           </div>
         </div>
       </div>
 
       {/* Mensaje informativo */}
-      <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-        <div className="flex items-start gap-3">
-          <svg className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-          </svg>
-          <div>
-            <h3 className="text-sm font-semibold text-yellow-800">Orden Rechazada</h3>
-            <p className="text-sm text-yellow-700 mt-1">
-              Esta orden fue rechazada. Puedes modificar los datos y reenviarla para una nueva revisión.
-              Al guardar, el flujo de aprobaciones se reiniciará.
-            </p>
+      {canSpecialEdit ? (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <h3 className="text-sm font-semibold text-blue-900">Edición con Permiso Especial</h3>
+              <p className="text-sm text-blue-700 mt-1">
+                Tienes autorización para editar esta orden en cualquier momento (Dirección, Construcción, Contraloría o Admin). 
+                Puedes ajustar cantidades, cambiar precios, marcar o desmarcar destajos. Las aprobaciones previas se conservarán intactas.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            <div>
+              <h3 className="text-sm font-semibold text-yellow-800">Orden Rechazada</h3>
+              <p className="text-sm text-yellow-700 mt-1">
+                Esta orden fue rechazada. Puedes modificar los datos y reenviarla para una nueva revisión.
+                Al guardar, el flujo de aprobaciones se reiniciará.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Formulario */}
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -1129,6 +1168,8 @@ export default function EditarOrdenPage() {
               ? uploadingFiles
                 ? "Subiendo archivos..."
                 : "Guardando..."
+              : canSpecialEdit
+              ? "Guardar Cambios"
               : "Guardar y Reenviar"}
           </button>
         </div>
