@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import type { StoreInsumoSearchResult, InsumoCategoria } from "@/types/database";
 import ControlDeObraView from "@/components/admin/ControlDeObraView";
 import CatalogoAvancesView from "@/components/admin/CatalogoAvancesView";
+import { PresupuestosPageSkeleton } from "@/components/ui/Skeletons";
 
 interface Store {
   id: number;
@@ -227,7 +228,7 @@ function DeleteConfirmModal({
 // ─── Componente principal ────────────────────────────────────────────────────
 
 export default function PresupuestosPage() {
-  const { user, isDepartmentHead, isAdmin } = useAuth();
+  const { user, isDepartmentHead, isAdmin, loading: authLoading } = useAuth();
 
   const [stores, setStores] = useState<Store[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null);
@@ -890,6 +891,10 @@ export default function PresupuestosPage() {
   };
 
   // ── Render ───────────────────────────────────────────────────────────────
+  if (authLoading || loadingStores) {
+    return <PresupuestosPageSkeleton />;
+  }
+
   return (
     <>
       {showDeleteModal && selectedStore && (
@@ -901,75 +906,90 @@ export default function PresupuestosPage() {
         />
       )}
 
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-
-          {/* Banner del Módulo con Diseño Oficial COCONSA */}
-          <div className="bg-gradient-to-r from-[#C8102E] to-red-700 rounded-2xl shadow-lg p-6 text-white mb-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h1 className="text-2xl font-bold">
-                  {activeTab === "control_obra"
-                    ? "Control Financiero de Obra"
-                    : activeTab === "catalogo_avances"
-                    ? "Catálogo de Conceptos y Avances"
-                    : "Control de Presupuesto por Obra"}
-                </h1>
-                <p className="text-red-100 text-sm mt-1">
-                  {activeTab === "control_obra"
-                    ? "Plantilla ejecutiva semanal de ingresos, egresos directos/indirectos y margen de utilidad."
-                    : activeTab === "catalogo_avances"
-                    ? "Programa de obra, conceptos presupuestados y seguimiento semanal de ejecuciones."
-                    : "Gestión presupuestal de insumos por centro de costos y control de costos autorizados."}
-                </p>
-              </div>
-
-              {/* Pestañas Superiores integradas en el Banner */}
-              <div className="flex bg-white/20 backdrop-blur-md p-1.5 rounded-xl gap-1.5 text-xs font-bold border border-white/30 self-start md:self-auto flex-wrap sm:flex-nowrap">
-                <button
-                  onClick={() => setActiveTab("presupuesto")}
-                  className={`px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
-                    activeTab === "presupuesto"
-                      ? "bg-white text-[#C8102E] shadow-md font-extrabold"
-                      : "text-white/90 hover:text-white hover:bg-white/10"
-                  }`}
-                >
-                  <IconDocument className="w-4 h-4" />
-                  <span>Explosión de Insumos</span>
-                </button>
-
-                <button
-                  onClick={() => setActiveTab("catalogo_avances")}
-                  className={`px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
-                    activeTab === "catalogo_avances"
-                      ? "bg-white text-[#C8102E] shadow-md font-extrabold"
-                      : "text-white/90 hover:text-white hover:bg-white/10"
-                  }`}
-                >
-                  <IconDocument className="w-4 h-4" />
-                  <span>Catálogo de Avances</span>
-                </button>
-
-                <button
-                  onClick={() => setActiveTab("control_obra")}
-                  className={`px-3.5 py-2 rounded-lg transition-all flex items-center gap-1.5 ${
-                    activeTab === "control_obra"
-                      ? "bg-white text-[#C8102E] shadow-md font-extrabold"
-                      : "text-white/90 hover:text-white hover:bg-white/10"
-                  }`}
-                >
-                  <IconChartBar className="w-4 h-4" />
-                  <span>Control de Obra</span>
-                </button>
-              </div>
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Banner del Módulo con Diseño Oficial COCONSA */}
+        <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-xl shadow-lg p-6 text-white">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold">
+                {activeTab === "control_obra"
+                  ? "Control Financiero de Obra"
+                  : activeTab === "catalogo_avances"
+                  ? "Catálogo de Conceptos y Avances"
+                  : "Control de Presupuesto por Obra"}
+              </h1>
+              <p className="text-red-100 text-sm mt-1">
+                {activeTab === "control_obra"
+                  ? "Plantilla ejecutiva semanal de ingresos, egresos directos/indirectos y margen de utilidad."
+                  : activeTab === "catalogo_avances"
+                  ? "Programa de obra, conceptos presupuestados y seguimiento semanal de ejecuciones."
+                  : "Gestión presupuestal de insumos por centro de costos y control de costos autorizados."}
+              </p>
             </div>
+
+            {isDireccion && (
+              <Link
+                href="/dashboard/presupuestos/autorizaciones"
+                className="inline-flex items-center justify-center gap-2 bg-white text-red-600 px-5 py-2.5 rounded-lg font-medium hover:bg-red-50 transition-colors shadow-sm self-start sm:self-auto text-sm"
+              >
+                <IconWarning className="w-4 h-4 text-amber-600" />
+                <span>Autorizaciones</span>
+                {allApprovals.filter((a) => a.status === "pending_approval").length > 0 && (
+                  <span className="bg-amber-600 text-white text-xs font-extrabold px-2 py-0.5 rounded-full shadow-sm ml-1 animate-pulse">
+                    {allApprovals.filter((a) => a.status === "pending_approval").length}
+                  </span>
+                )}
+              </Link>
+            )}
           </div>
+        </div>
+
+        {/* Tabs - Diseño unificado COCONSA */}
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8 overflow-x-auto">
+            <button
+              onClick={() => setActiveTab("presupuesto")}
+              className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
+                activeTab === "presupuesto"
+                  ? "border-red-500 text-red-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              <IconDocument className="w-4 h-4" />
+              <span>Explosión de Insumos</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("catalogo_avances")}
+              className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
+                activeTab === "catalogo_avances"
+                  ? "border-red-500 text-red-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              <IconDocument className="w-4 h-4" />
+              <span>Catálogo de Avances</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("control_obra")}
+              className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors ${
+                activeTab === "control_obra"
+                  ? "border-red-500 text-red-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              <IconChartBar className="w-4 h-4" />
+              <span>Control de Obra</span>
+            </button>
+          </nav>
+        </div>
 
           {/* Renderear Vista según Pestaña Activa */}
           {activeTab === "control_obra" ? (
             <div className="space-y-6">
               {/* Selector de Obra en Control de Obra */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-xl shadow p-4 sm:p-5 border border-gray-100">
                 <div className="max-w-md">
                   <label className="block text-sm font-semibold text-gray-900 mb-1.5">
                     Centro de Costos / Obra
@@ -980,7 +1000,7 @@ export default function PresupuestosPage() {
                       const val = e.target.value;
                       setSelectedStoreId(val ? parseInt(val, 10) : null);
                     }}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#C8102E] focus:border-transparent text-sm font-medium text-gray-900 bg-white shadow-sm outline-none"
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:bg-white text-sm font-medium text-gray-900 outline-none transition-all"
                   >
                     <option value="">-- Selecciona una obra --</option>
                     {stores.map((s) => (
@@ -999,9 +1019,9 @@ export default function PresupuestosPage() {
                   canEdit={canEditCostoAutorizado}
                 />
               ) : (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-16 text-center">
-                  <div className="w-14 h-14 rounded-full bg-rose-50 text-[#C8102E] flex items-center justify-center mx-auto mb-3">
-                    <IconChartBar className="w-7 h-7 text-[#C8102E]" />
+                <div className="bg-white rounded-xl shadow border border-gray-100 p-12 text-center">
+                  <div className="w-14 h-14 rounded-full bg-rose-50 text-red-600 flex items-center justify-center mx-auto mb-3">
+                    <IconChartBar className="w-7 h-7 text-red-600" />
                   </div>
                   <h3 className="text-lg font-bold text-gray-900">Selecciona una Obra</h3>
                   <p className="text-xs text-gray-500 mt-1">Elige un Centro de Costos en el menú desplegable para abrir su panel financiero de Control de Obra.</p>
@@ -1011,7 +1031,7 @@ export default function PresupuestosPage() {
           ) : activeTab === "catalogo_avances" ? (
             <div className="space-y-6">
               {/* Selector de Obra en Catálogo de Avances */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="bg-white rounded-xl shadow p-4 sm:p-5 border border-gray-100">
                 <div className="max-w-md">
                   <label className="block text-sm font-semibold text-gray-900 mb-1.5">
                     Centro de Costos / Obra
@@ -1022,7 +1042,7 @@ export default function PresupuestosPage() {
                       const val = e.target.value;
                       setSelectedStoreId(val ? parseInt(val, 10) : null);
                     }}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#C8102E] focus:border-transparent text-sm font-medium text-gray-900 bg-white shadow-sm outline-none"
+                    className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:bg-white text-sm font-medium text-gray-900 outline-none transition-all"
                   >
                     <option value="">-- Selecciona una obra --</option>
                     {stores.map((s) => (
@@ -1041,9 +1061,9 @@ export default function PresupuestosPage() {
                   canEdit={canEditCostoAutorizado}
                 />
               ) : (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-16 text-center">
-                  <div className="w-14 h-14 rounded-full bg-rose-50 text-[#C8102E] flex items-center justify-center mx-auto mb-3">
-                    <IconDocument className="w-7 h-7 text-[#C8102E]" />
+                <div className="bg-white rounded-xl shadow border border-gray-100 p-12 text-center">
+                  <div className="w-14 h-14 rounded-full bg-rose-50 text-red-600 flex items-center justify-center mx-auto mb-3">
+                    <IconDocument className="w-7 h-7 text-red-600" />
                   </div>
                   <h3 className="text-lg font-bold text-gray-900">Selecciona una Obra</h3>
                   <p className="text-xs text-gray-500 mt-1">Elige un Centro de Costos en el menú desplegable para abrir su Catálogo de Avances.</p>
@@ -1052,54 +1072,33 @@ export default function PresupuestosPage() {
             </div>
           ) : (
             <>
-              {/* Selector de Obra y Botón de enlace a Autorizaciones */}
-
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex-1 max-w-md">
-                <label className="block text-sm font-semibold text-gray-900 mb-1.5">
-                  Centro de Costos / Obra
-                </label>
-                {loadingStores ? (
-                  <div className="h-10 bg-gray-100 animate-pulse rounded-lg w-full" />
-                ) : (
-                  <select
-                    id="select-obra"
-                    value={selectedStoreId ?? ""}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setSelectedStoreId(val ? parseInt(val, 10) : null);
-                      setUploadError(null);
-                      setUploadSuccess(null);
-                      setSelectedCategoria("all");
-                      setSearchQuery("");
-                    }}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#C8102E] focus:border-transparent text-sm font-medium text-gray-900 bg-white shadow-sm outline-none"
-                  >
-                    <option value="">Selecciona una obra...</option>
-                    {stores.map((store) => (
-                      <option key={store.id} value={store.id}>{store.name}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              {/* Enlace a la página independiente de Autorizaciones (sólo para Dirección) */}
-              {isDireccion && (
-                <div className="flex items-center gap-3 pt-2 md:pt-4">
-                  <Link
-                    href="/dashboard/presupuestos/autorizaciones"
-                    className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-sm bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100"
-                  >
-                    <IconWarning className="w-4 h-4 text-amber-600" />
-                    <span>Solicitudes de Autorización</span>
-                    {allApprovals.filter((a) => a.status === "pending_approval").length > 0 && (
-                      <span className="bg-amber-600 text-white text-xs font-extrabold px-2.5 py-0.5 rounded-full shadow-sm ml-1 animate-pulse">
-                        {allApprovals.filter((a) => a.status === "pending_approval").length}
-                      </span>
-                    )}
-                  </Link>
-                </div>
+          {/* Selector de Obra */}
+          <div className="bg-white rounded-xl shadow p-4 sm:p-5 border border-gray-100">
+            <div className="max-w-md">
+              <label className="block text-sm font-semibold text-gray-900 mb-1.5">
+                Centro de Costos / Obra
+              </label>
+              {loadingStores ? (
+                <div className="h-10 bg-gray-100 animate-pulse rounded-lg w-full" />
+              ) : (
+                <select
+                  id="select-obra"
+                  value={selectedStoreId ?? ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedStoreId(val ? parseInt(val, 10) : null);
+                    setUploadError(null);
+                    setUploadSuccess(null);
+                    setSelectedCategoria("all");
+                    setSearchQuery("");
+                  }}
+                  className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-red-500 focus:bg-white text-sm font-medium text-gray-900 outline-none transition-all"
+                >
+                  <option value="">Selecciona una obra...</option>
+                  {stores.map((store) => (
+                    <option key={store.id} value={store.id}>{store.name}</option>
+                  ))}
+                </select>
               )}
             </div>
           </div>
@@ -1107,7 +1106,7 @@ export default function PresupuestosPage() {
           {selectedStoreId ? (
             <>
               {/* Zona de carga del PDF */}
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+              <div className="bg-white rounded-xl shadow p-5 border border-gray-100">
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <h2 className="text-lg font-semibold text-gray-900">
@@ -1267,38 +1266,38 @@ export default function PresupuestosPage() {
 
               {/* Resumen financiero por categoría */}
               {loadingSummary ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="h-36 bg-white rounded-xl shadow-sm border border-gray-200 animate-pulse" />
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  {[...Array(6)].map((_, i) => (
+                    <div key={i} className="h-32 bg-white rounded-xl shadow border border-gray-100 animate-pulse" />
                   ))}
                 </div>
               ) : summary?.hasPresupuesto ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-6">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                   {/* Card de Total */}
                   <button
                     onClick={() => setSelectedCategoria("all")}
-                    className={`bg-white rounded-xl shadow-sm border-2 p-5 text-left hover:shadow-md transition-all ${
+                    className={`bg-white rounded-xl shadow p-4 text-left border border-gray-100 transition-all ${
                       selectedCategoria === "all"
-                        ? "border-[#C8102E] shadow-md"
-                        : "border-gray-200"
+                        ? "ring-2 ring-red-500 ring-offset-2 shadow-md"
+                        : "hover:shadow-md"
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-rose-50 text-[#C8102E]">
-                        <IconChartBar className="w-5 h-5" />
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-rose-50 text-red-600">
+                        <IconChartBar className="w-4 h-4" />
                       </div>
-                      <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-rose-100 text-[#C8102E]">
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-rose-100 text-red-700">
                         {summary.totalInsumos}
                       </span>
                     </div>
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Total General</p>
-                    <p className="text-xl font-bold text-gray-900 mt-0.5 tabular-nums">
+                    <p className="text-gray-500 text-xs font-medium uppercase tracking-wide">Total General</p>
+                    <p className="text-lg font-bold text-gray-900 mt-0.5 tabular-nums">
                       {formatCurrency(summary.totalReporte)}
                     </p>
-                    <div className="mt-3">
-                      <div className="flex justify-between text-xs text-gray-400 mb-1">
+                    <div className="mt-2.5">
+                      <div className="flex justify-between text-[11px] text-gray-400 mb-1">
                         <span>Comprometido</span>
-                        <span className="tabular-nums">{getPorcentajeComprometido("all").toFixed(1)}%</span>
+                        <span className="tabular-nums font-semibold text-gray-600">{getPorcentajeComprometido("all").toFixed(1)}%</span>
                       </div>
                       <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                         <div
@@ -1309,7 +1308,7 @@ export default function PresupuestosPage() {
                               ? "bg-amber-400"
                               : "bg-green-500"
                           }`}
-                          style={{ width: `${getPorcentajeComprometido("all")}%` }}
+                          style={{ width: `${Math.min(100, getPorcentajeComprometido("all"))}%` }}
                         />
                       </div>
                     </div>
@@ -1324,31 +1323,33 @@ export default function PresupuestosPage() {
                       <button
                         key={cat}
                         onClick={() => setSelectedCategoria((prev) => (prev === cat ? "all" : cat))}
-                        className={`bg-white rounded-xl shadow-sm border-2 p-5 text-left hover:shadow-md transition-all ${isActive ? `${cfg.borderActive} shadow-md` : "border-gray-200"
-                          }`}
+                        className={`bg-white rounded-xl shadow p-4 text-left border border-gray-100 transition-all ${
+                          isActive ? "ring-2 ring-red-500 ring-offset-2 shadow-md" : "hover:shadow-md"
+                        }`}
                       >
-                        <div className="flex items-center justify-between mb-3">
-                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${cfg.bg} ${cfg.text}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${cfg.bg} ${cfg.text}`}>
                             {cfg.icon}
                           </div>
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cfg.badge}`}>
                             {catData?.count ?? 0}
                           </span>
                         </div>
-                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{cat}</p>
-                        <p className="text-xl font-bold text-gray-900 mt-0.5 tabular-nums">
+                        <p className="text-gray-500 text-xs font-medium uppercase tracking-wide truncate" title={cat}>{cat}</p>
+                        <p className="text-lg font-bold text-gray-900 mt-0.5 tabular-nums">
                           {formatCurrency(catData?.monto ?? 0)}
                         </p>
-                        <div className="mt-3">
-                          <div className="flex justify-between text-xs text-gray-400 mb-1">
+                        <div className="mt-2.5">
+                          <div className="flex justify-between text-[11px] text-gray-400 mb-1">
                             <span>Comprometido</span>
-                            <span className="tabular-nums">{comprometido.toFixed(1)}%</span>
+                            <span className="tabular-nums font-semibold text-gray-600">{comprometido.toFixed(1)}%</span>
                           </div>
                           <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                             <div
-                              className={`h-full rounded-full transition-all ${comprometido >= 90 ? "bg-red-500" : comprometido >= 70 ? "bg-amber-400" : "bg-green-500"
-                                }`}
-                              style={{ width: `${comprometido}%` }}
+                              className={`h-full rounded-full transition-all ${
+                                comprometido >= 90 ? "bg-red-500" : comprometido >= 70 ? "bg-amber-400" : "bg-green-500"
+                              }`}
+                              style={{ width: `${Math.min(100, comprometido)}%` }}
                             />
                           </div>
                         </div>
@@ -1374,52 +1375,54 @@ export default function PresupuestosPage() {
               {/* Tabla de insumos */}
               {summary?.hasPresupuesto && (
                 <>
-                                  <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-                  {/* Toolbar */}
-                  <div className="px-6 py-4 border-b border-gray-200 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => setSelectedCategoria("all")}
-                        className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${selectedCategoria === "all"
-                          ? "bg-[#C8102E] text-white shadow-sm"
-                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                          }`}
-                      >
-                        Todos ({summary.totalInsumos})
-                      </button>
-                      {CATEGORIAS.map((cat) => {
-                        const cfg = CATEGORIA_CONFIG[cat];
-                        const count = summary.resumenPorCategoria[cat]?.count ?? 0;
-                        return (
-                          <button
-                            key={cat}
-                            onClick={() => setSelectedCategoria(selectedCategoria === cat ? "all" : cat)}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${selectedCategoria === cat
-                              ? `${cfg.bg} ${cfg.text} ring-2 ring-offset-1 ring-current font-bold`
+                  <div className="bg-white rounded-xl shadow overflow-hidden">
+                    {/* Toolbar */}
+                    <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => setSelectedCategoria("all")}
+                          className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                            selectedCategoria === "all"
+                              ? "bg-red-600 text-white shadow-sm"
                               : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          }`}
+                        >
+                          Todos ({summary.totalInsumos})
+                        </button>
+                        {CATEGORIAS.map((cat) => {
+                          const cfg = CATEGORIA_CONFIG[cat];
+                          const count = summary.resumenPorCategoria[cat]?.count ?? 0;
+                          return (
+                            <button
+                              key={cat}
+                              onClick={() => setSelectedCategoria(selectedCategoria === cat ? "all" : cat)}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                                selectedCategoria === cat
+                                  ? `${cfg.bg} ${cfg.text} ring-2 ring-offset-1 ring-current font-bold`
+                                  : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                               }`}
-                          >
-                            <span className={selectedCategoria === cat ? cfg.text : "text-gray-500"}>
-                              {cfg.icon}
-                            </span>
-                            {cat} ({count})
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div className="relative w-full sm:w-64">
-                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                        <IconSearch className="w-4 h-4" />
+                            >
+                              <span className={selectedCategoria === cat ? cfg.text : "text-gray-500"}>
+                                {cfg.icon}
+                              </span>
+                              {cat} ({count})
+                            </button>
+                          );
+                        })}
                       </div>
-                      <input
-                        type="text"
-                        placeholder="Buscar por clave o descripción..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#C8102E] focus:border-transparent text-gray-900"
-                      />
+                      <div className="relative w-full sm:w-64">
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                          <IconSearch className="w-4 h-4" />
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Buscar por clave o descripción..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:bg-white transition-all"
+                        />
+                      </div>
                     </div>
-                  </div>
 
                   {/* Tabla */}
                   <div className="overflow-x-auto">
@@ -2058,18 +2061,17 @@ export default function PresupuestosPage() {
 
           {/* Estado vacío inicial */}
           {!selectedStoreId && !loadingStores && (
-            <div className="text-center py-20">
+            <div className="bg-white rounded-xl shadow border border-gray-100 p-12 text-center">
               <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
                 <IconChartBar className="w-8 h-8 text-gray-400" />
               </div>
-              <h2 className="text-xl font-semibold text-gray-700">Selecciona una obra</h2>
-              <p className="text-gray-400 mt-2 text-sm">
+              <h2 className="text-lg font-semibold text-gray-800">Selecciona una obra</h2>
+              <p className="text-gray-500 mt-1 text-sm">
                 Elige el Centro de Costos para ver o cargar su presupuesto de insumos.
               </p>
             </div>
           )}
         </div>
-      </div>
 
       {/* Mini Modal Personalizado de Confirmación para Dirección */}
       {confirmModal?.open && confirmModal.report && (
