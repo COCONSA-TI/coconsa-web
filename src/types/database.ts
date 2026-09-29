@@ -110,7 +110,7 @@ export interface Store {
 // INSUMOS DE PRESUPUESTO POR OBRA (store_insumos)
 // ============================================
 
-export type InsumoCategoria = 'Materiales' | 'Mano de Obra' | 'Herramienta' | 'Equipo' | 'Adicionales';
+export type InsumoCategoria = 'Materiales' | 'Mano de Obra' | 'Herramienta' | 'Equipo' | 'Gastos Indirectos' | 'Adicionales';
 
 export interface StoreInsumo {
   id: number;
