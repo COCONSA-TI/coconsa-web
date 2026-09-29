@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import type { StoreInsumoSearchResult, InsumoCategoria } from "@/types/database";
 import ControlDeObraView from "@/components/admin/ControlDeObraView";
 import CatalogoAvancesView from "@/components/admin/CatalogoAvancesView";
+import BudgetReconcileModal from "@/components/admin/BudgetReconcileModal";
 import { PresupuestosPageSkeleton } from "@/components/ui/Skeletons";
 
 interface Store {
@@ -280,6 +281,7 @@ export default function PresupuestosPage() {
   const montoInputRef = useRef<HTMLInputElement>(null);
 
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [isReconcileModalOpen, setIsReconcileModalOpen] = useState(false);
   // ── Reportes Semanales ──────────────────────────────────────────────────
   const [weeklyReports, setWeeklyReports] = useState<any[]>([]);
   const [loadingWeeklyReports, setLoadingWeeklyReports] = useState(false);
@@ -944,20 +946,35 @@ export default function PresupuestosPage() {
               </p>
             </div>
 
-            {isDireccion && (
-              <Link
-                href="/dashboard/presupuestos/autorizaciones"
-                className="inline-flex items-center justify-center gap-2 bg-white text-red-600 px-5 py-2.5 rounded-lg font-medium hover:bg-red-50 transition-colors shadow-sm self-start sm:self-auto text-sm"
-              >
-                <IconWarning className="w-4 h-4 text-amber-600" />
-                <span>Autorizaciones</span>
-                {allApprovals.filter((a) => a.status === "pending_approval").length > 0 && (
-                  <span className="bg-amber-600 text-white text-xs font-extrabold px-2 py-0.5 rounded-full shadow-sm ml-1 animate-pulse">
-                    {allApprovals.filter((a) => a.status === "pending_approval").length}
-                  </span>
-                )}
-              </Link>
-            )}
+            <div className="flex flex-wrap items-center gap-3 self-start sm:self-auto">
+              {activeTab === "presupuesto" && selectedStoreId && summary?.hasPresupuesto && (
+                <button
+                  type="button"
+                  onClick={() => setIsReconcileModalOpen(true)}
+                  className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors shadow-sm text-sm"
+                >
+                  <svg className="w-4 h-4 text-amber-200 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.34.208-.646.477-.859a4 4 0 10-4.954 0c.27.213.462.519.477.859h4z" />
+                  </svg>
+                  <span>Conciliar Histórico con IA</span>
+                </button>
+              )}
+
+              {isDireccion && (
+                <Link
+                  href="/dashboard/presupuestos/autorizaciones"
+                  className="inline-flex items-center justify-center gap-2 bg-white text-red-600 px-5 py-2.5 rounded-lg font-medium hover:bg-red-50 transition-colors shadow-sm text-sm"
+                >
+                  <IconWarning className="w-4 h-4 text-amber-600" />
+                  <span>Autorizaciones</span>
+                  {allApprovals.filter((a) => a.status === "pending_approval").length > 0 && (
+                    <span className="bg-amber-600 text-white text-xs font-extrabold px-2 py-0.5 rounded-full shadow-sm ml-1 animate-pulse">
+                      {allApprovals.filter((a) => a.status === "pending_approval").length}
+                    </span>
+                  )}
+                </Link>
+              )}
+            </div>
           </div>
         </div>
 
@@ -1259,7 +1276,7 @@ export default function PresupuestosPage() {
 
                 {/* Si ya hay presupuesto y no se está subiendo, mostrar opción de reemplazar */}
                 {summary?.hasPresupuesto && !uploading && (
-                  <div className="mt-2 flex items-center gap-2">
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
                     <label
                       htmlFor="budget-pdf-replace"
                       className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
@@ -1274,8 +1291,20 @@ export default function PresupuestosPage() {
                       className="hidden"
                       onChange={handleFileChange}
                     />
+
+                    <button
+                      type="button"
+                      onClick={() => setIsReconcileModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300 rounded-lg transition-colors shadow-sm"
+                    >
+                      <svg className="w-4 h-4 text-amber-600 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.34.208-.646.477-.859a4 4 0 10-4.954 0c.27.213.462.519.477.859h4z" />
+                      </svg>
+                      <span>Conciliar Histórico</span>
+                    </button>
+
                     <span className="text-xs text-gray-400">
-                      Esto sobreescribirá el presupuesto actual de la obra
+                      Revisa compras históricas y enlázalas automáticamente con el catálogo
                     </span>
                   </div>
                 )}
@@ -2183,6 +2212,22 @@ export default function PresupuestosPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de Conciliación Histórica con IA */}
+      {selectedStoreId && (
+        <BudgetReconcileModal
+          storeId={selectedStoreId}
+          storeName={selectedStore?.name || "Obra seleccionada"}
+          isOpen={isReconcileModalOpen}
+          onClose={() => setIsReconcileModalOpen(false)}
+          onSuccess={() => {
+            if (selectedStoreId) {
+              fetchSummary(selectedStoreId);
+              fetchInsumos(selectedStoreId);
+            }
+          }}
+        />
       )}
     </>
   );

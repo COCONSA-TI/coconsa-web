@@ -119,7 +119,7 @@ REGLAS ESTRICTAS DE EXTRACCIÓN Y VALORES POR DEFECTO:
 
     return NextResponse.json({
       success: true,
-      message: 'Datos del proveedor extraídos correctamente con Gemini 2.5-flash',
+      message: 'Datos del proveedor extraídos correctamente',
       data: sanitizedData,
     });
   } catch (error: unknown) {

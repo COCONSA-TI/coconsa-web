@@ -340,7 +340,7 @@ export default function EditarProveedorPage({
             <svg className="w-4 h-4 text-amber-300" fill="currentColor" viewBox="0 0 20 20">
               <path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.34.208-.646.477-.859a4 4 0 10-4.954 0c.27.213.462.519.477.859h4z" />
             </svg>
-            <span>Extracción con Gemini 2.5-flash disponible</span>
+            <span>Autocompletado disponible</span>
           </div>
         </div>
       </div>
@@ -359,7 +359,7 @@ export default function EditarProveedorPage({
                   <span className="text-red-500">*</span>
                 </h2>
                 <p className="text-xs text-gray-500 mt-0.5 ml-8">
-                  Puedes conservar la carátula actual o subir una nueva (la IA la analizará automáticamente).
+                  Puedes conservar la carátula actual o subir una nueva (se extraerán los datos automáticamente).
                 </p>
               </div>
 
@@ -372,7 +372,7 @@ export default function EditarProveedorPage({
                   <svg className="w-3.5 h-3.5 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clipRule="evenodd" />
                   </svg>
-                  Re-analizar con IA
+                  Re-analizar documento
                 </button>
               )}
             </div>
@@ -407,7 +407,7 @@ export default function EditarProveedorPage({
                     </svg>
                   </div>
                   <div>
-                    <h4 className="text-sm font-semibold text-gray-900">Gemini 2.5-flash está analizando el documento...</h4>
+                    <h4 className="text-sm font-semibold text-gray-900">Procesando y analizando el documento...</h4>
                     <p className="text-xs text-gray-500 mt-1">Actualizando campos a partir de la nueva carátula.</p>
                   </div>
                 </div>
