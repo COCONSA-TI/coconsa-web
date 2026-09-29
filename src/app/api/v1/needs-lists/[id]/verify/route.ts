@@ -49,24 +49,34 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Acción inválida' }, { status: 400 });
     }
 
+    // Verificar que la lista existe y tiene el status esperado antes de actualizar
+    const { data: currentList, error: fetchError } = await supabaseAdmin
+      .from('needs_lists')
+      .select('id, status, total, deposit_amount')
+      .eq('id', needsListId)
+      .single();
+
+    if (fetchError || !currentList) {
+      return NextResponse.json({ success: false, error: 'Lista no encontrada' }, { status: 404 });
+    }
+
+    if (!currentStatusConditions.includes(currentList.status)) {
+      return NextResponse.json({
+        success: false,
+        error: `No se puede realizar esta acción. El estado actual de la lista es '${currentList.status}'.`,
+      }, { status: 409 });
+    }
+
     // Para "accept", calcular y guardar el remaining_balance
     if (action === 'accept') {
-      // Obtener el total y el monto depositado de la lista
-      const { data: needsList } = await supabaseAdmin
-        .from('needs_lists')
-        .select('total, deposit_amount')
-        .eq('id', needsListId)
-        .single();
-
-      // Obtener la suma de todos los comprobantes de gastos
       const { data: proofs } = await supabaseAdmin
         .from('expense_proofs')
         .select('amount')
         .eq('needs_list_id', needsListId);
 
-      const totalEntregado = needsList?.deposit_amount !== null && needsList?.deposit_amount !== undefined 
-        ? Number(needsList.deposit_amount) 
-        : (needsList?.total || 0);
+      const totalEntregado = currentList.deposit_amount !== null && currentList.deposit_amount !== undefined
+        ? Number(currentList.deposit_amount)
+        : (currentList.total || 0);
       const totalComprobado = proofs?.reduce((sum: number, p: { amount: number }) => sum + Number(p.amount), 0) || 0;
       const remainingBalance = Math.round((totalEntregado - totalComprobado) * 100) / 100;
 
@@ -77,12 +87,11 @@ export async function POST(
           remaining_balance: remainingBalance,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', needsListId)
-        .in('status', currentStatusConditions);
+        .eq('id', needsListId);
 
       if (updateError) {
-        console.error('Error al actualizar estado de comprobación:', updateError);
-        return NextResponse.json({ success: false, error: 'Error al actualizar el estado' }, { status: 500 });
+        console.error('Error al actualizar estado de comprobación (accept):', updateError);
+        return NextResponse.json({ success: false, error: 'Error al cambiar el estado: ' + updateError.message }, { status: 500 });
       }
 
       return NextResponse.json({
@@ -104,12 +113,11 @@ export async function POST(
     const { error: updateError } = await supabaseAdmin
       .from('needs_lists')
       .update(updateData)
-      .eq('id', needsListId)
-      .in('status', currentStatusConditions);
+      .eq('id', needsListId);
 
     if (updateError) {
       console.error('Error al actualizar estado de comprobación:', updateError);
-      return NextResponse.json({ success: false, error: 'Error al actualizar el estado' }, { status: 500 });
+      return NextResponse.json({ success: false, error: 'Error al cambiar el estado: ' + updateError.message }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, message });
