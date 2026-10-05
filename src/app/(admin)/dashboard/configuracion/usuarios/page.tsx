@@ -16,8 +16,16 @@ interface UserData {
   updated_at: string | null;
   is_active: boolean;
   is_department_head: boolean;
+  all_stores_access?: boolean;
+  can_view_all_store_orders?: boolean;
   role: { id: number; name: string } | null;
   department: { id: string; name: string } | null;
+  stores?: Array<{ id: number; name: string }>;
+}
+
+interface StoreItem {
+  id: number;
+  name: string;
 }
 
 interface Role {
@@ -78,6 +86,7 @@ function UsersContent() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [stores, setStores] = useState<StoreItem[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Modal states
@@ -86,6 +95,7 @@ function UsersContent() {
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [storeSearchQuery, setStoreSearchQuery] = useState('');
 
   // Form states
   const [formData, setFormData] = useState({
@@ -95,12 +105,16 @@ function UsersContent() {
     role: 0,
     department_id: '',
     is_department_head: false,
+    all_stores_access: false,
+    can_view_all_store_orders: false,
+    store_ids: [] as number[],
   });
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<UserStatus>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [storeFilter, setStoreFilter] = useState<string>('all');
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
@@ -115,6 +129,7 @@ function UsersContent() {
       fetchUsers();
       fetchRoles();
       fetchDepartments();
+      fetchStores();
     }
   }, [authLoading, isAdmin]);
 
@@ -158,6 +173,18 @@ function UsersContent() {
     }
   };
 
+  const fetchStores = async () => {
+    try {
+      const response = await fetch('/api/v1/stores-suppliers?all=true');
+      const data = await response.json();
+      if (data.stores) {
+        setStores(data.stores);
+      }
+    } catch (error) {
+      console.error('Error fetching stores:', error);
+    }
+  };
+
   const filteredUsers = useMemo(() => {
     return users.filter(user => {
       if (statusFilter === 'active' && !user.is_active) return false;
@@ -167,14 +194,21 @@ function UsersContent() {
         const search = searchTerm.toLowerCase();
         const matchesEmail = user.email.toLowerCase().includes(search);
         const matchesName = user.full_name?.toLowerCase().includes(search) || false;
-        if (!matchesEmail && !matchesName) return false;
+        const matchesStores = (user.stores || []).some(s => s.name.toLowerCase().includes(search));
+        if (!matchesEmail && !matchesName && !matchesStores) return false;
       }
 
       if (roleFilter !== 'all' && user.role?.name !== roleFilter) return false;
 
+      if (storeFilter !== 'all') {
+        const targetStoreId = parseInt(storeFilter, 10);
+        const hasStore = user.all_stores_access || (user.stores || []).some(s => s.id === targetStoreId);
+        if (!hasStore) return false;
+      }
+
       return true;
     });
-  }, [users, statusFilter, searchTerm, roleFilter]);
+  }, [users, statusFilter, searchTerm, roleFilter, storeFilter]);
 
   const stats = {
     total: users.length,
@@ -182,12 +216,13 @@ function UsersContent() {
     inactive: users.filter(u => !u.is_active).length,
   };
 
-  const hasActiveFilters = searchTerm || roleFilter !== 'all';
+  const hasActiveFilters = searchTerm || roleFilter !== 'all' || storeFilter !== 'all';
 
   const clearAllFilters = () => {
     setStatusFilter('all');
     setSearchTerm('');
     setRoleFilter('all');
+    setStoreFilter('all');
   };
 
   const resetForm = () => {
@@ -198,7 +233,11 @@ function UsersContent() {
       role: roles[0]?.id || 0,
       department_id: '',
       is_department_head: false,
+      all_stores_access: false,
+      can_view_all_store_orders: false,
+      store_ids: [],
     });
+    setStoreSearchQuery('');
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -249,6 +288,9 @@ function UsersContent() {
         role: formData.role,
         department_id: formData.department_id || null,
         is_department_head: formData.is_department_head,
+        all_stores_access: formData.all_stores_access,
+        can_view_all_store_orders: formData.can_view_all_store_orders,
+        store_ids: formData.store_ids,
       };
 
       // Solo incluir password si se proporciono
@@ -318,10 +360,14 @@ function UsersContent() {
       email: user.email,
       password: '',
       full_name: user.full_name || '',
-      role: user.role?.id || 0,
+      role: user.role?.id || roles[0]?.id || 0,
       department_id: user.department?.id || '',
       is_department_head: user.is_department_head,
+      all_stores_access: user.all_stores_access ?? false,
+      can_view_all_store_orders: user.can_view_all_store_orders ?? false,
+      store_ids: user.stores?.map(s => s.id) || [],
     });
+    setStoreSearchQuery('');
     setShowEditModal(true);
   };
 
@@ -491,6 +537,22 @@ function UsersContent() {
                   ))}
                 </select>
               </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
+                  Centro de Costos / Obra
+                </label>
+                <select
+                  value={storeFilter}
+                  onChange={(e) => setStoreFilter(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                >
+                  <option value="all">Todos los centros de costos</option>
+                  {stores.map(store => (
+                    <option key={store.id} value={store.id}>{store.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {hasActiveFilters && (
@@ -572,6 +634,36 @@ function UsersContent() {
                         </div>
                       )}
                       <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-500">Centros</span>
+                        <span className="text-right">
+                          {user.all_stores_access ? (
+                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                              Todos
+                            </span>
+                          ) : user.stores && user.stores.length > 0 ? (
+                            <span className="text-xs text-gray-700 font-medium">
+                              {user.stores.length === 1 ? user.stores[0].name : `${user.stores.length} asignados`}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400 italic">Ninguno</span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-500">Visibilidad ODC</span>
+                        <span className="text-right">
+                          {user.can_view_all_store_orders ? (
+                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                              Todas e histórico
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                              Solo propias
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-500">Registrado</span>
                         <span className="text-gray-900">{dateInfo.relative}</span>
                       </div>
@@ -611,6 +703,8 @@ function UsersContent() {
                     <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-4">Usuario</th>
                     <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-4">Rol</th>
                     <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-4">Departamento</th>
+                    <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-4">Centros de Costos</th>
+                    <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-4">Visibilidad ODC</th>
                     <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-4">Registrado</th>
                     <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-4">Estado</th>
                     <th className="text-right text-xs font-medium text-gray-500 uppercase tracking-wider px-6 py-4">Acciones</th>
@@ -648,6 +742,39 @@ function UsersContent() {
                         </td>
                         <td className="px-6 py-4">
                           <span className="text-sm text-gray-900">{user.department?.name || '-'}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          {user.all_stores_access ? (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
+                              Todos los centros
+                            </span>
+                          ) : user.stores && user.stores.length > 0 ? (
+                            <div className="flex flex-wrap gap-1 max-w-xs">
+                              {user.stores.slice(0, 2).map(s => (
+                                <span key={s.id} className="inline-flex px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700 font-medium truncate max-w-[120px]" title={s.name}>
+                                  {s.name}
+                                </span>
+                              ))}
+                              {user.stores.length > 2 && (
+                                <span className="inline-flex px-1.5 py-0.5 rounded text-xs bg-gray-200 text-gray-700 font-medium" title={user.stores.slice(2).map(s => s.name).join(', ')}>
+                                  +{user.stores.length - 2}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-gray-400 italic">Sin centros asignados</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4">
+                          {user.can_view_all_store_orders ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                              Todas e histórico
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200">
+                              Solo propias
+                            </span>
+                          )}
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-sm text-gray-900">{dateInfo.date}</div>
@@ -815,6 +942,115 @@ function UsersContent() {
                 </label>
               </div>
 
+              {/* Centros de Costos / Obras */}
+              <div className="border-t border-gray-100 pt-4 space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Centros de Costos / Obras</h3>
+                  <p className="text-xs text-gray-500">Define a qué centros de costos tiene acceso operativo este usuario.</p>
+                </div>
+
+                <div className="flex items-center gap-2 p-3 bg-purple-50/60 rounded-lg border border-purple-100">
+                  <input
+                    type="checkbox"
+                    id="create_all_stores_access"
+                    checked={formData.all_stores_access}
+                    onChange={(e) => setFormData({ ...formData, all_stores_access: e.target.checked })}
+                    className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                  />
+                  <label htmlFor="create_all_stores_access" className="text-sm font-medium text-purple-900 cursor-pointer">
+                    Acceso global a todos los centros de costos
+                  </label>
+                </div>
+
+                {!formData.all_stores_access && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <input
+                        type="text"
+                        placeholder="Buscar centro de costos..."
+                        value={storeSearchQuery}
+                        onChange={(e) => setStoreSearchQuery(e.target.value)}
+                        className="text-xs px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg flex-1 focus:ring-1 focus:ring-red-500 focus:border-transparent"
+                      />
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, store_ids: stores.map(s => s.id) })}
+                          className="text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 hover:bg-red-50 rounded"
+                        >
+                          Todos
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, store_ids: [] })}
+                          className="text-xs text-gray-500 hover:text-gray-700 font-medium px-2 py-1 hover:bg-gray-100 rounded"
+                        >
+                          Ninguno
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="max-h-36 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1 bg-gray-50/50">
+                      {stores
+                        .filter(store => store.name.toLowerCase().includes(storeSearchQuery.toLowerCase()))
+                        .map(store => {
+                          const isChecked = formData.store_ids.includes(store.id);
+                          return (
+                            <label
+                              key={store.id}
+                              className={`flex items-center gap-2 p-1.5 rounded cursor-pointer text-xs transition-colors ${
+                                isChecked ? 'bg-red-50 text-red-900 font-medium' : 'hover:bg-gray-100 text-gray-700'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setFormData({ ...formData, store_ids: [...formData.store_ids, store.id] });
+                                  } else {
+                                    setFormData({ ...formData, store_ids: formData.store_ids.filter(id => id !== store.id) });
+                                  }
+                                }}
+                                className="w-3.5 h-3.5 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                              />
+                              <span className="truncate">{store.name}</span>
+                            </label>
+                          );
+                        })}
+                      {stores.filter(store => store.name.toLowerCase().includes(storeSearchQuery.toLowerCase())).length === 0 && (
+                        <p className="text-xs text-gray-400 py-2 text-center">No se encontraron centros de costos</p>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      {formData.store_ids.length} de {stores.length} centros seleccionados
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Visibilidad de Órdenes */}
+              <div className="border-t border-gray-100 pt-4 space-y-2">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Visibilidad de Órdenes de Compra</h3>
+                  <p className="text-xs text-gray-500">Permisos para consultar el historial de órdenes dentro de sus centros autorizados.</p>
+                </div>
+
+                <div className="flex items-start gap-2 p-3 bg-blue-50/50 rounded-lg border border-blue-100">
+                  <input
+                    type="checkbox"
+                    id="create_can_view_all_store_orders"
+                    checked={formData.can_view_all_store_orders}
+                    onChange={(e) => setFormData({ ...formData, can_view_all_store_orders: e.target.checked })}
+                    className="w-4 h-4 mt-0.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="create_can_view_all_store_orders" className="text-xs text-blue-900 cursor-pointer">
+                    <span className="font-semibold block text-sm">Ver todas las órdenes de compra y su histórico</span>
+                    Permite ver todas las órdenes emitidas en sus centros de costos asignados. Si no está marcado, solo podrá ver las órdenes que él mismo haya creado.
+                  </label>
+                </div>
+              </div>
+
               {message && (
                 <div className={`p-3 rounded-lg text-sm ${
                   message.type === 'success' 
@@ -956,6 +1192,115 @@ function UsersContent() {
                 <label htmlFor="edit_is_department_head" className="text-sm text-gray-700">
                   Es jefe de departamento
                 </label>
+              </div>
+
+              {/* Centros de Costos / Obras */}
+              <div className="border-t border-gray-100 pt-4 space-y-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Centros de Costos / Obras</h3>
+                  <p className="text-xs text-gray-500">Define a qué centros de costos tiene acceso operativo este usuario.</p>
+                </div>
+
+                <div className="flex items-center gap-2 p-3 bg-purple-50/60 rounded-lg border border-purple-100">
+                  <input
+                    type="checkbox"
+                    id="edit_all_stores_access"
+                    checked={formData.all_stores_access}
+                    onChange={(e) => setFormData({ ...formData, all_stores_access: e.target.checked })}
+                    className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                  />
+                  <label htmlFor="edit_all_stores_access" className="text-sm font-medium text-purple-900 cursor-pointer">
+                    Acceso global a todos los centros de costos
+                  </label>
+                </div>
+
+                {!formData.all_stores_access && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <input
+                        type="text"
+                        placeholder="Buscar centro de costos..."
+                        value={storeSearchQuery}
+                        onChange={(e) => setStoreSearchQuery(e.target.value)}
+                        className="text-xs px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg flex-1 focus:ring-1 focus:ring-red-500 focus:border-transparent"
+                      />
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, store_ids: stores.map(s => s.id) })}
+                          className="text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 hover:bg-red-50 rounded"
+                        >
+                          Todos
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, store_ids: [] })}
+                          className="text-xs text-gray-500 hover:text-gray-700 font-medium px-2 py-1 hover:bg-gray-100 rounded"
+                        >
+                          Ninguno
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="max-h-36 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1 bg-gray-50/50">
+                      {stores
+                        .filter(store => store.name.toLowerCase().includes(storeSearchQuery.toLowerCase()))
+                        .map(store => {
+                          const isChecked = formData.store_ids.includes(store.id);
+                          return (
+                            <label
+                              key={store.id}
+                              className={`flex items-center gap-2 p-1.5 rounded cursor-pointer text-xs transition-colors ${
+                                isChecked ? 'bg-red-50 text-red-900 font-medium' : 'hover:bg-gray-100 text-gray-700'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setFormData({ ...formData, store_ids: [...formData.store_ids, store.id] });
+                                  } else {
+                                    setFormData({ ...formData, store_ids: formData.store_ids.filter(id => id !== store.id) });
+                                  }
+                                }}
+                                className="w-3.5 h-3.5 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                              />
+                              <span className="truncate">{store.name}</span>
+                            </label>
+                          );
+                        })}
+                      {stores.filter(store => store.name.toLowerCase().includes(storeSearchQuery.toLowerCase())).length === 0 && (
+                        <p className="text-xs text-gray-400 py-2 text-center">No se encontraron centros de costos</p>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      {formData.store_ids.length} de {stores.length} centros seleccionados
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Visibilidad de Órdenes */}
+              <div className="border-t border-gray-100 pt-4 space-y-2">
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-900">Visibilidad de Órdenes de Compra</h3>
+                  <p className="text-xs text-gray-500">Permisos para consultar el historial de órdenes dentro de sus centros autorizados.</p>
+                </div>
+
+                <div className="flex items-start gap-2 p-3 bg-blue-50/50 rounded-lg border border-blue-100">
+                  <input
+                    type="checkbox"
+                    id="edit_can_view_all_store_orders"
+                    checked={formData.can_view_all_store_orders}
+                    onChange={(e) => setFormData({ ...formData, can_view_all_store_orders: e.target.checked })}
+                    className="w-4 h-4 mt-0.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="edit_can_view_all_store_orders" className="text-xs text-blue-900 cursor-pointer">
+                    <span className="font-semibold block text-sm">Ver todas las órdenes de compra y su histórico</span>
+                    Permite ver todas las órdenes emitidas en sus centros de costos asignados. Si no está marcado, solo podrá ver las órdenes que él mismo haya creado.
+                  </label>
+                </div>
               </div>
 
               {message && (

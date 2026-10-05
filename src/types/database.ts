@@ -276,11 +276,20 @@ export interface User {
   department_id: string | null;
   is_department_head: boolean;
   is_active: boolean;
+  all_stores_access?: boolean;
+  can_view_all_store_orders?: boolean;
+}
+
+export interface UserStore {
+  user_id: string;
+  store_id: number;
+  created_at: string;
 }
 
 export interface UserWithRelations extends User {
   roles?: Role;
   department?: Department;
+  stores?: Store[];
 }
 
 // ============================================

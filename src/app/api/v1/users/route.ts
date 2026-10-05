@@ -12,6 +12,9 @@ const CreateUserSchema = z.object({
   role: z.number().int().positive({ message: 'Rol inválido' }),
   department_id: z.string().uuid().nullable().optional(),
   is_department_head: z.boolean().optional().default(false),
+  all_stores_access: z.boolean().optional().default(false),
+  can_view_all_store_orders: z.boolean().optional().default(false),
+  store_ids: z.array(z.number()).optional().default([]),
 });
 
 // GET - Listar todos los usuarios (solo admin)
@@ -30,6 +33,8 @@ export async function GET() {
         updated_at,
         is_active,
         is_department_head,
+        all_stores_access,
+        can_view_all_store_orders,
         roles (
           id,
           name
@@ -49,6 +54,22 @@ export async function GET() {
       );
     }
 
+    // Consultar centros de costos asignados en user_stores
+    const { data: allUserStores } = await supabaseAdmin
+      .from('user_stores')
+      .select('user_id, store_id, stores(id, name)');
+
+    const storesByUser = new Map<string, Array<{ id: number; name: string }>>();
+    allUserStores?.forEach((item: any) => {
+      const storeObj = Array.isArray(item.stores) ? item.stores[0] : item.stores;
+      if (storeObj) {
+        if (!storesByUser.has(item.user_id)) {
+          storesByUser.set(item.user_id, []);
+        }
+        storesByUser.get(item.user_id)!.push({ id: storeObj.id, name: storeObj.name });
+      }
+    });
+
     // Formatear respuesta
     const formattedUsers = users?.map(user => ({
       id: user.id,
@@ -58,8 +79,11 @@ export async function GET() {
       updated_at: user.updated_at,
       is_active: user.is_active ?? true,
       is_department_head: user.is_department_head,
+      all_stores_access: user.all_stores_access ?? false,
+      can_view_all_store_orders: user.can_view_all_store_orders ?? false,
       role: Array.isArray(user.roles) ? user.roles[0] : user.roles,
       department: Array.isArray(user.departments) ? user.departments[0] : user.departments,
+      stores: storesByUser.get(user.id) || [],
     })) || [];
 
     return NextResponse.json({
@@ -86,7 +110,7 @@ export async function POST(request: Request) {
     if (!validatedFields.success) {
       return NextResponse.json(
         { 
-          success: false,
+          success: false, 
           error: 'Datos inválidos',
           details: validatedFields.error.flatten().fieldErrors 
         },
@@ -94,7 +118,17 @@ export async function POST(request: Request) {
       );
     }
 
-    const { email, password, full_name, role, department_id, is_department_head } = validatedFields.data;
+    const { 
+      email, 
+      password, 
+      full_name, 
+      role, 
+      department_id, 
+      is_department_head,
+      all_stores_access = false,
+      can_view_all_store_orders = false,
+      store_ids = []
+    } = validatedFields.data;
 
     // Verificar que el email no exista
     const { data: existingUser } = await supabaseAdmin
@@ -123,6 +157,8 @@ export async function POST(request: Request) {
         role,
         department_id: department_id || null,
         is_department_head: is_department_head || false,
+        all_stores_access,
+        can_view_all_store_orders,
         is_active: true,
       })
       .select(`
@@ -132,6 +168,8 @@ export async function POST(request: Request) {
         created_at,
         is_active,
         is_department_head,
+        all_stores_access,
+        can_view_all_store_orders,
         roles (
           id,
           name
@@ -151,6 +189,22 @@ export async function POST(request: Request) {
       );
     }
 
+    // Insertar tiendas asignadas en user_stores si aplica
+    let assignedStores: Array<{ id: number; name: string }> = [];
+    if (!all_stores_access && store_ids.length > 0) {
+      const userStoreRecords = store_ids.map(sid => ({
+        user_id: newUser.id,
+        store_id: sid,
+      }));
+      await supabaseAdmin.from('user_stores').insert(userStoreRecords);
+
+      const { data: storesData } = await supabaseAdmin
+        .from('stores')
+        .select('id, name')
+        .in('id', store_ids);
+      assignedStores = storesData || [];
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Usuario creado exitosamente',
@@ -158,6 +212,7 @@ export async function POST(request: Request) {
         ...newUser,
         role: Array.isArray(newUser.roles) ? newUser.roles[0] : newUser.roles,
         department: Array.isArray(newUser.departments) ? newUser.departments[0] : newUser.departments,
+        stores: assignedStores,
       },
     }, { status: 201 });
   } catch {

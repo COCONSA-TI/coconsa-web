@@ -38,57 +38,85 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const tab = searchParams.get('tab') || 'active';
 
-    // Obtener información del usuario actual para determinar si es jefe de departamento
+    // Obtener información del usuario actual para determinar permisos y centros de costos
     const { data: currentUserData } = await supabaseAdmin
       .from('users')
-      .select('id, department_id, is_department_head')
+      .select('id, department_id, is_department_head, all_stores_access, can_view_all_store_orders')
       .eq('id', session!.userId)
       .single();
+
+    // Obtener centros de costos asignados al usuario
+    const { data: userStoreRows } = await supabaseAdmin
+      .from('user_stores')
+      .select('store_id')
+      .eq('user_id', session!.userId);
+
+    const assignedStoreIds = (userStoreRows || []).map((r) => r.store_id);
+    const hasAllStoresAccess = currentUserData?.all_stores_access ?? (session!.role === 'admin' && assignedStoreIds.length === 0);
+    const canViewAllStoreOrders = currentUserData?.can_view_all_store_orders ?? false;
+
+    // Si el usuario no tiene acceso global y no tiene centros de costos asignados, no ve ninguna orden
+    if (!hasAllStoresAccess && assignedStoreIds.length === 0) {
+      return NextResponse.json({
+        success: true,
+        orders: [],
+        count: 0,
+      });
+    }
 
     let query = supabaseAdmin
       .from('orders')
       .select('id, created_at, store_id, machine_id, total, currency, status, applicant_id, items, payment_type, is_urgent, is_definitive_rejection, is_piecework');
 
-    if (session!.role !== 'admin') {
-      if (currentUserData?.is_department_head && currentUserData?.department_id) {
-        // Jefes de departamento ven:
-        // 1. Sus propias órdenes
-        // 2. Órdenes de otros usuarios del mismo departamento
-        // 3. Órdenes que tienen aprobación en su departamento
+    // Restricción por centros de costos si no tiene acceso total
+    if (!hasAllStoresAccess) {
+      query = query.in('store_id', assignedStoreIds);
+    }
 
-        // Obtener todos los usuarios del mismo departamento
-        const { data: deptUsers } = await supabaseAdmin
-          .from('users')
-          .select('id')
-          .eq('department_id', currentUserData.department_id);
+    // Restricción por solicitante / departamento
+    if (session!.role === 'admin' && hasAllStoresAccess) {
+      // Admin con acceso total ve todas las órdenes
+    } else if (canViewAllStoreOrders) {
+      // Usuario con permiso para ver todas las órdenes de sus centros de costos asignados (activo e histórico)
+    } else if (currentUserData?.is_department_head && currentUserData?.department_id) {
+      // Jefes de departamento ven:
+      // 1. Sus propias órdenes
+      // 2. Órdenes de otros usuarios del mismo departamento
+      // 3. Órdenes que tienen aprobación en su departamento
 
-        const deptUserIds = deptUsers?.map(u => u.id).filter(Boolean) || [];
+      // Obtener todos los usuarios del mismo departamento
+      const { data: deptUsers } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('department_id', currentUserData.department_id);
 
-        // Obtener órdenes que requieren aprobación de su departamento
-        const { data: pendingApprovalOrderIds } = await supabaseAdmin
-          .from('order_approvals')
-          .select('order_id')
-          .eq('department_id', currentUserData.department_id);
+      const deptUserIds = deptUsers?.map(u => u.id).filter(Boolean) || [];
 
-        const orderIdsFromApprovals = pendingApprovalOrderIds?.map(a => a.order_id).filter(Boolean) || [];
+      // Obtener órdenes que requieren aprobación de su departamento
+      const { data: pendingApprovalOrderIds } = await supabaseAdmin
+        .from('order_approvals')
+        .select('order_id')
+        .eq('department_id', currentUserData.department_id);
 
-        // Construir filtro OR con: órdenes del departamento + órdenes de aprobación
-        const orFilters: string[] = [];
+      const orderIdsFromApprovals = pendingApprovalOrderIds?.map(a => a.order_id).filter(Boolean) || [];
 
-        if (deptUserIds.length > 0) {
-          orFilters.push(`applicant_id.in.(${deptUserIds.join(',')})`);
-        } else {
-          orFilters.push(`applicant_id.eq.${session!.userId}`);
-        }
+      // Construir filtro OR con: órdenes del departamento + órdenes de aprobación
+      const orFilters: string[] = [];
 
-        if (orderIdsFromApprovals.length > 0) {
-          orFilters.push(`id.in.(${orderIdsFromApprovals.join(',')})`);
-        }
-
-        query = query.or(orFilters.join(','));
+      if (deptUserIds.length > 0) {
+        orFilters.push(`applicant_id.in.(${deptUserIds.join(',')})`);
       } else {
-        query = query.eq('applicant_id', session!.userId);
+        orFilters.push(`applicant_id.eq.${session!.userId}`);
       }
+
+      if (orderIdsFromApprovals.length > 0) {
+        orFilters.push(`id.in.(${orderIdsFromApprovals.join(',')})`);
+      }
+
+      query = query.or(orFilters.join(','));
+    } else {
+      // Usuario estándar: solo ve sus propias órdenes
+      query = query.eq('applicant_id', session!.userId);
     }
 
     if (tab === 'active') {
