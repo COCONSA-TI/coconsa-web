@@ -38,6 +38,7 @@
     "react-leaflet": "^5.0.0",
     "react-loading-skeleton": "^3.5.0",
     "resend": "^6.1.0",
+    "xlsx": "^0.18.5",
     "yet-another-react-lightbox": "^3.25.0",
     "zod": "^4.1.11"
   },
