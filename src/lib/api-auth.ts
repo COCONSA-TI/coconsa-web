@@ -114,35 +114,13 @@ export async function requireSupplierCatalogAccess() {
 }
 
 /**
- * Permite crear proveedores a:
- * - Administradores del sistema
- * - Jefes de departamento
+ * Permite crear proveedores a cualquier usuario autenticado con acceso al sistema.
  */
 export async function requireSupplierCreation() {
   const { error, session } = await requireAuth();
 
   if (error) {
     return { error, session: null };
-  }
-
-  if (session!.role === 'admin') {
-    return { error: null, session };
-  }
-
-  const { data: userData, error: userError } = await supabaseAdmin
-    .from('users')
-    .select('is_department_head')
-    .eq('id', session!.userId)
-    .single();
-
-  if (userError || !userData?.is_department_head) {
-    return {
-      error: NextResponse.json(
-        { error: 'Esta acción solo está disponible para administradores y jefes de departamento' },
-        { status: 403 }
-      ),
-      session: null,
-    };
   }
 
   return { error: null, session };

@@ -39,7 +39,7 @@ const COMMON_CATEGORIES = [
 ];
 
 export default function CrearProveedorPage() {
-  const { isAdmin, isDepartmentHead, loading } = useRequireAuth();
+  const { loading } = useRequireAuth();
   const { success, error: toastError, warning, info } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -273,25 +273,7 @@ export default function CrearProveedorPage() {
     );
   }
 
-  if (!isAdmin && !isDepartmentHead) {
-    return (
-      <div className="max-w-4xl mx-auto p-8 text-center bg-white rounded-xl shadow">
-        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.072 16.5c-.77.833.192 2.5 1.732 2.5z" />
-          </svg>
-        </div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Acceso Restringido</h2>
-        <p className="text-gray-500 mb-6">Solo los jefes de departamento y administradores pueden registrar proveedores.</p>
-        <Link
-          href="/dashboard/proveedores"
-          className="inline-flex px-5 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition"
-        >
-          Volver a Proveedores
-        </Link>
-      </div>
-    );
-  }
+
 
   const inputClass = (hasError: boolean, isAiFilled: boolean) =>
     `w-full px-4 py-2.5 text-gray-900 bg-white rounded-lg border text-sm focus:ring-2 outline-none transition-all ${
