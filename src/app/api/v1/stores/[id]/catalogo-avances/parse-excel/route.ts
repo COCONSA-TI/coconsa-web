@@ -147,7 +147,7 @@ Extrae TODOS los conceptos sin omitir ningún renglón.`;
     } catch {
       // Fallback a gemini-1.5-flash
       const fallbackModel = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
+        model: "gemini-2.5-flash",
         generationConfig: {
           // @ts-expect-error — responseSchema es válido pero los tipos del SDK lo marcan con advertencia
           responseSchema: catalogoSchema,
