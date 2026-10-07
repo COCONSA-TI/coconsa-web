@@ -375,9 +375,9 @@ export function PresupuestosPageSkeleton() {
         </div>
       </div>
 
-      {/* Financial Summary Category Cards Skeleton (6 cards) */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {[...Array(6)].map((_, i) => (
+      {/* Financial Summary Category Cards Skeleton (7 cards: Total + 6 Categorías) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-4">
+        {[...Array(7)].map((_, i) => (
           <div key={i} className="bg-white rounded-xl shadow p-4 border border-gray-100 animate-pulse">
             <div className="flex items-center justify-between mb-2">
               <div className="w-8 h-8 rounded-lg bg-gray-100"></div>

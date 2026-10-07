@@ -110,7 +110,7 @@ export interface Store {
 // INSUMOS DE PRESUPUESTO POR OBRA (store_insumos)
 // ============================================
 
-export type InsumoCategoria = 'Materiales' | 'Mano de Obra' | 'Herramienta' | 'Equipo' | 'Adicionales';
+export type InsumoCategoria = 'Materiales' | 'Mano de Obra' | 'Herramienta' | 'Equipo' | 'Gastos Indirectos' | 'Adicionales';
 
 export interface StoreInsumo {
   id: number;
@@ -276,11 +276,20 @@ export interface User {
   department_id: string | null;
   is_department_head: boolean;
   is_active: boolean;
+  all_stores_access?: boolean;
+  can_view_all_store_orders?: boolean;
+}
+
+export interface UserStore {
+  user_id: string;
+  store_id: number;
+  created_at: string;
 }
 
 export interface UserWithRelations extends User {
   roles?: Role;
   department?: Department;
+  stores?: Store[];
 }
 
 // ============================================

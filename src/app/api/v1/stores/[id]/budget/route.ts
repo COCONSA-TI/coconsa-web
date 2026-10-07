@@ -342,9 +342,15 @@ export async function POST(
       );
     }
 
-    // Paso 3: Marcar como inactivos los insumos que ya no están en el PDF (excepto los Adicionales aprobados)
+    // Paso 3: Marcar como inactivos los insumos que ya no están en el PDF (excepto los Adicionales y Gastos Indirectos aprobados)
     const orphanIds = (existingInsumos ?? [])
-      .filter((ins) => ins.categoria !== "Adicionales" && !newClaves.has(ins.clave.trim()))
+      .filter(
+        (ins) =>
+          ins.categoria !== "Adicionales" &&
+          ins.categoria !== "Gastos Indirectos" &&
+          ins.categoria !== "Indirectos" &&
+          !newClaves.has(ins.clave.trim())
+      )
       .map((ins) => ins.id);
 
     if (orphanIds.length > 0) {
@@ -448,14 +454,16 @@ export async function GET(
       "Mano de Obra": { monto: 0, count: 0 },
       Herramienta: { monto: 0, count: 0 },
       Equipo: { monto: 0, count: 0 },
+      "Gastos Indirectos": { monto: 0, count: 0 },
       Adicionales: { monto: 0, count: 0 },
     } as Record<string, { monto: number; count: number }>;
 
     for (const ins of insumos ?? []) {
       const cat = ins.categoria as string;
-      if (resumen[cat]) {
-        resumen[cat].monto += ins.monto_presupuestado || 0;
-        resumen[cat].count += 1;
+      const normalizedCat = (cat === "Indirectos" || cat === "Gasto Indirecto") ? "Gastos Indirectos" : cat;
+      if (resumen[normalizedCat]) {
+        resumen[normalizedCat].monto += ins.monto_presupuestado || 0;
+        resumen[normalizedCat].count += 1;
       }
     }
     const totalReporte = Object.values(resumen).reduce((a, b) => a + b.monto, 0);

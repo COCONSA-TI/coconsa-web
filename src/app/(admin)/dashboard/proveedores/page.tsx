@@ -33,7 +33,7 @@ export default function ProveedoresPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [previewSupplier, setPreviewSupplier] = useState<Supplier | null>(null);
 
-  const canCreateSuppliers = isAdmin || isDepartmentHead;
+  const canCreateSuppliers = true;
   const canEditSuppliers = isAdmin || isDepartmentHead;
 
   useEffect(() => {

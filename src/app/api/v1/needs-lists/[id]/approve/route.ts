@@ -68,7 +68,7 @@ export async function POST(
     // Verificar que la lista existe
     const { data: needsList, error: needsListError } = await supabaseAdmin
       .from('needs_lists')
-      .select('id, status')
+      .select('id, status, store_id')
       .eq('id', needsListId)
       .single();
 
@@ -170,6 +170,15 @@ export async function POST(
     if (updateListError) {
       console.error('Error al actualizar estado de la lista:', updateListError);
       // No fallar aquí, la aprobación ya se registró
+    }
+
+    // Sincronizar automáticamente el presupuesto de la obra e incorporar los Gastos Indirectos
+    if (needsList.store_id) {
+      try {
+        await supabaseAdmin.rpc('recalcular_presupuesto_obra', { p_store_id: needsList.store_id });
+      } catch (rpcErr) {
+        console.warn('[needs-lists/approve] No se pudo recalcular presupuesto de obra:', rpcErr);
+      }
     }
 
     return NextResponse.json({
