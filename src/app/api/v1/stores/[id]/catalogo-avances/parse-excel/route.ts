@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/api-auth";
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+import * as XLSX from "xlsx";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
@@ -22,22 +23,19 @@ const catalogoSchema = {
   },
 };
 
-function robustParseJSON(rawText: string): any {
+function robustParseJSON(rawText: string): unknown {
   let cleaned = rawText
     .replace(/^```json\s*/i, "")
     .replace(/^```\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
 
-  // Limpiar comas flotantes antes de llaves o corchetes de cierre
   cleaned = cleaned.replace(/,(\s*[}\]])/g, "$1");
 
-  // 1. Intento parse directo
   try {
     return JSON.parse(cleaned);
   } catch (err1) {
-    // 2. Extraer subcadena JSON delimitada
-    const firstBracket = cleaned.search(/[\[\{]/);
+    const firstBracket = cleaned.search(/[\[{]/);
     if (firstBracket !== -1) {
       const openChar = cleaned[firstBracket];
       const closeChar = openChar === "[" ? "]" : "}";
@@ -50,7 +48,6 @@ function robustParseJSON(rawText: string): any {
         try {
           return JSON.parse(substring);
         } catch {
-          // Intentar cerrar arreglo trunco en la última llave completa
           const lastCloseObj = substring.lastIndexOf("}");
           if (lastCloseObj !== -1) {
             let truncated = substring.substring(0, lastCloseObj + 1);
@@ -58,7 +55,7 @@ function robustParseJSON(rawText: string): any {
             try {
               return JSON.parse(truncated);
             } catch {
-              // Ignorar y lanzar error inicial
+              // ignorar
             }
           }
         }
@@ -66,6 +63,32 @@ function robustParseJSON(rawText: string): any {
     }
     throw err1;
   }
+}
+
+/**
+ * Convierte un buffer de Excel (XLSX/XLS) a texto CSV plano.
+ * Gemini no soporta archivos Excel como inline data (devuelve 500 Internal Server Error).
+ * La conversión conserva todos los datos: números, textos y valores calculados de fórmulas.
+ * Lo que NO se transfiere: colores, imágenes, gráficas (irrelevante para catálogos de obra).
+ */
+function excelBufferToText(buffer: Buffer): string {
+  const workbook = XLSX.read(buffer, { type: "buffer" });
+  const sheetsText: string[] = [];
+
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    const csv = XLSX.utils.sheet_to_csv(sheet, { forceQuotes: false });
+    // Filtrar filas completamente vacías para reducir tokens
+    const filteredCsv = csv
+      .split("\n")
+      .filter((row) => row.replace(/,/g, "").trim().length > 0)
+      .join("\n");
+    if (filteredCsv.trim().length > 0) {
+      sheetsText.push(`=== Hoja: ${sheetName} ===\n${filteredCsv}`);
+    }
+  }
+
+  return sheetsText.join("\n\n");
 }
 
 export async function POST(
@@ -99,13 +122,29 @@ export async function POST(
     const fileName = file.name.toLowerCase();
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    let mimeType = "application/pdf";
-    if (fileName.endsWith(".xlsx")) {
-      mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-    } else if (fileName.endsWith(".xls")) {
-      mimeType = "application/vnd.ms-excel";
-    } else if (fileName.endsWith(".csv")) {
-      mimeType = "text/csv";
+    const isExcel = fileName.endsWith(".xlsx") || fileName.endsWith(".xls");
+    const isCsv = fileName.endsWith(".csv");
+
+    // Preparar el contenido para Gemini según tipo de archivo.
+    // XLSX/XLS → texto plano (Gemini no acepta archivos Excel como inline data).
+    // CSV y PDF → inline data directamente.
+    type GeminiPart =
+      | { inlineData: { data: string; mimeType: string } }
+      | { text: string };
+
+    let fileContentObj: GeminiPart;
+
+    if (isExcel) {
+      const excelText = excelBufferToText(buffer);
+      fileContentObj = { text: excelText };
+    } else if (isCsv) {
+      fileContentObj = {
+        inlineData: { data: buffer.toString("base64"), mimeType: "text/csv" },
+      };
+    } else {
+      fileContentObj = {
+        inlineData: { data: buffer.toString("base64"), mimeType: "application/pdf" },
+      };
     }
 
     const systemPrompt = `Eres el asistente experto en construcción de COCONSA.
@@ -123,13 +162,6 @@ Para cada concepto extrae:
 
 Extrae TODOS los conceptos sin omitir ningún renglón.`;
 
-    const fileContentObj = {
-      inlineData: {
-        data: buffer.toString("base64"),
-        mimeType,
-      },
-    };
-
     let textResponse = "";
 
     try {
@@ -145,7 +177,7 @@ Extrae TODOS los conceptos sin omitir ningún renglón.`;
       const result = await model.generateContent([systemPrompt, fileContentObj]);
       textResponse = result.response.text();
     } catch {
-      // Fallback a gemini-1.5-flash
+      // Fallback: gemini-1.5-flash fue deprecado (devuelve 404), usar gemini-2.0-flash
       const fallbackModel = genAI.getGenerativeModel({
         model: "gemini-2.5-flash",
         generationConfig: {
@@ -163,7 +195,11 @@ Extrae TODOS los conceptos sin omitir ningún renglón.`;
 
     const extractedList = Array.isArray(parsedData)
       ? parsedData
-      : parsedData.conceptos || parsedData.concepts || parsedData.items || parsedData.catalog || [];
+      : (parsedData as Record<string, unknown>).conceptos ||
+        (parsedData as Record<string, unknown>).concepts ||
+        (parsedData as Record<string, unknown>).items ||
+        (parsedData as Record<string, unknown>).catalog ||
+        [];
 
     return NextResponse.json({
       success: true,
