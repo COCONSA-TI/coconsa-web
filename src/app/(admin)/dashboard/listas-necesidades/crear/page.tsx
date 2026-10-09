@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import BankAccountManager from '@/components/admin/BankAccountManager';
@@ -23,9 +23,6 @@ interface NeedsListItem {
   precioTotal?: number;
   justificacion: string;
   evidenciaFile: File | null;
-  insumo_clave?: string;
-  categoria?: string;
-  cantidad_disponible?: number;
 }
 
 interface StoreOption {
@@ -37,108 +34,6 @@ interface UnitOption {
   id: string;
   name: string;
   abbreviation: string;
-}
-
-interface InsumoOption {
-  id: number;
-  clave: string;
-  descripcion: string;
-  unidad: string;
-  costo_unitario: number;
-  costo_autorizado?: number | null;
-  cantidad_disponible: number;
-  agotado: boolean;
-  categoria: string;
-}
-
-interface InsumoAutocompleteProps {
-  value: string;
-  insumos: InsumoOption[];
-  onSelect: (insumo: InsumoOption) => void;
-  onChange: (val: string) => void;
-}
-
-function InsumoAutocomplete({ value, insumos, onSelect, onChange }: InsumoAutocompleteProps) {
-  const [query, setQuery] = useState(value);
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => { setQuery(value); }, [value]);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  const filtered = query.length >= 1
-    ? insumos.filter(ins =>
-        ins.clave.toLowerCase().includes(query.toLowerCase()) ||
-        ins.descripcion.toLowerCase().includes(query.toLowerCase())
-      ).slice(0, 30)
-    : insumos.slice(0, 30);
-
-  return (
-    <div ref={ref} className="relative">
-      <input
-        type="text"
-        value={query}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          onChange(e.target.value);
-          setOpen(true);
-        }}
-        onFocus={() => setOpen(true)}
-        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-sm text-gray-900"
-        placeholder="Busca por clave o descripción del presupuesto..."
-        autoComplete="off"
-      />
-      {open && filtered.length > 0 && (
-        <div className="absolute z-50 left-0 right-0 mt-1 bg-white rounded-lg border border-gray-200 shadow-xl max-h-60 overflow-y-auto">
-          {filtered.map((ins) => {
-            const hasCostoAut = ins.costo_autorizado != null && ins.costo_autorizado > 0;
-            const effectiveCost = hasCostoAut ? ins.costo_autorizado! : ins.costo_unitario;
-
-            return (
-              <button
-                key={ins.id}
-                type="button"
-                onClick={() => {
-                  onSelect(ins);
-                  setQuery(ins.descripcion);
-                  setOpen(false);
-                }}
-                className={`w-full text-left px-3 py-2 hover:bg-red-50 transition-colors border-b border-gray-50 last:border-0 ${ins.agotado ? 'opacity-50' : ''}`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <span className="text-xs font-semibold text-gray-500 font-mono mr-2">{ins.clave}</span>
-                    <span className="inline-block px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-600 rounded mr-2">{ins.categoria}</span>
-                    <p className="text-sm text-gray-800 truncate mt-0.5">{ins.descripcion}</p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className={`text-xs font-medium ${ins.agotado ? 'text-red-500' : 'text-green-600'}`}>
-                      {ins.agotado ? 'Agotado' : `Disp: ${ins.cantidad_disponible.toLocaleString('es-MX', { maximumFractionDigits: 2 })} ${ins.unidad}`}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      ${effectiveCost.toLocaleString('es-MX', { maximumFractionDigits: 2 })}/{ins.unidad}
-                      {hasCostoAut && (
-                        <span className="ml-1 text-[10px] text-green-700 font-semibold bg-green-50 px-1 py-0.5 rounded border border-green-200">
-                          Autorizado
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
 }
 
 const LEGACY_MACHINE_STORE_REGEX = /^(CG|M|C|V|AT)\d+[\.\s-]?/i;
@@ -157,9 +52,6 @@ export default function CreateNeedsListPage() {
   const [storeId, setStoreId] = useState('');
   const [availableStores, setAvailableStores] = useState<StoreOption[]>([]);
   const [availableUnits, setAvailableUnits] = useState<UnitOption[]>([]);
-  const [storeInsumos, setStoreInsumos] = useState<InsumoOption[]>([]);
-  const [hasPresupuesto, setHasPresupuesto] = useState(false);
-  const [loadingInsumos, setLoadingInsumos] = useState(false);
   const [currency, setCurrency] = useState('MXN');
   const [ivaPercentage, setIvaPercentage] = useState(16);
   const [isUrgent, setIsUrgent] = useState(false);
@@ -168,46 +60,11 @@ export default function CreateNeedsListPage() {
     { nombre: '', cantidad: 1, unidad: '', precioUnitario: 0, justificacion: '', evidenciaFile: null },
   ]);
 
-  const fetchInsumosForStore = useCallback(async (sId: string) => {
-    if (!sId) {
-      setStoreInsumos([]);
-      setHasPresupuesto(false);
-      return;
-    }
-    setLoadingInsumos(true);
-    try {
-      const res = await fetch(`/api/v1/stores/${sId}/insumos?limit=500`);
-      if (!res.ok) throw new Error('Error');
-      const data = await res.json();
-      setHasPresupuesto(data.hasPresupuesto);
-      const CATEGORIAS_SOLICITABLES = ['Materiales', 'Herramienta', 'Equipo', 'Mano de Obra', 'Gastos Indirectos', 'Indirectos'];
-      setStoreInsumos(
-        (data.insumos || []).filter((i: { categoria: string }) =>
-          CATEGORIAS_SOLICITABLES.includes(i.categoria)
-        )
-      );
-    } catch {
-      setStoreInsumos([]);
-      setHasPresupuesto(false);
-    } finally {
-      setLoadingInsumos(false);
-    }
-  }, []);
-
   useEffect(() => {
     fetchBankAccounts();
     fetchStores();
     fetchUnits();
   }, []);
-
-  useEffect(() => {
-    if (storeId) {
-      fetchInsumosForStore(storeId);
-    } else {
-      setStoreInsumos([]);
-      setHasPresupuesto(false);
-    }
-  }, [storeId, fetchInsumosForStore]);
 
   const fetchUnits = async () => {
     try {
@@ -271,9 +128,6 @@ export default function CreateNeedsListPage() {
 
   const updateItem = (index: number, field: keyof NeedsListItem, value: string | number | File | null) => {
     const newItems = [...items];
-    if (field === 'precioUnitario' && newItems[index].insumo_clave) {
-      return;
-    }
     newItems[index] = { ...newItems[index], [field]: value };
     setItems(newItems);
   };
@@ -302,25 +156,6 @@ export default function CreateNeedsListPage() {
 
     if (items.length === 0 || !items[0].nombre) {
       toast.warning('Items requeridos', 'Debes agregar al menos un item');
-      return;
-    }
-
-    // Validar exceso de cantidad presupuestada disponible
-    const itemsExcedidos = items.filter(item => {
-      if (!item.insumo_clave) return false;
-      const insumo = storeInsumos.find(s => s.clave === item.insumo_clave);
-      const disp = insumo ? insumo.cantidad_disponible : item.cantidad_disponible;
-      return disp !== undefined && item.cantidad > disp;
-    });
-
-    if (itemsExcedidos.length > 0) {
-      const primerExcedido = itemsExcedidos[0];
-      const insumo = storeInsumos.find(s => s.clave === primerExcedido.insumo_clave);
-      const disp = insumo ? insumo.cantidad_disponible : (primerExcedido.cantidad_disponible ?? 0);
-      toast.warning(
-        'No tienes permiso para enviar esta solicitud',
-        `El concepto "${primerExcedido.insumo_clave}" excede la cantidad presupuestada disponible (Disponible: ${disp}, Solicitado: ${primerExcedido.cantidad}). Por favor solicita autorización a Dirección.`
-      );
       return;
     }
 
@@ -401,8 +236,7 @@ export default function CreateNeedsListPage() {
           precioUnitario: item.precioUnitario,
           justificacion: item.justificacion,
           evidencia_url: itemEvidenceUrls[index] || undefined,
-          insumo_clave: item.insumo_clave || undefined,
-          categoria: item.categoria || undefined,
+          categoria: 'Gastos Indirectos',
         })),
       };
 
@@ -616,14 +450,14 @@ export default function CreateNeedsListPage() {
             </button>
           </div>
 
-          {hasPresupuesto && (
-            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800 flex items-center justify-between">
-              <div>
-                <span className="font-semibold">Presupuesto activo:</span> Esta obra cuenta con un presupuesto cargado. Selecciona los insumos autorizados (categorías Materiales y Herramienta) para vinculación automática.
-              </div>
-              {loadingInsumos && <span className="text-blue-600 animate-pulse font-medium">Cargando catálogo...</span>}
-            </div>
-          )}
+          <div className="mb-4 bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-600 flex items-center gap-2">
+            <svg className="w-4 h-4 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>
+              Los conceptos registrados en esta lista no requieren pertenecer al catálogo previo del presupuesto de obra. Siguen el flujo de aprobación normal y se incorporan como <strong>Gastos Indirectos</strong>.
+            </span>
+          </div>
 
           <div className="space-y-4">
             {items.map((item, index) => (
@@ -645,53 +479,17 @@ export default function CreateNeedsListPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                   <div className="md:col-span-2">
-                    <label className="block text-sm text-gray-600 mb-1 flex items-center justify-between">
-                      <span>Nombre / Descripción <span className="text-red-500">*</span></span>
-                      {item.insumo_clave && (
-                        <span className="text-[11px] font-mono text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-200">
-                          {item.insumo_clave} ({item.categoria})
-                        </span>
-                      )}
+                    <label className="block text-sm text-gray-600 mb-1">
+                      Nombre / Descripción <span className="text-red-500">*</span>
                     </label>
-                    {hasPresupuesto && storeInsumos.length > 0 ? (
-                      <InsumoAutocomplete
-                        value={item.nombre}
-                        insumos={storeInsumos}
-                        onChange={(val) => {
-                          const newItems = [...items];
-                          newItems[index] = { ...newItems[index], nombre: val, insumo_clave: undefined, categoria: undefined, cantidad_disponible: undefined };
-                          setItems(newItems);
-                        }}
-                        onSelect={(insumo) => {
-                          const newItems = [...items];
-                          const matchedUnit = availableUnits.find(
-                            u => u.abbreviation.toLowerCase() === (insumo.unidad || '').toLowerCase() ||
-                                 u.name.toLowerCase() === (insumo.unidad || '').toLowerCase()
-                          );
-                          const finalUnit = matchedUnit ? matchedUnit.abbreviation : (insumo.unidad || newItems[index].unidad);
-
-                          newItems[index] = {
-                            ...newItems[index],
-                            nombre: insumo.descripcion,
-                            unidad: finalUnit,
-                            precioUnitario: (insumo.costo_autorizado != null && insumo.costo_autorizado > 0) ? insumo.costo_autorizado : (insumo.costo_unitario || newItems[index].precioUnitario),
-                            insumo_clave: insumo.clave,
-                            categoria: insumo.categoria,
-                            cantidad_disponible: insumo.cantidad_disponible,
-                          };
-                          setItems(newItems);
-                        }}
-                      />
-                    ) : (
-                      <input
-                        type="text"
-                        value={item.nombre}
-                        onChange={(e) => updateItem(index, 'nombre', e.target.value)}
-                        required
-                        placeholder="Descripción del item"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
-                      />
-                    )}
+                    <input
+                      type="text"
+                      value={item.nombre}
+                      onChange={(e) => updateItem(index, 'nombre', e.target.value)}
+                      required
+                      placeholder="Descripción del item"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
+                    />
                   </div>
 
                   <div>
@@ -706,25 +504,6 @@ export default function CreateNeedsListPage() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
                     />
                   </div>
-
-                  {(() => {
-                    const matchedInsumo = item.insumo_clave ? storeInsumos.find(s => s.clave === item.insumo_clave) : undefined;
-                    const disp = matchedInsumo ? matchedInsumo.cantidad_disponible : item.cantidad_disponible;
-                    const requestedQty = Number(item.cantidad) || 0;
-                    const exceedsLimit = item.insumo_clave !== undefined && disp !== undefined && requestedQty > disp;
-
-                    return exceedsLimit ? (
-                      <div className="md:col-span-4 mt-2 p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 font-medium flex items-start gap-2">
-                        <svg className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                        <div>
-                          <span className="font-semibold text-red-800">⚠️ No tienes permiso para solicitar esta cantidad:</span>
-                          <p className="mt-0.5 text-red-700">La cantidad solicitada ({requestedQty.toLocaleString('es-MX', { maximumFractionDigits: 2 })}) excede la cantidad presupuestada disponible ({disp?.toLocaleString('es-MX', { maximumFractionDigits: 2 })} {item.unidad}). Por favor solicita autorización a <strong>Dirección</strong> para incrementar el presupuesto antes de proceder.</p>
-                        </div>
-                      </div>
-                    ) : null;
-                  })()}
 
                   <div>
                     <label className="block text-sm text-gray-600 mb-1">Unidad *</label>
@@ -747,38 +526,16 @@ export default function CreateNeedsListPage() {
                   </div>
 
                   <div className="md:col-span-2">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-sm text-gray-600">Precio Unitario *</label>
-                      {item.insumo_clave && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
-                          <svg className="w-3 h-3 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                          </svg>
-                          Fijo por presupuesto
-                        </span>
-                      )}
-                    </div>
+                    <label className="block text-sm text-gray-600 mb-1">Precio Unitario *</label>
                     <input
                       type="number"
                       value={item.precioUnitario}
-                      readOnly={Boolean(item.insumo_clave)}
-                      disabled={Boolean(item.insumo_clave)}
                       onChange={(e) => updateItem(index, 'precioUnitario', Number(e.target.value))}
                       required
                       min="0"
                       step="0.01"
-                      className={`w-full px-3 py-2 border rounded-lg text-sm transition-colors ${
-                        item.insumo_clave
-                          ? "bg-gray-100 text-gray-600 border-gray-200 cursor-not-allowed select-none font-medium"
-                          : "border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
-                      }`}
-                      title={item.insumo_clave ? "El precio está establecido por el presupuesto cargado y no puede modificarse." : undefined}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
                     />
-                    {item.insumo_clave && (
-                      <p className="text-[11px] text-gray-500 mt-1">
-                        El precio unitario no es editable porque proviene del catálogo de presupuesto de la obra.
-                      </p>
-                    )}
                   </div>
 
                   <div className="md:col-span-2">
