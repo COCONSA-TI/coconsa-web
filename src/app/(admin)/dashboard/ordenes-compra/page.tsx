@@ -27,6 +27,8 @@ interface Order {
   machine_name?: string | null;
   suppliers?: string[];
   materials?: string[];
+  has_extra_budget_approval?: boolean;
+  extra_budget_items_count?: number;
 }
 
 const statusConfig: Record<OrderStatus, { label: string; className: string; iconBg: string }> = {
@@ -158,7 +160,22 @@ function OrdenesCompraContent() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [tab, setTab] = useState<"active" | "history">("active");
+  const tabParam = searchParams.get('tab');
+  const [tab, setTab] = useState<"active" | "history">(() => {
+    if (tabParam === "history" || tabParam === "active") return tabParam;
+    if (typeof window !== "undefined") {
+      try {
+        const saved = sessionStorage.getItem('orderFilters');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.tab === "history" || parsed.tab === "active") {
+            return parsed.tab;
+          }
+        }
+      } catch {}
+    }
+    return "active";
+  });
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportDateFrom, setReportDateFrom] = useState("");
   const [reportDateTo, setReportDateTo] = useState("");
@@ -174,17 +191,22 @@ function OrdenesCompraContent() {
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [myApprovalFilters, setMyApprovalFilters] = useState<string[]>([]);
+  const [pieceworkFilter, setPieceworkFilter] = useState<"all" | "piecework" | "regular">("all");
   const [showFilters, setShowFilters] = useState(false);
 
   // Paginación
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [itemsPerPage, setItemsPerPage] = useState<number>(10);
 
-  // Leer filtro de URL al cargar (para compartir enlaces)
+  // Leer filtro y tab de URL al cargar (para compartir enlaces)
   useEffect(() => {
     const statusParam = searchParams.get('status');
     if (statusParam && Object.keys(statusConfig).includes(statusParam)) {
       setStatusFilter(statusParam as OrderStatus);
+    }
+    const currentTabParam = searchParams.get('tab');
+    if (currentTabParam === 'history' || currentTabParam === 'active') {
+      setTab(currentTabParam);
     }
   }, [searchParams]);
 
@@ -194,6 +216,10 @@ function OrdenesCompraContent() {
     if (savedFilters) {
       try {
         const filters = JSON.parse(savedFilters);
+        const currentTabParam = searchParams.get('tab');
+        if (!currentTabParam && (filters.tab === "history" || filters.tab === "active")) {
+          setTab(filters.tab);
+        }
         setStatusFilter(filters.statusFilter || "all");
         setSearchTerm(filters.searchTerm || "");
         setDepartmentFilters(filters.departmentFilters || []);
@@ -204,6 +230,7 @@ function OrdenesCompraContent() {
         setDateFrom(filters.dateFrom || "");
         setDateTo(filters.dateTo || "");
         setMyApprovalFilters(filters.myApprovalFilters || (filters.myApprovalFilter && filters.myApprovalFilter !== "all" ? [filters.myApprovalFilter] : []));
+        setPieceworkFilter(filters.pieceworkFilter || "all");
         setShowFilters(filters.showFilters || false);
         // Limpiar sessionStorage después de restaurar
         sessionStorage.removeItem('orderFilters');
@@ -211,11 +238,12 @@ function OrdenesCompraContent() {
         console.error('Error al restaurar filtros:', error);
       }
     }
-  }, []);
+  }, [searchParams]);
 
   // Guardar filtros en sessionStorage cuando cambian (para persistencia)
   const saveFiltersToSession = () => {
     const filters = {
+      tab,
       statusFilter,
       searchTerm,
       departmentFilters,
@@ -226,6 +254,7 @@ function OrdenesCompraContent() {
       dateFrom,
       dateTo,
       myApprovalFilters,
+      pieceworkFilter,
       showFilters,
     };
     sessionStorage.setItem('orderFilters', JSON.stringify(filters));
@@ -240,7 +269,7 @@ function OrdenesCompraContent() {
   // Resetear página al modificar filtros
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, departmentFilters, storeFilters, applicantFilters, supplierFilters, materialFilters, dateFrom, dateTo, myApprovalFilters, tab]);
+  }, [searchTerm, statusFilter, departmentFilters, storeFilters, applicantFilters, supplierFilters, materialFilters, dateFrom, dateTo, myApprovalFilters, pieceworkFilter, tab]);
 
   const fetchOrders = async (currentTab = tab) => {
     try {
@@ -410,9 +439,17 @@ function OrdenesCompraContent() {
         }
       }
 
+      // Filtro por destajo
+      if (pieceworkFilter === "piecework" && !order.is_piecework) {
+        return false;
+      }
+      if (pieceworkFilter === "regular" && order.is_piecework) {
+        return false;
+      }
+
       return true;
     });
-  }, [orders, statusFilter, searchTerm, departmentFilters, storeFilters, applicantFilters, supplierFilters, materialFilters, dateFrom, dateTo, myApprovalFilters]);
+  }, [orders, statusFilter, searchTerm, departmentFilters, storeFilters, applicantFilters, supplierFilters, materialFilters, dateFrom, dateTo, myApprovalFilters, pieceworkFilter]);
 
   // Paginación
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage) || 1;
@@ -429,7 +466,7 @@ function OrdenesCompraContent() {
     rejected: orders.filter(o => o.status === "rejected").length,
   };
 
-  const hasActiveFilters = searchTerm || departmentFilters.length > 0 || storeFilters.length > 0 || applicantFilters.length > 0 || supplierFilters.length > 0 || materialFilters.length > 0 || dateFrom || dateTo || myApprovalFilters.length > 0;
+  const hasActiveFilters = searchTerm || departmentFilters.length > 0 || storeFilters.length > 0 || applicantFilters.length > 0 || supplierFilters.length > 0 || materialFilters.length > 0 || dateFrom || dateTo || myApprovalFilters.length > 0 || pieceworkFilter !== "all";
 
   const clearAllFilters = () => {
     setStatusFilter("all");
@@ -442,6 +479,7 @@ function OrdenesCompraContent() {
     setDateFrom("");
     setDateTo("");
     setMyApprovalFilters([]);
+    setPieceworkFilter("all");
   };
 
   if (authLoading || loading) {
@@ -551,7 +589,14 @@ function OrdenesCompraContent() {
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8">
           <button
-            onClick={() => setTab("active")}
+            onClick={() => {
+              setTab("active");
+              if (typeof window !== "undefined") {
+                const url = new URL(window.location.href);
+                url.searchParams.delete("tab");
+                window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+              }
+            }}
             className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${tab === "active"
               ? "border-red-500 text-red-600"
               : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -560,7 +605,14 @@ function OrdenesCompraContent() {
             Activas
           </button>
           <button
-            onClick={() => setTab("history")}
+            onClick={() => {
+              setTab("history");
+              if (typeof window !== "undefined") {
+                const url = new URL(window.location.href);
+                url.searchParams.set("tab", "history");
+                window.history.replaceState({}, '', url.pathname + url.search);
+              }
+            }}
             className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${tab === "history"
               ? "border-red-500 text-red-600"
               : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -693,6 +745,24 @@ function OrdenesCompraContent() {
             )}
           </div>
 
+          {/* Quick Destajo filter toggle */}
+          <button
+            onClick={() => setPieceworkFilter(prev => prev === "piecework" ? "all" : "piecework")}
+            className={`inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${pieceworkFilter === "piecework"
+              ? "bg-red-700 text-white shadow-sm"
+              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            title={pieceworkFilter === "piecework" ? "Mostrando solo destajos. Click para ver todas" : "Filtrar solo órdenes de destajo"}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            <span>Destajo</span>
+            {pieceworkFilter === "piecework" && (
+              <span className="w-2 h-2 bg-white rounded-full"></span>
+            )}
+          </button>
+
           {/* Filter Toggle Button */}
           <button
             onClick={() => setShowFilters(!showFilters)}
@@ -730,6 +800,22 @@ function OrdenesCompraContent() {
                   onChange={setMyApprovalFilters}
                   placeholder="Todas"
                 />
+              </div>
+
+              {/* Tipo de Orden Filter */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
+                  Tipo de Orden
+                </label>
+                <select
+                  value={pieceworkFilter}
+                  onChange={(e) => setPieceworkFilter(e.target.value as "all" | "piecework" | "regular")}
+                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900 focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                >
+                  <option value="all">Todas las órdenes</option>
+                  <option value="piecework">Solo Destajo</option>
+                  <option value="regular">Sin Destajo (Normales)</option>
+                </select>
               </div>
 
               {/* Departamento Actual Filter */}
@@ -866,6 +952,17 @@ function OrdenesCompraContent() {
             </span>
           )}
 
+          {pieceworkFilter !== "all" && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+              {pieceworkFilter === "piecework" ? "Solo Destajo" : "Sin Destajo"}
+              <button onClick={() => setPieceworkFilter("all")} className="hover:opacity-70">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </span>
+          )}
+
           {departmentFilters.length > 0 && (
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
               Departamento: {departmentFilters.join(", ")}
@@ -992,7 +1089,7 @@ function OrdenesCompraContent() {
                 return (
                   <Link
                     key={order.id}
-                    href={`/dashboard/ordenes-compra/${order.id}`}
+                    href={`/dashboard/ordenes-compra/${order.id}${tab === 'history' ? '?tab=history' : ''}`}
                     className="block p-4 hover:bg-gray-50 transition-colors"
                     onClick={saveFiltersToSession}
                   >
@@ -1014,6 +1111,14 @@ function OrdenesCompraContent() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                             </svg>
                             Destajo
+                          </span>
+                        )}
+                        {order.has_extra_budget_approval && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-300 rounded text-xs font-semibold" title="Requiere autorización especial de Gerencia">
+                            <svg className="w-3 h-3 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            Autorización Especial
                           </span>
                         )}
                         <span className="text-gray-400">·</span>
@@ -1177,6 +1282,14 @@ function OrdenesCompraContent() {
                                 Destajo
                               </span>
                             )}
+                            {order.has_extra_budget_approval && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-300 rounded text-xs font-semibold" title="Requiere autorización especial de Gerencia">
+                                <svg className="w-3 h-3 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                Autorización Especial
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="px-6 py-4">
@@ -1257,7 +1370,7 @@ function OrdenesCompraContent() {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <Link
-                            href={`/dashboard/ordenes-compra/${order.id}`}
+                            href={`/dashboard/ordenes-compra/${order.id}${tab === 'history' ? '?tab=history' : ''}`}
                             className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 font-medium text-sm transition-colors"
                             onClick={saveFiltersToSession}
                           >

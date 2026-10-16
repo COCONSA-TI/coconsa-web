@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 import { getOrderApprovals, canUserApprove, getApprovalIconType, getDepartmentBadgeStyle, type OrderApproval, type ApprovalIconType } from "@/lib/approvalFlow";
@@ -91,9 +91,10 @@ function formatDate(dateString: string): { full: string; date: string; time: str
   };
 }
 
-export default function OrdenDetallesPage() {
+function OrdenDetallesContent() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const orderId = params.id as string;
   const { isAdmin, user } = useAuth();
   const toast = useToast();
@@ -105,6 +106,9 @@ export default function OrdenDetallesPage() {
   const canSpecialEditOrder = isAdmin || isDirection || isConstruccionHead || isContraloriaHead;
 
   const [order, setOrder] = useState<OrderDetail | null>(null);
+
+  const isHistory = searchParams.get('tab') === 'history' || order?.status === 'completed';
+  const backUrl = isHistory ? '/dashboard/ordenes-compra?tab=history' : '/dashboard/ordenes-compra';
   const [loading, setLoading] = useState(true);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [isMergingEvidences, setIsMergingEvidences] = useState(false);
@@ -150,7 +154,7 @@ export default function OrdenDetallesPage() {
       await fetchAttachments();
     } catch {
       toast.error('Error', 'No se pudo cargar la orden');
-      router.push('/dashboard/ordenes-compra');
+      router.push(backUrl);
     } finally {
       setLoading(false);
     }
@@ -777,7 +781,7 @@ export default function OrdenDetallesPage() {
         <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center gap-2 mb-4">
             <Link
-              href="/dashboard/ordenes-compra"
+              href={backUrl}
               className="inline-flex items-center gap-1 text-red-100 hover:text-white transition-colors text-sm"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -805,6 +809,14 @@ export default function OrdenDetallesPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
                     Destajo
+                  </span>
+                )}
+                {order.has_extra_budget_approval && (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 shadow-sm">
+                    <svg className="w-3.5 h-3.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    Autorización Especial
                   </span>
                 )}
                 <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${statusInfo.className}`}>
@@ -973,12 +985,12 @@ export default function OrdenDetallesPage() {
                 </svg>
               </div>
               <div>
-                <h3 className="text-amber-900 font-semibold">Autorización Extraordinaria Requerida</h3>
+                <h3 className="text-amber-900 font-semibold">Autorización Especial Requerida (Gerencia)</h3>
                 <p className="text-amber-800 text-sm mt-1">
                   Esta orden contiene{' '}
                   <strong>{order.extra_budget_items_count ?? 0} artículo(s)</strong>{' '}
-                  que no están en el catálogo del presupuesto de la obra.{' '}
-                  Dirección debe autorizar esta compra antes de que inicie el flujo de aprobación normal.
+                  fuera de catálogo o presupuesto.{' '}
+                  Requiere revisión y autorización de Gerencia antes de avanzar al flujo normal de Contraloría.
                 </p>
               </div>
             </div>
@@ -1600,5 +1612,13 @@ export default function OrdenDetallesPage() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function OrdenDetallesPage() {
+  return (
+    <Suspense fallback={<OrderDetailSkeleton />}>
+      <OrdenDetallesContent />
+    </Suspense>
   );
 }

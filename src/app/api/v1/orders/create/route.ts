@@ -71,7 +71,13 @@ async function uploadEvidenceFiles(files: File[], orderId: string): Promise<stri
 }
 
 // Función para crear aprobaciones en el servidor
-async function createOrderApprovalsServer(orderId: string, applicantDepartmentId: string, applicantId: string, isUrgent: boolean = false) {
+async function createOrderApprovalsServer(
+  orderId: string,
+  applicantDepartmentId: string,
+  applicantId: string,
+  isUrgent: boolean = false,
+  requiresExtraBudgetApproval: boolean = false
+) {
   // Obtener información del solicitante
   const { data: applicant, error: applicantError } = await supabaseAdmin
     .from('users')
@@ -99,7 +105,7 @@ async function createOrderApprovalsServer(orderId: string, applicantDepartmentId
   // Crear aprobaciones para cada departamento en el flujo
   const approvalsToCreate = [];
 
-  if (isUrgent && isApplicantDeptHead) {
+  if (isUrgent && isApplicantDeptHead && !requiresExtraBudgetApproval) {
     // ORDEN URGENTE: Solo crear aprobaciones para Dirección (3), Contabilidad (4) y Pagos (5)
     // Se saltan: Gerencia del solicitante (1) y Contraloría (2)
     const urgentDepartments = departments.filter(
@@ -115,11 +121,21 @@ async function createOrderApprovalsServer(orderId: string, applicantDepartmentId
       });
     }
   } else {
-    // ORDEN NORMAL: Determinar flujo según el departamento del solicitante
-    const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
+    // ORDEN NORMAL O CON AUTORIZACIÓN ESPECIAL: Determinar flujo según departamento
+    let applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
+
+    // Si requiere autorización especial pero el departamento del solicitante no es una Gerencia (approval_order 1),
+    // asignar Gerencia de Construcción o la primera Gerencia del flujo
+    if (requiresExtraBudgetApproval && (!applicantDept || applicantDept.approval_order !== 1)) {
+      const defaultGerencia = departments.find((d: Department) => d.code === 'gerencia_construccion' || d.approval_order === 1);
+      if (defaultGerencia) {
+        applicantDept = defaultGerencia;
+      }
+    }
+
     const applicantApprovalOrder = applicantDept?.approval_order ?? 0;
 
-    if (applicantApprovalOrder >= 2) {
+    if (applicantApprovalOrder >= 2 && !requiresExtraBudgetApproval) {
       // El solicitante pertenece a un departamento del flujo de aprobación (Contraloría, Dirección, Contabilidad, Pagos).
       // NO se incluye Gerencia (step 1) porque no tienen gerente que les apruebe.
       // NO se auto-aprueba su propio paso para evitar conflictos de interés.
@@ -137,28 +153,32 @@ async function createOrderApprovalsServer(orderId: string, applicantDepartmentId
         });
       }
     } else {
-      // El solicitante es de una Gerencia (approval_order = 1) o no tiene departamento en el flujo.
+      // El solicitante es de una Gerencia (approval_order = 1) o la orden requiere autorización especial.
       // Flujo completo: Gerencia (1) → Contraloría (2) → Dirección (3) → Contabilidad (4) → Pagos (5)
 
       // 1. Aprobación del departamento del solicitante (gerencia)
       if (applicantDept) {
-        // Si el solicitante ES el jefe de su departamento, auto-aprobar su nivel
+        // Si requiere autorización especial: NUNCA se auto-aprueba, Gerencia debe aprobar explícitamente.
+        // Si es normal y el solicitante es jefe de departamento, se auto-aprueba.
+        const shouldAutoApprove = isApplicantDeptHead && !requiresExtraBudgetApproval;
         approvalsToCreate.push({
           order_id: orderId,
           department_id: applicantDept.id,
-          status: isApplicantDeptHead ? 'approved' : 'pending',
-          approval_order: applicantDept.approval_order,
-          approver_id: isApplicantDeptHead ? applicantId : null,
-          approved_at: isApplicantDeptHead ? new Date().toISOString() : null,
-          comments: isApplicantDeptHead ? 'Auto-aprobado (solicitante es jefe de departamento)' : null,
+          status: shouldAutoApprove ? 'approved' : 'pending',
+          approval_order: applicantDept.approval_order || 1,
+          approver_id: shouldAutoApprove ? applicantId : null,
+          approved_at: shouldAutoApprove ? new Date().toISOString() : null,
+          comments: requiresExtraBudgetApproval
+            ? 'Autorización especial requerida: conceptos fuera de presupuesto'
+            : (shouldAutoApprove ? 'Auto-aprobado (solicitante es jefe de departamento)' : null),
         });
       }
 
       // 2. Aprobaciones para el resto del flujo (contraloría, dirección, contabilidad, pagos)
       // Solo incluir departamentos con approval_order > 1 que NO sean otras gerencias
-      // Evitamos duplicar el departamento del solicitante
+      // Evitamos duplicar el departamento de la gerencia seleccionada
       const subsequentDepartments = departments.filter(
-        (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== applicantDepartmentId
+        (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== applicantDept?.id
       );
 
       for (const dept of subsequentDepartments) {
@@ -180,12 +200,17 @@ async function createOrderApprovalsServer(orderId: string, applicantDepartmentId
     throw new Error('Error al crear aprobaciones: ' + insertError.message);
   }
 
-  // Si se auto-aprobó el primer nivel (orden normal con dept head de gerencia), actualizar estado a in_progress
-  // Si es orden urgente, también ponerla en in_progress ya que se saltó gerencia y contraloría
-  // Si el solicitante pertenece a un depto con approval_order >= 2, también in_progress porque no hay step 1
-  const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
-  const applicantApprovalOrder = applicantDept?.approval_order ?? 0;
-  const shouldBeInProgress = isUrgent || (isApplicantDeptHead && applicantApprovalOrder === 1) || applicantApprovalOrder >= 2;
+  // Si requiere autorización especial, se queda en 'pending' esperando a Gerencia.
+  // Si se auto-aprobó el primer nivel (orden normal con dept head de gerencia), pasa a in_progress.
+  // Si es orden urgente normal, también in_progress.
+  // Si el solicitante pertenece a un depto con approval_order >= 2 y no es especial, in_progress.
+  const applicantDeptFinal = departments.find((d: Department) => d.id === applicantDepartmentId);
+  const applicantApprovalOrder = applicantDeptFinal?.approval_order ?? 0;
+  const shouldBeInProgress = !requiresExtraBudgetApproval && (
+    (isUrgent && isApplicantDeptHead) ||
+    (isApplicantDeptHead && applicantApprovalOrder === 1) ||
+    (applicantApprovalOrder >= 2)
+  );
 
   if (shouldBeInProgress) {
     await supabaseAdmin
@@ -513,7 +538,7 @@ export async function POST(request: Request) {
       orderCreated.justification_prove = finalEvidenceUrls.join(',');
     }
     
-    // ── Determinar si la orden requiere aprobación extraordinaria de Dirección ──
+    // ── Determinar si la orden requiere autorización especial de Gerencia ──
     // Condición: la obra tiene presupuesto cargado Y alguno de los items no está en el catálogo
     const itemsSinClave = items.filter((item: OrderItem) => !item.insumo_clave?.trim());
     let requiresExtraBudgetApproval = false;
@@ -527,7 +552,7 @@ export async function POST(request: Request) {
 
       if ((insumoCount ?? 0) > 0) {
         requiresExtraBudgetApproval = true;
-        // Actualizar la orden con los flags de presupuesto extraordinario
+        // Actualizar la orden con los flags de autorización especial
         await supabaseAdmin
           .from('orders')
           .update({
@@ -538,40 +563,19 @@ export async function POST(request: Request) {
       }
     }
 
-    // Crear el flujo de aprobaciones
+    // Crear el flujo de aprobaciones:
+    // Si requiere autorización especial, inicia en Gerencia (paso 1) sin auto-aprobarse para que Gerencia autorice.
     if (userDepartmentId) {
       try {
-        if (requiresExtraBudgetApproval) {
-          // APROBACIÓN EXTRAORDINARIA: Crear solo el paso 0 de Dirección
-          // La orden queda en 'pending' hasta que Dirección apruebe.
-          // Una vez aprobada, el endpoint approve/route.ts lanza el flujo normal.
-          const { data: direccionDept } = await supabaseAdmin
-            .from('departments')
-            .select('id')
-            .ilike('code', '%direccion%')
-            .eq('requires_approval', true)
-            .single();
-
-          if (direccionDept) {
-            await supabaseAdmin
-              .from('order_approvals')
-              .insert({
-                order_id: orderCreated.id,
-                department_id: direccionDept.id,
-                status: 'pending',
-                approval_order: 0, // Paso 0 = antes del flujo normal
-                comments: `Autorización extraordinaria requerida: ${itemsSinClave.length} artículo(s) no están en el catálogo del presupuesto de la obra.`,
-              });
-          } else {
-            // Si no se encuentra Dirección, usar flujo normal como fallback
-            await createOrderApprovalsServer(String(orderCreated.id), userDepartmentId, userId, is_urgent);
-          }
-        } else {
-          // FLUJO NORMAL: sin items fuera de presupuesto
-          await createOrderApprovalsServer(String(orderCreated.id), userDepartmentId, userId, is_urgent);
-        }
-      } catch {
-        // No fallar la creación de la orden si falla la creación de aprobaciones
+        await createOrderApprovalsServer(
+          String(orderCreated.id),
+          userDepartmentId,
+          userId,
+          is_urgent,
+          requiresExtraBudgetApproval
+        );
+      } catch (err) {
+        console.error('Error al crear flujo de aprobaciones:', err);
       }
     }
 
