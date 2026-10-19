@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 import { getOrderApprovals, canUserApprove, getApprovalIconType, getDepartmentBadgeStyle, type OrderApproval, type ApprovalIconType } from "@/lib/approvalFlow";
@@ -21,6 +21,9 @@ interface OrderItem {
   unit_price: number;
   subtotal: number;
   supplier_name: string;
+  insumo_clave?: string | null;
+  is_extra_budget?: boolean;
+  extra_budget_reason?: string | null;
 }
 
 interface OrderAttachment {
@@ -91,9 +94,10 @@ function formatDate(dateString: string): { full: string; date: string; time: str
   };
 }
 
-export default function OrdenDetallesPage() {
+function OrdenDetallesContent() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const orderId = params.id as string;
   const { isAdmin, user } = useAuth();
   const toast = useToast();
@@ -105,6 +109,9 @@ export default function OrdenDetallesPage() {
   const canSpecialEditOrder = isAdmin || isDirection || isConstruccionHead || isContraloriaHead;
 
   const [order, setOrder] = useState<OrderDetail | null>(null);
+
+  const isHistory = searchParams.get('tab') === 'history' || order?.status === 'completed';
+  const backUrl = isHistory ? '/dashboard/ordenes-compra?tab=history' : '/dashboard/ordenes-compra';
   const [loading, setLoading] = useState(true);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [isMergingEvidences, setIsMergingEvidences] = useState(false);
@@ -150,7 +157,7 @@ export default function OrdenDetallesPage() {
       await fetchAttachments();
     } catch {
       toast.error('Error', 'No se pudo cargar la orden');
-      router.push('/dashboard/ordenes-compra');
+      router.push(backUrl);
     } finally {
       setLoading(false);
     }
@@ -777,7 +784,7 @@ export default function OrdenDetallesPage() {
         <div className="bg-gradient-to-r from-red-600 to-red-700 rounded-xl shadow-lg p-6 text-white">
           <div className="flex items-center gap-2 mb-4">
             <Link
-              href="/dashboard/ordenes-compra"
+              href={backUrl}
               className="inline-flex items-center gap-1 text-red-100 hover:text-white transition-colors text-sm"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -805,6 +812,14 @@ export default function OrdenDetallesPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
                     Destajo
+                  </span>
+                )}
+                {order.has_extra_budget_approval && (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1 shadow-sm">
+                    <svg className="w-3.5 h-3.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    Autorización Especial
                   </span>
                 )}
                 <span className={`px-3 py-1 rounded-full text-xs font-medium shadow-sm ${statusInfo.className}`}>
@@ -962,8 +977,8 @@ export default function OrdenDetallesPage() {
           </div>
         )}
 
-        {/* Banner: Autorización Extraordinaria pendiente */}
-        {order.has_extra_budget_approval && order.status === 'pending' && (
+        {/* Banner: Autorización Especial */}
+        {order.has_extra_budget_approval && (
           <div className="bg-amber-50 border border-amber-300 rounded-xl p-5">
             <div className="flex items-start gap-4">
               <div className="bg-amber-100 rounded-full p-2 flex-shrink-0">
@@ -973,12 +988,16 @@ export default function OrdenDetallesPage() {
                 </svg>
               </div>
               <div>
-                <h3 className="text-amber-900 font-semibold">Autorización Extraordinaria Requerida</h3>
+                <h3 className="text-amber-900 font-semibold">
+                  {order.status === 'pending' ? 'Autorización Especial Requerida (Gerencia)' : 'Orden con Autorización Especial'}
+                </h3>
                 <p className="text-amber-800 text-sm mt-1">
                   Esta orden contiene{' '}
-                  <strong>{order.extra_budget_items_count ?? 0} artículo(s)</strong>{' '}
-                  que no están en el catálogo del presupuesto de la obra.{' '}
-                  Dirección debe autorizar esta compra antes de que inicie el flujo de aprobación normal.
+                  <strong>{order.extra_budget_items_count || order.items.filter(i => i.is_extra_budget).length || 1} artículo(s)</strong>{' '}
+                  fuera de catálogo, agotados o que exceden el presupuesto disponible.{' '}
+                  {order.status === 'pending'
+                    ? 'Requiere revisión y autorización de Gerencia antes de avanzar al flujo normal de Contraloría.'
+                    : 'Incluye insumos gestionados con autorización especial de Gerencia.'}
                 </p>
               </div>
             </div>
@@ -1453,6 +1472,25 @@ export default function OrdenDetallesPage() {
               <div className="lg:hidden space-y-3">
                 {order.items.map((item) => (
                   <div key={item.id} className="bg-gray-50 rounded-lg p-4">
+                    <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                      {item.insumo_clave && (
+                        <span className="font-mono text-xs bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded">
+                          {item.insumo_clave}
+                        </span>
+                      )}
+                      {item.is_extra_budget && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full">
+                          <svg className="w-3 h-3 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          Autorización Especial
+                          {item.extra_budget_reason === 'agotado' && ' · Agotado'}
+                          {item.extra_budget_reason === 'menor_a_1' && ' · Disp. < 1'}
+                          {item.extra_budget_reason === 'excede_disponible' && ' · Excede presupuesto'}
+                          {item.extra_budget_reason === 'fuera_catalogo' && ' · Fuera de catálogo'}
+                        </span>
+                      )}
+                    </div>
                     <div className="font-medium text-gray-900 mb-3">{item.name}</div>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
@@ -1492,7 +1530,28 @@ export default function OrdenDetallesPage() {
                     {order.items.map((item) => (
                       <tr key={item.id}>
                         <td className="py-3 pr-4">
-                          <span className="font-medium text-gray-900">{item.name}</span>
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {item.insumo_clave && (
+                                <span className="font-mono text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-gray-200">
+                                  {item.insumo_clave}
+                                </span>
+                              )}
+                              <span className="font-medium text-gray-900">{item.name}</span>
+                              {item.is_extra_budget && (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full" title={item.extra_budget_reason || undefined}>
+                                  <svg className="w-3 h-3 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                  </svg>
+                                  Autorización Especial
+                                  {item.extra_budget_reason === 'agotado' && ' · Agotado'}
+                                  {item.extra_budget_reason === 'menor_a_1' && ' · Disp. < 1'}
+                                  {item.extra_budget_reason === 'excede_disponible' && ' · Excede presupuesto'}
+                                  {item.extra_budget_reason === 'fuera_catalogo' && ' · Fuera de catálogo'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </td>
                         <td className="py-3 px-4">
                           <span className="text-gray-600">{item.supplier_name}</span>
@@ -1600,5 +1659,13 @@ export default function OrdenDetallesPage() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function OrdenDetallesPage() {
+  return (
+    <Suspense fallback={<OrderDetailSkeleton />}>
+      <OrdenDetallesContent />
+    </Suspense>
   );
 }

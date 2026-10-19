@@ -12,6 +12,9 @@ interface OrderItemDisplay {
   precioTotal: number;
   proveedor?: string;
   supplier_name?: string;
+  insumo_clave?: string | null;
+  is_extra_budget?: boolean;
+  extra_budget_reason?: string | null;
 }
 
 type DBOrderDetail = {
@@ -37,10 +40,17 @@ type DBOrderDetail = {
   is_definitive_rejection: boolean;
   payment_proof_url: string | null;
   is_piecework: boolean;
+  has_extra_budget_approval?: boolean | null;
+  extra_budget_items_count?: number | null;
 };
 
 // Función para recrear aprobaciones
-async function recreateOrderApprovals(orderId: string, applicantId: string, isUrgent: boolean = false) {
+async function recreateOrderApprovals(
+  orderId: string,
+  applicantId: string,
+  isUrgent: boolean = false,
+  requiresExtraBudgetApproval: boolean = false
+) {
   // Eliminar aprobaciones existentes
   await supabaseAdmin
     .from('order_approvals')
@@ -75,7 +85,7 @@ async function recreateOrderApprovals(orderId: string, applicantId: string, isUr
   // Crear aprobaciones para cada departamento
   const approvalsToCreate = [];
 
-  if (isUrgent && isApplicantDeptHead) {
+  if (isUrgent && isApplicantDeptHead && !requiresExtraBudgetApproval) {
     // ORDEN URGENTE: Solo crear aprobaciones para Dirección (3), Contabilidad (4) y Pagos (5)
     const urgentDepartments = departments.filter(
       (d: Department) => d.approval_order && d.approval_order >= 3
@@ -90,11 +100,19 @@ async function recreateOrderApprovals(orderId: string, applicantId: string, isUr
       });
     }
   } else {
-    // ORDEN NORMAL: Determinar flujo según el departamento del solicitante
-    const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
+    // ORDEN NORMAL O CON AUTORIZACIÓN ESPECIAL: Determinar flujo según departamento
+    let applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
+
+    if (requiresExtraBudgetApproval && (!applicantDept || applicantDept.approval_order !== 1)) {
+      const defaultGerencia = departments.find((d: Department) => d.code === 'gerencia_construccion' || d.approval_order === 1);
+      if (defaultGerencia) {
+        applicantDept = defaultGerencia;
+      }
+    }
+
     const applicantApprovalOrder = applicantDept?.approval_order ?? 0;
 
-    if (applicantApprovalOrder >= 2) {
+    if (applicantApprovalOrder >= 2 && !requiresExtraBudgetApproval) {
       // El solicitante pertenece a un departamento del flujo de aprobación (Contraloría, Dirección, Contabilidad, Pagos).
       // NO se incluye Gerencia (step 1) porque no tienen gerente que les apruebe.
       // NO se auto-aprueba su propio paso para evitar conflictos de interés.
@@ -112,25 +130,28 @@ async function recreateOrderApprovals(orderId: string, applicantId: string, isUr
         });
       }
     } else {
-      // El solicitante es de una Gerencia (approval_order = 1) o no tiene departamento en el flujo.
+      // El solicitante es de una Gerencia (approval_order = 1) o la orden requiere autorización especial.
       // Flujo completo: Gerencia (1) → Contraloría (2) → Dirección (3) → Contabilidad (4) → Pagos (5)
 
-      // 1. Aprobación del departamento del solicitante
+      // 1. Aprobación del departamento del solicitante (gerencia)
       if (applicantDept) {
+        const shouldAutoApprove = isApplicantDeptHead && !requiresExtraBudgetApproval;
         approvalsToCreate.push({
           order_id: orderId,
           department_id: applicantDept.id,
-          status: isApplicantDeptHead ? 'approved' : 'pending',
-          approval_order: applicantDept.approval_order,
-          approver_id: isApplicantDeptHead ? applicantId : null,
-          approved_at: isApplicantDeptHead ? new Date().toISOString() : null,
-          comments: isApplicantDeptHead ? 'Auto-aprobado (solicitante es jefe de departamento)' : null,
+          status: shouldAutoApprove ? 'approved' : 'pending',
+          approval_order: applicantDept.approval_order || 1,
+          approver_id: shouldAutoApprove ? applicantId : null,
+          approved_at: shouldAutoApprove ? new Date().toISOString() : null,
+          comments: requiresExtraBudgetApproval
+            ? 'Autorización especial requerida: conceptos fuera de presupuesto'
+            : (shouldAutoApprove ? 'Auto-aprobado (solicitante es jefe de departamento)' : null),
         });
       }
 
       // 2. Aprobaciones para el resto del flujo
       const subsequentDepartments = departments.filter(
-        (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== applicantDepartmentId
+        (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== applicantDept?.id
       );
 
       for (const dept of subsequentDepartments) {
@@ -153,12 +174,13 @@ async function recreateOrderApprovals(orderId: string, applicantId: string, isUr
   }
 
   // Determinar si la orden debe empezar en 'in_progress':
-  // - Orden urgente (sin gerencia ni contraloría)
-  // - Dept head de gerencia (auto-aprobó step 1)
-  // - Solicitante de depto con approval_order >= 2 (sin gerencia en el flujo)
   const applicantDeptForStatus = departments.find((d: Department) => d.id === applicantDepartmentId);
   const applicantApprovalOrder = applicantDeptForStatus?.approval_order ?? 0;
-  return isUrgent || (isApplicantDeptHead && applicantApprovalOrder === 1) || applicantApprovalOrder >= 2;
+  return !requiresExtraBudgetApproval && (
+    (isUrgent && isApplicantDeptHead) ||
+    (isApplicantDeptHead && applicantApprovalOrder === 1) ||
+    applicantApprovalOrder >= 2
+  );
 }
 
 export async function GET(
@@ -261,10 +283,10 @@ export async function GET(
       if (user?.department_id) {
         const { data: uDept } = await supabaseAdmin
           .from('departments')
-          .select('name')
+          .select('name, approval_order, code')
           .eq('id', user.department_id)
           .single();
-        if (uDept?.name && uDept.name.toLowerCase().includes('gerencia')) {
+        if (uDept && (uDept.approval_order === 1 || uDept.code?.startsWith('gerencia'))) {
           currentDepartmentName = uDept.name;
         } else {
           currentDepartmentName = 'Contraloría';
@@ -315,6 +337,8 @@ export async function GET(
       machine_id: typedOrder.machine_id || null,
       machine_name: machineName,
       current_department_name: currentDepartmentName,
+      has_extra_budget_approval: Boolean(typedOrder.has_extra_budget_approval),
+      extra_budget_items_count: typedOrder.extra_budget_items_count || 0,
       items: itemsArray.map((item, index: number) => ({
         id: `${typedOrder.id}-${index}`,
         name: item.nombre || 'N/A',
@@ -322,7 +346,10 @@ export async function GET(
         unit: item.unidad || 'N/A',
         unit_price: item.precioUnitario || 0,
         subtotal: item.precioTotal || (item.cantidad * item.precioUnitario) || 0,
-        supplier_name: supplierName
+        supplier_name: supplierName,
+        insumo_clave: item.insumo_clave || null,
+        is_extra_budget: Boolean(item.is_extra_budget || (!item.insumo_clave && typedOrder.has_extra_budget_approval)),
+        extra_budget_reason: item.extra_budget_reason || null,
       }))
     };
 
@@ -355,7 +382,7 @@ export async function PUT(
     // Obtener la orden actual
     const { data: existingOrder, error: orderError } = await supabaseAdmin
       .from('orders')
-      .select('id, status, applicant_id, is_urgent, is_definitive_rejection, store_id')
+      .select('id, status, applicant_id, is_urgent, is_definitive_rejection, store_id, has_extra_budget_approval')
       .eq('id', orderId)
       .single();
 
@@ -518,7 +545,9 @@ export async function PUT(
       unidad: item.unidad,
       precioUnitario: item.precioUnitario,
       precioTotal: parseFloat(String(item.cantidad)) * item.precioUnitario,
-      proveedor: item.supplier_name || item.proveedor
+      proveedor: item.supplier_name || item.proveedor,
+      ...(item.insumo_clave ? { insumo_clave: item.insumo_clave } : {}),
+      ...(item.is_extra_budget ? { is_extra_budget: true, extra_budget_reason: item.extra_budget_reason } : {}),
     }));
 
     // Preparar datos de actualización
@@ -587,7 +616,12 @@ export async function PUT(
     // Si NO es edición especial (es el solicitante original tras rechazo), recrear el flujo de aprobaciones
     if (!canSpecialEdit) {
       try {
-        const isAutoApproved = await recreateOrderApprovals(orderId, existingOrder.applicant_id, existingOrder.is_urgent || false);
+        const isAutoApproved = await recreateOrderApprovals(
+          orderId,
+          existingOrder.applicant_id,
+          existingOrder.is_urgent || false,
+          Boolean(updatedOrder?.has_extra_budget_approval ?? existingOrder.has_extra_budget_approval)
+        );
         
         // Si se auto-aprobó el primer nivel, actualizar estado
         if (isAutoApproved) {

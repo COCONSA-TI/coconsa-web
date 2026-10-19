@@ -71,7 +71,13 @@ async function uploadEvidenceFiles(files: File[], orderId: string): Promise<stri
 }
 
 // Función para crear aprobaciones en el servidor
-async function createOrderApprovalsServer(orderId: string, applicantDepartmentId: string, applicantId: string, isUrgent: boolean = false) {
+async function createOrderApprovalsServer(
+  orderId: string,
+  applicantDepartmentId: string,
+  applicantId: string,
+  isUrgent: boolean = false,
+  requiresExtraBudgetApproval: boolean = false
+) {
   // Obtener información del solicitante
   const { data: applicant, error: applicantError } = await supabaseAdmin
     .from('users')
@@ -99,7 +105,7 @@ async function createOrderApprovalsServer(orderId: string, applicantDepartmentId
   // Crear aprobaciones para cada departamento en el flujo
   const approvalsToCreate = [];
 
-  if (isUrgent && isApplicantDeptHead) {
+  if (isUrgent && isApplicantDeptHead && !requiresExtraBudgetApproval) {
     // ORDEN URGENTE: Solo crear aprobaciones para Dirección (3), Contabilidad (4) y Pagos (5)
     // Se saltan: Gerencia del solicitante (1) y Contraloría (2)
     const urgentDepartments = departments.filter(
@@ -115,11 +121,21 @@ async function createOrderApprovalsServer(orderId: string, applicantDepartmentId
       });
     }
   } else {
-    // ORDEN NORMAL: Determinar flujo según el departamento del solicitante
-    const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
+    // ORDEN NORMAL O CON AUTORIZACIÓN ESPECIAL: Determinar flujo según departamento
+    let applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
+
+    // Si requiere autorización especial pero el departamento del solicitante no es una Gerencia (approval_order 1),
+    // asignar Gerencia de Construcción o la primera Gerencia del flujo
+    if (requiresExtraBudgetApproval && (!applicantDept || applicantDept.approval_order !== 1)) {
+      const defaultGerencia = departments.find((d: Department) => d.code === 'gerencia_construccion' || d.approval_order === 1);
+      if (defaultGerencia) {
+        applicantDept = defaultGerencia;
+      }
+    }
+
     const applicantApprovalOrder = applicantDept?.approval_order ?? 0;
 
-    if (applicantApprovalOrder >= 2) {
+    if (applicantApprovalOrder >= 2 && !requiresExtraBudgetApproval) {
       // El solicitante pertenece a un departamento del flujo de aprobación (Contraloría, Dirección, Contabilidad, Pagos).
       // NO se incluye Gerencia (step 1) porque no tienen gerente que les apruebe.
       // NO se auto-aprueba su propio paso para evitar conflictos de interés.
@@ -137,28 +153,32 @@ async function createOrderApprovalsServer(orderId: string, applicantDepartmentId
         });
       }
     } else {
-      // El solicitante es de una Gerencia (approval_order = 1) o no tiene departamento en el flujo.
+      // El solicitante es de una Gerencia (approval_order = 1) o la orden requiere autorización especial.
       // Flujo completo: Gerencia (1) → Contraloría (2) → Dirección (3) → Contabilidad (4) → Pagos (5)
 
       // 1. Aprobación del departamento del solicitante (gerencia)
       if (applicantDept) {
-        // Si el solicitante ES el jefe de su departamento, auto-aprobar su nivel
+        // Si requiere autorización especial: NUNCA se auto-aprueba, Gerencia debe aprobar explícitamente.
+        // Si es normal y el solicitante es jefe de departamento, se auto-aprueba.
+        const shouldAutoApprove = isApplicantDeptHead && !requiresExtraBudgetApproval;
         approvalsToCreate.push({
           order_id: orderId,
           department_id: applicantDept.id,
-          status: isApplicantDeptHead ? 'approved' : 'pending',
-          approval_order: applicantDept.approval_order,
-          approver_id: isApplicantDeptHead ? applicantId : null,
-          approved_at: isApplicantDeptHead ? new Date().toISOString() : null,
-          comments: isApplicantDeptHead ? 'Auto-aprobado (solicitante es jefe de departamento)' : null,
+          status: shouldAutoApprove ? 'approved' : 'pending',
+          approval_order: applicantDept.approval_order || 1,
+          approver_id: shouldAutoApprove ? applicantId : null,
+          approved_at: shouldAutoApprove ? new Date().toISOString() : null,
+          comments: requiresExtraBudgetApproval
+            ? 'Autorización especial requerida: conceptos fuera de presupuesto'
+            : (shouldAutoApprove ? 'Auto-aprobado (solicitante es jefe de departamento)' : null),
         });
       }
 
       // 2. Aprobaciones para el resto del flujo (contraloría, dirección, contabilidad, pagos)
       // Solo incluir departamentos con approval_order > 1 que NO sean otras gerencias
-      // Evitamos duplicar el departamento del solicitante
+      // Evitamos duplicar el departamento de la gerencia seleccionada
       const subsequentDepartments = departments.filter(
-        (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== applicantDepartmentId
+        (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== applicantDept?.id
       );
 
       for (const dept of subsequentDepartments) {
@@ -180,12 +200,17 @@ async function createOrderApprovalsServer(orderId: string, applicantDepartmentId
     throw new Error('Error al crear aprobaciones: ' + insertError.message);
   }
 
-  // Si se auto-aprobó el primer nivel (orden normal con dept head de gerencia), actualizar estado a in_progress
-  // Si es orden urgente, también ponerla en in_progress ya que se saltó gerencia y contraloría
-  // Si el solicitante pertenece a un depto con approval_order >= 2, también in_progress porque no hay step 1
-  const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
-  const applicantApprovalOrder = applicantDept?.approval_order ?? 0;
-  const shouldBeInProgress = isUrgent || (isApplicantDeptHead && applicantApprovalOrder === 1) || applicantApprovalOrder >= 2;
+  // Si requiere autorización especial, se queda en 'pending' esperando a Gerencia.
+  // Si se auto-aprobó el primer nivel (orden normal con dept head de gerencia), pasa a in_progress.
+  // Si es orden urgente normal, también in_progress.
+  // Si el solicitante pertenece a un depto con approval_order >= 2 y no es especial, in_progress.
+  const applicantDeptFinal = departments.find((d: Department) => d.id === applicantDepartmentId);
+  const applicantApprovalOrder = applicantDeptFinal?.approval_order ?? 0;
+  const shouldBeInProgress = !requiresExtraBudgetApproval && (
+    (isUrgent && isApplicantDeptHead) ||
+    (isApplicantDeptHead && applicantApprovalOrder === 1) ||
+    (applicantApprovalOrder >= 2)
+  );
 
   if (shouldBeInProgress) {
     await supabaseAdmin
@@ -367,38 +392,70 @@ export async function POST(request: Request) {
     }
 
     // ── Validar presupuesto y fijar precio unitario para insumos vinculados ──
-    const itemsConClaveVal = items.filter((item: OrderItem) => item.insumo_clave?.trim());
-    if (storeIdToUse && itemsConClaveVal.length > 0) {
-      const claves = itemsConClaveVal.map((i: OrderItem) => i.insumo_clave!.trim());
-      const { data: dbInsumos } = await supabaseAdmin
+    let requiresExtraBudgetApproval = false;
+    let extraBudgetItemsCount = 0;
+
+    if (storeIdToUse) {
+      // Verificar si la obra tiene presupuesto cargado (hay registros en store_insumos)
+      const { count: insumoCount } = await supabaseAdmin
         .from('store_insumos')
-        .select('clave, costo_unitario, costo_autorizado, cantidad_presupuestada, cantidad_solicitada, cantidad_comprada')
-        .eq('store_id', storeIdToUse)
-        .in('clave', claves);
+        .select('id', { count: 'exact', head: true })
+        .eq('store_id', storeIdToUse);
 
-      if (dbInsumos && dbInsumos.length > 0) {
-        for (const item of itemsConClaveVal) {
-          const matched = dbInsumos.find((di) => di.clave.trim().toLowerCase() === item.insumo_clave!.trim().toLowerCase());
-          if (matched) {
-            // El precio unitario proviene estrictamente del presupuesto de la obra (no modificable)
-            const precioPresupuestado = (matched.costo_autorizado != null && matched.costo_autorizado > 0)
-              ? matched.costo_autorizado
-              : matched.costo_unitario;
-            if (precioPresupuestado != null) {
-              item.precioUnitario = precioPresupuestado;
-            }
+      const storeHasBudget = (insumoCount ?? 0) > 0;
 
-            const disponible = matched.cantidad_presupuestada - matched.cantidad_solicitada - matched.cantidad_comprada;
-            const requestedQty = parseFloat(String(item.cantidad)) || 0;
-            if (requestedQty > disponible) {
-              return NextResponse.json(
-                {
-                  error: `No tienes permiso para solicitar ${requestedQty} unidades del concepto "${item.insumo_clave}". Excede la cantidad disponible (${Math.max(0, disponible)}). Por favor solicita autorización a Dirección.`,
-                },
-                { status: 400 }
-              );
+      if (storeHasBudget) {
+        const itemsConClaveVal = items.filter((item: OrderItem) => item.insumo_clave?.trim());
+        if (itemsConClaveVal.length > 0) {
+          const claves = itemsConClaveVal.map((i: OrderItem) => i.insumo_clave!.trim());
+          const { data: dbInsumos } = await supabaseAdmin
+            .from('store_insumos')
+            .select('clave, costo_unitario, costo_autorizado, cantidad_presupuestada, cantidad_solicitada, cantidad_comprada')
+            .eq('store_id', storeIdToUse)
+            .in('clave', claves);
+
+          for (const item of itemsConClaveVal) {
+            const matched = dbInsumos?.find((di) => di.clave.trim().toLowerCase() === item.insumo_clave!.trim().toLowerCase());
+            if (matched) {
+              // El precio unitario proviene estrictamente del presupuesto de la obra (no modificable)
+              const precioPresupuestado = (matched.costo_autorizado != null && matched.costo_autorizado > 0)
+                ? matched.costo_autorizado
+                : matched.costo_unitario;
+              if (precioPresupuestado != null) {
+                item.precioUnitario = precioPresupuestado;
+              }
+
+              const disponible = matched.cantidad_presupuestada - matched.cantidad_solicitada - matched.cantidad_comprada;
+              const requestedQty = parseFloat(String(item.cantidad)) || 0;
+              if (disponible <= 0) {
+                item.is_extra_budget = true;
+                item.extra_budget_reason = 'agotado';
+              } else if (disponible < 1) {
+                item.is_extra_budget = true;
+                item.extra_budget_reason = 'menor_a_1';
+              } else if (requestedQty > disponible) {
+                item.is_extra_budget = true;
+                item.extra_budget_reason = 'excede_disponible';
+              }
+            } else {
+              item.is_extra_budget = true;
+              item.extra_budget_reason = 'fuera_catalogo';
             }
           }
+        }
+
+        // Marcar items sin clave como fuera de catálogo si la obra tiene presupuesto
+        for (const item of items) {
+          if (!item.insumo_clave?.trim()) {
+            item.is_extra_budget = true;
+            item.extra_budget_reason = 'fuera_catalogo';
+          }
+        }
+
+        const specialAuthItems = items.filter((item: OrderItem) => item.is_extra_budget);
+        if (specialAuthItems.length > 0) {
+          requiresExtraBudgetApproval = true;
+          extraBudgetItemsCount = specialAuthItems.length;
         }
       }
     }
@@ -441,7 +498,7 @@ export async function POST(request: Request) {
       sum + parseFloat(String(item.cantidad)), 0
     );
 
-    // Preparar los items con precio total calculado
+    // Preparar los items con precio total calculado y flags de autorización especial
     const itemsWithTotal = items.map((item: OrderItem) => ({
       nombre: item.nombre,
       cantidad: parseFloat(String(item.cantidad)),
@@ -452,6 +509,7 @@ export async function POST(request: Request) {
       // Datos de presupuesto (pasados desde el frontend si la obra tiene presupuesto)
       ...(item.insumo_clave ? { insumo_clave: item.insumo_clave } : {}),
       ...(item.categoria ? { categoria: item.categoria } : {}),
+      ...(item.is_extra_budget ? { is_extra_budget: true, extra_budget_reason: item.extra_budget_reason } : {}),
     }));
 
     // Crear la orden
@@ -479,9 +537,9 @@ export async function POST(request: Request) {
       is_urgent: is_urgent || false,
       urgency_justification: is_urgent ? urgency_justification : null,
       is_piecework: is_piecework || false,
-      // Campos de presupuesto extraordinario (se actualizan abajo si aplica)
-      has_extra_budget_approval: false,
-      extra_budget_items_count: 0,
+      // Campos de presupuesto extraordinario / autorización especial
+      has_extra_budget_approval: requiresExtraBudgetApproval,
+      extra_budget_items_count: extraBudgetItemsCount,
     };
 
     const { data: orderCreated, error: orderError } = await supabaseAdmin
@@ -512,66 +570,20 @@ export async function POST(request: Request) {
       
       orderCreated.justification_prove = finalEvidenceUrls.join(',');
     }
-    
-    // ── Determinar si la orden requiere aprobación extraordinaria de Dirección ──
-    // Condición: la obra tiene presupuesto cargado Y alguno de los items no está en el catálogo
-    const itemsSinClave = items.filter((item: OrderItem) => !item.insumo_clave?.trim());
-    let requiresExtraBudgetApproval = false;
 
-    if (storeIdToUse && itemsSinClave.length > 0) {
-      // Verificar si la obra tiene presupuesto cargado (hay registros en store_insumos)
-      const { count: insumoCount } = await supabaseAdmin
-        .from('store_insumos')
-        .select('id', { count: 'exact', head: true })
-        .eq('store_id', storeIdToUse);
-
-      if ((insumoCount ?? 0) > 0) {
-        requiresExtraBudgetApproval = true;
-        // Actualizar la orden con los flags de presupuesto extraordinario
-        await supabaseAdmin
-          .from('orders')
-          .update({
-            has_extra_budget_approval: true,
-            extra_budget_items_count: itemsSinClave.length,
-          })
-          .eq('id', orderCreated.id);
-      }
-    }
-
-    // Crear el flujo de aprobaciones
+    // Crear el flujo de aprobaciones:
+    // Si requiere autorización especial, inicia en Gerencia (paso 1) sin auto-aprobarse para que Gerencia autorice.
     if (userDepartmentId) {
       try {
-        if (requiresExtraBudgetApproval) {
-          // APROBACIÓN EXTRAORDINARIA: Crear solo el paso 0 de Dirección
-          // La orden queda en 'pending' hasta que Dirección apruebe.
-          // Una vez aprobada, el endpoint approve/route.ts lanza el flujo normal.
-          const { data: direccionDept } = await supabaseAdmin
-            .from('departments')
-            .select('id')
-            .ilike('code', '%direccion%')
-            .eq('requires_approval', true)
-            .single();
-
-          if (direccionDept) {
-            await supabaseAdmin
-              .from('order_approvals')
-              .insert({
-                order_id: orderCreated.id,
-                department_id: direccionDept.id,
-                status: 'pending',
-                approval_order: 0, // Paso 0 = antes del flujo normal
-                comments: `Autorización extraordinaria requerida: ${itemsSinClave.length} artículo(s) no están en el catálogo del presupuesto de la obra.`,
-              });
-          } else {
-            // Si no se encuentra Dirección, usar flujo normal como fallback
-            await createOrderApprovalsServer(String(orderCreated.id), userDepartmentId, userId, is_urgent);
-          }
-        } else {
-          // FLUJO NORMAL: sin items fuera de presupuesto
-          await createOrderApprovalsServer(String(orderCreated.id), userDepartmentId, userId, is_urgent);
-        }
-      } catch {
-        // No fallar la creación de la orden si falla la creación de aprobaciones
+        await createOrderApprovalsServer(
+          String(orderCreated.id),
+          userDepartmentId,
+          userId,
+          is_urgent,
+          requiresExtraBudgetApproval
+        );
+      } catch (err) {
+        console.error('Error al crear flujo de aprobaciones:', err);
       }
     }
 

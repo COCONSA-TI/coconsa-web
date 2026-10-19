@@ -28,6 +28,8 @@ type SupabaseOrder = {
   is_definitive_rejection: boolean;
   machine_id: number | null;
   is_piecework: boolean;
+  has_extra_budget_approval?: boolean;
+  extra_budget_items_count?: number;
 };
 
 export async function GET(request: Request) {
@@ -66,7 +68,7 @@ export async function GET(request: Request) {
 
     let query = supabaseAdmin
       .from('orders')
-      .select('id, created_at, store_id, machine_id, total, currency, status, applicant_id, items, payment_type, is_urgent, is_definitive_rejection, is_piecework');
+      .select('id, created_at, store_id, machine_id, total, currency, status, applicant_id, items, payment_type, is_urgent, is_definitive_rejection, is_piecework, has_extra_budget_approval, extra_budget_items_count');
 
     // Restricción por centros de costos si no tiene acceso total
     if (!hasAllStoresAccess) {
@@ -158,7 +160,7 @@ export async function GET(request: Request) {
       machineIds.length > 0
         ? supabaseAdmin.from('machines').select('id, name').in('id', machineIds)
         : Promise.resolve({ data: [] as { id: number; name: string }[] }),
-      supabaseAdmin.from('departments').select('id, name'),
+      supabaseAdmin.from('departments').select('id, name, code, approval_order'),
       orderIds.length > 0
         ? supabaseAdmin.from('order_approvals').select('order_id, department_id, approval_order, status').in('order_id', orderIds).in('status', ['pending', 'PENDIENTE'])
         : Promise.resolve({ data: [] as { order_id: string; department_id: string; approval_order: number; status: string }[] }),
@@ -236,9 +238,9 @@ export async function GET(request: Request) {
       // resolver el departamento inicial de forma inteligente para que siempre esté etiquetada al 100%
       if ((normalizedStatus === 'pending' || normalizedStatus === 'in_progress') && !deptName) {
         const applicantDeptId = userDeptIdMap.get(String(order.applicant_id));
-        const applicantDeptName = applicantDeptId ? allDeptsMap.get(applicantDeptId) : null;
-        if (applicantDeptName && applicantDeptName.toLowerCase().includes('gerencia')) {
-          deptName = applicantDeptName;
+        const applicantDept = applicantDeptId ? allDepts?.find(d => String(d.id) === applicantDeptId) : null;
+        if (applicantDept && (applicantDept.approval_order === 1 || applicantDept.code?.startsWith('gerencia'))) {
+          deptName = applicantDept.name;
         } else {
           deptName = 'Contraloría';
         }
@@ -258,6 +260,8 @@ export async function GET(request: Request) {
         is_urgent: order.is_urgent || false,
         is_definitive_rejection: order.is_definitive_rejection || false,
         is_piecework: order.is_piecework || false,
+        has_extra_budget_approval: Boolean(order.has_extra_budget_approval),
+        extra_budget_items_count: order.extra_budget_items_count || 0,
         my_department_status: userDeptApprovals.get(orderIdStr) || null,
         current_department_name: (normalizedStatus === 'pending' || normalizedStatus === 'in_progress') ? deptName : null,
         machine_name: order.machine_id ? machinesMap.get(String(order.machine_id)) || null : null,
