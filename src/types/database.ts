@@ -400,6 +400,10 @@ export interface OrderItem {
   insumo_clave?: string;
   /** Categoría del insumo: Materiales, Mano de Obra, Herramienta, Equipo */
   categoria?: InsumoCategoria;
+  /** Indica si este concepto requirió autorización especial (fuera de presupuesto, agotado, etc.) */
+  is_extra_budget?: boolean;
+  /** Razón por la que requirió autorización especial: 'fuera_catalogo' | 'agotado' | 'menor_a_1' | 'excede_disponible' */
+  extra_budget_reason?: string | null;
 }
 
 export interface Order {

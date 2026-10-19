@@ -12,6 +12,9 @@ interface OrderItemDisplay {
   precioTotal: number;
   proveedor?: string;
   supplier_name?: string;
+  insumo_clave?: string | null;
+  is_extra_budget?: boolean;
+  extra_budget_reason?: string | null;
 }
 
 type DBOrderDetail = {
@@ -37,6 +40,8 @@ type DBOrderDetail = {
   is_definitive_rejection: boolean;
   payment_proof_url: string | null;
   is_piecework: boolean;
+  has_extra_budget_approval?: boolean | null;
+  extra_budget_items_count?: number | null;
 };
 
 // Función para recrear aprobaciones
@@ -332,6 +337,8 @@ export async function GET(
       machine_id: typedOrder.machine_id || null,
       machine_name: machineName,
       current_department_name: currentDepartmentName,
+      has_extra_budget_approval: Boolean(typedOrder.has_extra_budget_approval),
+      extra_budget_items_count: typedOrder.extra_budget_items_count || 0,
       items: itemsArray.map((item, index: number) => ({
         id: `${typedOrder.id}-${index}`,
         name: item.nombre || 'N/A',
@@ -339,7 +346,10 @@ export async function GET(
         unit: item.unidad || 'N/A',
         unit_price: item.precioUnitario || 0,
         subtotal: item.precioTotal || (item.cantidad * item.precioUnitario) || 0,
-        supplier_name: supplierName
+        supplier_name: supplierName,
+        insumo_clave: item.insumo_clave || null,
+        is_extra_budget: Boolean(item.is_extra_budget || (!item.insumo_clave && typedOrder.has_extra_budget_approval)),
+        extra_budget_reason: item.extra_budget_reason || null,
       }))
     };
 
@@ -535,7 +545,9 @@ export async function PUT(
       unidad: item.unidad,
       precioUnitario: item.precioUnitario,
       precioTotal: parseFloat(String(item.cantidad)) * item.precioUnitario,
-      proveedor: item.supplier_name || item.proveedor
+      proveedor: item.supplier_name || item.proveedor,
+      ...(item.insumo_clave ? { insumo_clave: item.insumo_clave } : {}),
+      ...(item.is_extra_budget ? { is_extra_budget: true, extra_budget_reason: item.extra_budget_reason } : {}),
     }));
 
     // Preparar datos de actualización

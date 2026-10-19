@@ -21,6 +21,9 @@ interface OrderItem {
   unit_price: number;
   subtotal: number;
   supplier_name: string;
+  insumo_clave?: string | null;
+  is_extra_budget?: boolean;
+  extra_budget_reason?: string | null;
 }
 
 interface OrderAttachment {
@@ -974,8 +977,8 @@ function OrdenDetallesContent() {
           </div>
         )}
 
-        {/* Banner: Autorización Extraordinaria pendiente */}
-        {order.has_extra_budget_approval && order.status === 'pending' && (
+        {/* Banner: Autorización Especial */}
+        {order.has_extra_budget_approval && (
           <div className="bg-amber-50 border border-amber-300 rounded-xl p-5">
             <div className="flex items-start gap-4">
               <div className="bg-amber-100 rounded-full p-2 flex-shrink-0">
@@ -985,12 +988,16 @@ function OrdenDetallesContent() {
                 </svg>
               </div>
               <div>
-                <h3 className="text-amber-900 font-semibold">Autorización Especial Requerida (Gerencia)</h3>
+                <h3 className="text-amber-900 font-semibold">
+                  {order.status === 'pending' ? 'Autorización Especial Requerida (Gerencia)' : 'Orden con Autorización Especial'}
+                </h3>
                 <p className="text-amber-800 text-sm mt-1">
                   Esta orden contiene{' '}
-                  <strong>{order.extra_budget_items_count ?? 0} artículo(s)</strong>{' '}
-                  fuera de catálogo o presupuesto.{' '}
-                  Requiere revisión y autorización de Gerencia antes de avanzar al flujo normal de Contraloría.
+                  <strong>{order.extra_budget_items_count || order.items.filter(i => i.is_extra_budget).length || 1} artículo(s)</strong>{' '}
+                  fuera de catálogo, agotados o que exceden el presupuesto disponible.{' '}
+                  {order.status === 'pending'
+                    ? 'Requiere revisión y autorización de Gerencia antes de avanzar al flujo normal de Contraloría.'
+                    : 'Incluye insumos gestionados con autorización especial de Gerencia.'}
                 </p>
               </div>
             </div>
@@ -1465,6 +1472,25 @@ function OrdenDetallesContent() {
               <div className="lg:hidden space-y-3">
                 {order.items.map((item) => (
                   <div key={item.id} className="bg-gray-50 rounded-lg p-4">
+                    <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                      {item.insumo_clave && (
+                        <span className="font-mono text-xs bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded">
+                          {item.insumo_clave}
+                        </span>
+                      )}
+                      {item.is_extra_budget && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full">
+                          <svg className="w-3 h-3 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          Autorización Especial
+                          {item.extra_budget_reason === 'agotado' && ' · Agotado'}
+                          {item.extra_budget_reason === 'menor_a_1' && ' · Disp. < 1'}
+                          {item.extra_budget_reason === 'excede_disponible' && ' · Excede presupuesto'}
+                          {item.extra_budget_reason === 'fuera_catalogo' && ' · Fuera de catálogo'}
+                        </span>
+                      )}
+                    </div>
                     <div className="font-medium text-gray-900 mb-3">{item.name}</div>
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
@@ -1504,7 +1530,28 @@ function OrdenDetallesContent() {
                     {order.items.map((item) => (
                       <tr key={item.id}>
                         <td className="py-3 pr-4">
-                          <span className="font-medium text-gray-900">{item.name}</span>
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {item.insumo_clave && (
+                                <span className="font-mono text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-gray-200">
+                                  {item.insumo_clave}
+                                </span>
+                              )}
+                              <span className="font-medium text-gray-900">{item.name}</span>
+                              {item.is_extra_budget && (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full" title={item.extra_budget_reason || undefined}>
+                                  <svg className="w-3 h-3 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                  </svg>
+                                  Autorización Especial
+                                  {item.extra_budget_reason === 'agotado' && ' · Agotado'}
+                                  {item.extra_budget_reason === 'menor_a_1' && ' · Disp. < 1'}
+                                  {item.extra_budget_reason === 'excede_disponible' && ' · Excede presupuesto'}
+                                  {item.extra_budget_reason === 'fuera_catalogo' && ' · Fuera de catálogo'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </td>
                         <td className="py-3 px-4">
                           <span className="text-gray-600">{item.supplier_name}</span>

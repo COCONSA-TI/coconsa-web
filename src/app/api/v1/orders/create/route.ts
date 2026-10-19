@@ -392,38 +392,70 @@ export async function POST(request: Request) {
     }
 
     // ── Validar presupuesto y fijar precio unitario para insumos vinculados ──
-    const itemsConClaveVal = items.filter((item: OrderItem) => item.insumo_clave?.trim());
-    if (storeIdToUse && itemsConClaveVal.length > 0) {
-      const claves = itemsConClaveVal.map((i: OrderItem) => i.insumo_clave!.trim());
-      const { data: dbInsumos } = await supabaseAdmin
+    let requiresExtraBudgetApproval = false;
+    let extraBudgetItemsCount = 0;
+
+    if (storeIdToUse) {
+      // Verificar si la obra tiene presupuesto cargado (hay registros en store_insumos)
+      const { count: insumoCount } = await supabaseAdmin
         .from('store_insumos')
-        .select('clave, costo_unitario, costo_autorizado, cantidad_presupuestada, cantidad_solicitada, cantidad_comprada')
-        .eq('store_id', storeIdToUse)
-        .in('clave', claves);
+        .select('id', { count: 'exact', head: true })
+        .eq('store_id', storeIdToUse);
 
-      if (dbInsumos && dbInsumos.length > 0) {
-        for (const item of itemsConClaveVal) {
-          const matched = dbInsumos.find((di) => di.clave.trim().toLowerCase() === item.insumo_clave!.trim().toLowerCase());
-          if (matched) {
-            // El precio unitario proviene estrictamente del presupuesto de la obra (no modificable)
-            const precioPresupuestado = (matched.costo_autorizado != null && matched.costo_autorizado > 0)
-              ? matched.costo_autorizado
-              : matched.costo_unitario;
-            if (precioPresupuestado != null) {
-              item.precioUnitario = precioPresupuestado;
-            }
+      const storeHasBudget = (insumoCount ?? 0) > 0;
 
-            const disponible = matched.cantidad_presupuestada - matched.cantidad_solicitada - matched.cantidad_comprada;
-            const requestedQty = parseFloat(String(item.cantidad)) || 0;
-            if (requestedQty > disponible) {
-              return NextResponse.json(
-                {
-                  error: `No tienes permiso para solicitar ${requestedQty} unidades del concepto "${item.insumo_clave}". Excede la cantidad disponible (${Math.max(0, disponible)}). Por favor solicita autorización a Dirección.`,
-                },
-                { status: 400 }
-              );
+      if (storeHasBudget) {
+        const itemsConClaveVal = items.filter((item: OrderItem) => item.insumo_clave?.trim());
+        if (itemsConClaveVal.length > 0) {
+          const claves = itemsConClaveVal.map((i: OrderItem) => i.insumo_clave!.trim());
+          const { data: dbInsumos } = await supabaseAdmin
+            .from('store_insumos')
+            .select('clave, costo_unitario, costo_autorizado, cantidad_presupuestada, cantidad_solicitada, cantidad_comprada')
+            .eq('store_id', storeIdToUse)
+            .in('clave', claves);
+
+          for (const item of itemsConClaveVal) {
+            const matched = dbInsumos?.find((di) => di.clave.trim().toLowerCase() === item.insumo_clave!.trim().toLowerCase());
+            if (matched) {
+              // El precio unitario proviene estrictamente del presupuesto de la obra (no modificable)
+              const precioPresupuestado = (matched.costo_autorizado != null && matched.costo_autorizado > 0)
+                ? matched.costo_autorizado
+                : matched.costo_unitario;
+              if (precioPresupuestado != null) {
+                item.precioUnitario = precioPresupuestado;
+              }
+
+              const disponible = matched.cantidad_presupuestada - matched.cantidad_solicitada - matched.cantidad_comprada;
+              const requestedQty = parseFloat(String(item.cantidad)) || 0;
+              if (disponible <= 0) {
+                item.is_extra_budget = true;
+                item.extra_budget_reason = 'agotado';
+              } else if (disponible < 1) {
+                item.is_extra_budget = true;
+                item.extra_budget_reason = 'menor_a_1';
+              } else if (requestedQty > disponible) {
+                item.is_extra_budget = true;
+                item.extra_budget_reason = 'excede_disponible';
+              }
+            } else {
+              item.is_extra_budget = true;
+              item.extra_budget_reason = 'fuera_catalogo';
             }
           }
+        }
+
+        // Marcar items sin clave como fuera de catálogo si la obra tiene presupuesto
+        for (const item of items) {
+          if (!item.insumo_clave?.trim()) {
+            item.is_extra_budget = true;
+            item.extra_budget_reason = 'fuera_catalogo';
+          }
+        }
+
+        const specialAuthItems = items.filter((item: OrderItem) => item.is_extra_budget);
+        if (specialAuthItems.length > 0) {
+          requiresExtraBudgetApproval = true;
+          extraBudgetItemsCount = specialAuthItems.length;
         }
       }
     }
@@ -466,7 +498,7 @@ export async function POST(request: Request) {
       sum + parseFloat(String(item.cantidad)), 0
     );
 
-    // Preparar los items con precio total calculado
+    // Preparar los items con precio total calculado y flags de autorización especial
     const itemsWithTotal = items.map((item: OrderItem) => ({
       nombre: item.nombre,
       cantidad: parseFloat(String(item.cantidad)),
@@ -477,6 +509,7 @@ export async function POST(request: Request) {
       // Datos de presupuesto (pasados desde el frontend si la obra tiene presupuesto)
       ...(item.insumo_clave ? { insumo_clave: item.insumo_clave } : {}),
       ...(item.categoria ? { categoria: item.categoria } : {}),
+      ...(item.is_extra_budget ? { is_extra_budget: true, extra_budget_reason: item.extra_budget_reason } : {}),
     }));
 
     // Crear la orden
@@ -504,9 +537,9 @@ export async function POST(request: Request) {
       is_urgent: is_urgent || false,
       urgency_justification: is_urgent ? urgency_justification : null,
       is_piecework: is_piecework || false,
-      // Campos de presupuesto extraordinario (se actualizan abajo si aplica)
-      has_extra_budget_approval: false,
-      extra_budget_items_count: 0,
+      // Campos de presupuesto extraordinario / autorización especial
+      has_extra_budget_approval: requiresExtraBudgetApproval,
+      extra_budget_items_count: extraBudgetItemsCount,
     };
 
     const { data: orderCreated, error: orderError } = await supabaseAdmin
@@ -536,31 +569,6 @@ export async function POST(request: Request) {
         .eq('id', orderCreated.id);
       
       orderCreated.justification_prove = finalEvidenceUrls.join(',');
-    }
-    
-    // ── Determinar si la orden requiere autorización especial de Gerencia ──
-    // Condición: la obra tiene presupuesto cargado Y alguno de los items no está en el catálogo
-    const itemsSinClave = items.filter((item: OrderItem) => !item.insumo_clave?.trim());
-    let requiresExtraBudgetApproval = false;
-
-    if (storeIdToUse && itemsSinClave.length > 0) {
-      // Verificar si la obra tiene presupuesto cargado (hay registros en store_insumos)
-      const { count: insumoCount } = await supabaseAdmin
-        .from('store_insumos')
-        .select('id', { count: 'exact', head: true })
-        .eq('store_id', storeIdToUse);
-
-      if ((insumoCount ?? 0) > 0) {
-        requiresExtraBudgetApproval = true;
-        // Actualizar la orden con los flags de autorización especial
-        await supabaseAdmin
-          .from('orders')
-          .update({
-            has_extra_budget_approval: true,
-            extra_budget_items_count: itemsSinClave.length,
-          })
-          .eq('id', orderCreated.id);
-      }
     }
 
     // Crear el flujo de aprobaciones:
