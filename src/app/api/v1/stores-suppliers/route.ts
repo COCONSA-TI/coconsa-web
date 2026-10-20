@@ -24,22 +24,35 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const forceAllForAdmin = searchParams.get("all") === "true" && session.role === "admin";
 
-    let stores: Array<{ id: number; name: string }> = [];
+    // Helper para consultar stores con store_types (o fallback a solo id, name si aún no corre la migración)
+    const fetchStoresData = async (filterIds?: number[]) => {
+      let query = supabaseAdmin
+        .from("stores")
+        .select("id, name, store_type_id, store_type:store_types(id, code, name)")
+        .order("name");
+      if (filterIds && filterIds.length > 0) {
+        query = query.in("id", filterIds);
+      }
+      const res = await query;
+      if (!res.error) return res.data || [];
 
-    if (forceAllForAdmin) {
-      // Admin solicitando catálogo completo para configuración
-      const { data: allStores, error: allStoresErr } = await supabaseAdmin
+      // Fallback seguro si la tabla store_types aún no existe en Supabase
+      let fallbackQuery = supabaseAdmin
         .from("stores")
         .select("id, name")
         .order("name");
-
-      if (allStoresErr) {
-        return NextResponse.json(
-          { error: "Error al obtener almacenes", details: allStoresErr.message },
-          { status: 500 }
-        );
+      if (filterIds && filterIds.length > 0) {
+        fallbackQuery = fallbackQuery.in("id", filterIds);
       }
-      stores = allStores || [];
+      const fallbackRes = await fallbackQuery;
+      return fallbackRes.data || [];
+    };
+
+    let stores: any[] = [];
+
+    if (forceAllForAdmin) {
+      // Admin solicitando catálogo completo para configuración
+      stores = await fetchStoresData();
     } else {
       // Consultar permisos y asignaciones del usuario
       const { data: userData } = await supabaseAdmin
@@ -56,35 +69,14 @@ export async function GET(request: Request) {
       const assignedStoreIds = (userStoreRows || []).map((r) => r.store_id);
       const hasAllStoresAccess = userData?.all_stores_access ?? (session.role === "admin" && assignedStoreIds.length === 0);
 
-      let storesQuery = supabaseAdmin
-        .from("stores")
-        .select("id, name")
-        .order("name");
-
       if (!hasAllStoresAccess) {
         if (assignedStoreIds.length === 0) {
-          // Usuario sin centros de costos asignados: lista vacía
           stores = [];
         } else {
-          storesQuery = storesQuery.in("id", assignedStoreIds);
-          const { data: filteredStores, error: storesError } = await storesQuery;
-          if (storesError) {
-            return NextResponse.json(
-              { error: "Error al obtener almacenes", details: storesError.message },
-              { status: 500 }
-            );
-          }
-          stores = filteredStores || [];
+          stores = await fetchStoresData(assignedStoreIds);
         }
       } else {
-        const { data: allStores, error: storesError } = await storesQuery;
-        if (storesError) {
-          return NextResponse.json(
-            { error: "Error al obtener almacenes", details: storesError.message },
-            { status: 500 }
-          );
-        }
-        stores = allStores || [];
+        stores = await fetchStoresData();
       }
     }
 

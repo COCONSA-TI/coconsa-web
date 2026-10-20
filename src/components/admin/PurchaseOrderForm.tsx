@@ -407,14 +407,13 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
       const res = await fetch(`/api/v1/stores/${storeId}/insumos?limit=500`);
       if (!res.ok) throw new Error('Error');
       const data = await res.json();
-      setHasPresupuesto(data.hasPresupuesto);
       // Materiales, Herramienta y Equipo son comprables vía orden de compra (se excluye Mano de Obra)
       const CATEGORIAS_COMPRABLES = ['Materiales', 'Herramienta', 'Equipo'];
-      setStoreInsumos(
-        (data.insumos || []).filter((i: { categoria: string }) =>
-          CATEGORIAS_COMPRABLES.includes(i.categoria)
-        )
+      const comprables = (data.insumos || []).filter((i: { categoria: string }) =>
+        CATEGORIAS_COMPRABLES.includes(i.categoria)
       );
+      setHasPresupuesto(Boolean(data.hasPresupuesto && comprables.length > 0));
+      setStoreInsumos(comprables);
     } catch {
       setStoreInsumos([]);
       setHasPresupuesto(false);
@@ -430,7 +429,6 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
       setStoreInsumos([]);
       setHasPresupuesto(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.store_name, fetchInsumosForStore]);
 
   const handleItemChange = (id: string, field: keyof Item, value: string) => {
@@ -561,6 +559,7 @@ export default function PurchaseOrderForm({ onSubmit }: PurchaseOrderFormProps) 
     // Preparar datos para el endpoint
     const orderData = {
       applicant_name: formData.applicant_name,
+      store_id: storeIdMap[formData.store_name] || undefined,
       store_name: formData.store_name,
       machine_name: formData.store_name.toLowerCase() === 'maquinaria' ? formData.machine_name : undefined,
       supplier_name: formData.supplier_name,

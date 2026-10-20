@@ -147,6 +147,12 @@ export async function GET(request: Request) {
     const orderIds = (orders as SupabaseOrder[]).map((o) => o.id);
 
     // Ejecutar TODAS las queries de enrichment en paralelo
+    const storesPromise = storeIds.length > 0
+      ? supabaseAdmin.from('stores').select('id, name, store_type_id, store_type:store_types(code)').in('id', storeIds)
+          .then(res => res.error ? supabaseAdmin.from('stores').select('id, name').in('id', storeIds) : res)
+      : Promise.resolve({ data: [] as any[] });
+
+    // Ejecutar TODAS las queries de enrichment en paralelo
     const [
       { data: stores },
       { data: users },
@@ -155,7 +161,7 @@ export async function GET(request: Request) {
       { data: allPendingApprovals },
       deptApprovalsResult,
     ] = await Promise.all([
-      supabaseAdmin.from('stores').select('id, name').in('id', storeIds),
+      storesPromise,
       supabaseAdmin.from('users').select('id, full_name, department_id, is_department_head').in('id', userIds),
       machineIds.length > 0
         ? supabaseAdmin.from('machines').select('id, name').in('id', machineIds)
@@ -169,7 +175,11 @@ export async function GET(request: Request) {
         : Promise.resolve({ data: [] as { order_id: string; status: string; department_id: string }[] }),
     ]);
 
-    const storesMap = new Map(stores?.map(s => [String(s.id), s.name]) || []);
+    const storesMap = new Map(stores?.map((s: any) => [String(s.id), s.name]) || []);
+    const storeTypeMap = new Map(stores?.map((s: any) => {
+      const typeCode = Array.isArray(s.store_type) ? s.store_type[0]?.code : s.store_type?.code;
+      return [String(s.id), typeCode || null];
+    }) || []);
     const usersMap = new Map(users?.map(u => [String(u.id), u.full_name]) || []);
     const userDeptIdMap = new Map(users?.map(u => [String(u.id), u.department_id ? String(u.department_id) : null]) || []);
     const machinesMap = new Map(machines?.map(m => [String(m.id), m.name]) || []);
@@ -235,14 +245,22 @@ export async function GET(request: Request) {
       let deptName = currentDeptMap.get(orderIdStr)?.name || null;
 
       // Si la orden está pendiente o en proceso pero no tiene aprobación pendiente registrada (ej. órdenes históricas),
-      // resolver el departamento inicial de forma inteligente para que siempre esté etiquetada al 100%
+      // resolver el departamento inicial de forma inteligente según el tipo de almacén para que siempre esté etiquetada al 100%
       if ((normalizedStatus === 'pending' || normalizedStatus === 'in_progress') && !deptName) {
-        const applicantDeptId = userDeptIdMap.get(String(order.applicant_id));
-        const applicantDept = applicantDeptId ? allDepts?.find(d => String(d.id) === applicantDeptId) : null;
-        if (applicantDept && (applicantDept.approval_order === 1 || applicantDept.code?.startsWith('gerencia'))) {
-          deptName = applicantDept.name;
+        const storeName = storesMap.get(String(order.store_id));
+        const storeTypeCode = storeTypeMap.get(String(order.store_id));
+        if (storeTypeCode === 'maquinaria' || order.machine_id || (storeName && storeName.toLowerCase().includes('maquinaria'))) {
+          deptName = 'Gerencia de Maquinaria';
+        } else if (storeTypeCode === 'obra' || storeName) {
+          deptName = 'Gerencia de Construcción';
         } else {
-          deptName = 'Contraloría';
+          const applicantDeptId = userDeptIdMap.get(String(order.applicant_id));
+          const applicantDept = applicantDeptId ? allDepts?.find(d => String(d.id) === applicantDeptId) : null;
+          if (applicantDept && (applicantDept.approval_order === 1 || applicantDept.code?.startsWith('gerencia'))) {
+            deptName = applicantDept.name;
+          } else {
+            deptName = 'Gerencia de Construcción';
+          }
         }
       }
 
