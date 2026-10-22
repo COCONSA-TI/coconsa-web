@@ -94,13 +94,23 @@ export async function GET(request: Request) {
 
       const deptUserIds = deptUsers?.map(u => u.id).filter(Boolean) || [];
 
-      // Obtener órdenes que requieren aprobación de su departamento
-      const { data: pendingApprovalOrderIds } = await supabaseAdmin
+      // Obtener órdenes que requieren aprobación de su departamento (ordenadas de más reciente a más antigua)
+      let approvalOrderQuery = supabaseAdmin
         .from('order_approvals')
-        .select('order_id')
-        .eq('department_id', currentUserData.department_id);
+        .select('order_id, orders!inner(status)')
+        .eq('department_id', currentUserData.department_id)
+        .order('order_id', { ascending: false })
+        .limit(500);
 
-      const orderIdsFromApprovals = pendingApprovalOrderIds?.map(a => a.order_id).filter(Boolean) || [];
+      if (tab === 'active') {
+        approvalOrderQuery = approvalOrderQuery.neq('orders.status', 'completed');
+      } else if (tab === 'history') {
+        approvalOrderQuery = approvalOrderQuery.eq('orders.status', 'completed');
+      }
+
+      const { data: pendingApprovalOrderIds } = await approvalOrderQuery;
+
+      const orderIdsFromApprovals = [...new Set(pendingApprovalOrderIds?.map(a => a.order_id).filter(Boolean) || [])];
 
       // Construir filtro OR con: órdenes del departamento + órdenes de aprobación
       const orFilters: string[] = [];
@@ -146,11 +156,47 @@ export async function GET(request: Request) {
     const machineIds = [...new Set(orders.map((o: { machine_id: number | null }) => o.machine_id).filter(Boolean))];
     const orderIds = (orders as SupabaseOrder[]).map((o) => o.id);
 
+    // Dividir orderIds en bloques de 100 para no superar el límite de 1,000 filas de Supabase/PostgREST
+    // (cada orden tiene hasta 5-6 filas en order_approvals; 100 órdenes = máx. ~600 filas por bloque)
+    const orderIdChunks: string[][] = [];
+    for (let i = 0; i < orderIds.length; i += 100) {
+      orderIdChunks.push(orderIds.slice(i, i + 100));
+    }
+
     // Ejecutar TODAS las queries de enrichment en paralelo
     const storesPromise = storeIds.length > 0
       ? supabaseAdmin.from('stores').select('id, name, store_type_id, store_type:store_types(code)').in('id', storeIds)
           .then(res => res.error ? supabaseAdmin.from('stores').select('id, name').in('id', storeIds) : res)
       : Promise.resolve({ data: [] as any[] });
+
+    const pendingApprovalsPromise = orderIdChunks.length > 0
+      ? Promise.all(
+          orderIdChunks.map(chunk =>
+            supabaseAdmin
+              .from('order_approvals')
+              .select('order_id, department_id, approval_order, status')
+              .in('order_id', chunk)
+              .in('status', ['pending', 'PENDIENTE'])
+          )
+        ).then(results => ({
+          data: results.flatMap(r => r.data || []),
+        }))
+      : Promise.resolve({ data: [] as { order_id: string; department_id: string; approval_order: number; status: string }[] });
+
+    const deptApprovalsPromise =
+      currentUserData?.is_department_head && currentUserData?.department_id && orderIdChunks.length > 0
+        ? Promise.all(
+            orderIdChunks.map(chunk =>
+              supabaseAdmin
+                .from('order_approvals')
+                .select('order_id, status, department_id')
+                .eq('department_id', currentUserData.department_id)
+                .in('order_id', chunk)
+            )
+          ).then(results => ({
+            data: results.flatMap(r => r.data || []),
+          }))
+        : Promise.resolve({ data: [] as { order_id: string; status: string; department_id: string }[] });
 
     // Ejecutar TODAS las queries de enrichment en paralelo
     const [
@@ -162,17 +208,15 @@ export async function GET(request: Request) {
       deptApprovalsResult,
     ] = await Promise.all([
       storesPromise,
-      supabaseAdmin.from('users').select('id, full_name, department_id, is_department_head').in('id', userIds),
+      userIds.length > 0
+        ? supabaseAdmin.from('users').select('id, full_name, department_id, is_department_head').in('id', userIds)
+        : Promise.resolve({ data: [] as any[] }),
       machineIds.length > 0
         ? supabaseAdmin.from('machines').select('id, name').in('id', machineIds)
         : Promise.resolve({ data: [] as { id: number; name: string }[] }),
       supabaseAdmin.from('departments').select('id, name, code, approval_order'),
-      orderIds.length > 0
-        ? supabaseAdmin.from('order_approvals').select('order_id, department_id, approval_order, status').in('order_id', orderIds).in('status', ['pending', 'PENDIENTE'])
-        : Promise.resolve({ data: [] as { order_id: string; department_id: string; approval_order: number; status: string }[] }),
-      currentUserData?.is_department_head && currentUserData?.department_id && orderIds.length > 0
-        ? supabaseAdmin.from('order_approvals').select('order_id, status, department_id').eq('department_id', currentUserData.department_id).in('order_id', orderIds)
-        : Promise.resolve({ data: [] as { order_id: string; status: string; department_id: string }[] }),
+      pendingApprovalsPromise,
+      deptApprovalsPromise,
     ]);
 
     const storesMap = new Map(stores?.map((s: any) => [String(s.id), s.name]) || []);
@@ -245,21 +289,29 @@ export async function GET(request: Request) {
       let deptName = currentDeptMap.get(orderIdStr)?.name || null;
 
       // Si la orden está pendiente o en proceso pero no tiene aprobación pendiente registrada (ej. órdenes históricas),
-      // resolver el departamento inicial de forma inteligente según el tipo de almacén para que siempre esté etiquetada al 100%
+      // resolver el departamento de forma inteligente según el estado y tipo de almacén
       if ((normalizedStatus === 'pending' || normalizedStatus === 'in_progress') && !deptName) {
-        const storeName = storesMap.get(String(order.store_id));
-        const storeTypeCode = storeTypeMap.get(String(order.store_id));
-        if (storeTypeCode === 'maquinaria' || order.machine_id || (storeName && storeName.toLowerCase().includes('maquinaria'))) {
-          deptName = 'Gerencia de Maquinaria';
-        } else if (storeTypeCode === 'obra' || storeName) {
-          deptName = 'Gerencia de Construcción';
+        const contraloriaDeptName = allDepts?.find(d => d.code === 'contraloria')?.name || 'Contraloría';
+        const maquinariaDeptName = allDepts?.find(d => d.code === 'gerencia_maquinaria')?.name || 'Maquinaria';
+        const construccionDeptName = allDepts?.find(d => d.code === 'gerencia_construccion')?.name || 'Construcción';
+
+        if (normalizedStatus === 'in_progress') {
+          deptName = contraloriaDeptName;
         } else {
-          const applicantDeptId = userDeptIdMap.get(String(order.applicant_id));
-          const applicantDept = applicantDeptId ? allDepts?.find(d => String(d.id) === applicantDeptId) : null;
-          if (applicantDept && (applicantDept.approval_order === 1 || applicantDept.code?.startsWith('gerencia'))) {
-            deptName = applicantDept.name;
+          const storeName = storesMap.get(String(order.store_id));
+          const storeTypeCode = storeTypeMap.get(String(order.store_id));
+          if (storeTypeCode === 'maquinaria' || order.machine_id || (storeName && storeName.toLowerCase().includes('maquinaria'))) {
+            deptName = maquinariaDeptName;
+          } else if (storeTypeCode === 'obra' || storeName) {
+            deptName = construccionDeptName;
           } else {
-            deptName = 'Gerencia de Construcción';
+            const applicantDeptId = userDeptIdMap.get(String(order.applicant_id));
+            const applicantDept = applicantDeptId ? allDepts?.find(d => String(d.id) === applicantDeptId) : null;
+            if (applicantDept && (applicantDept.approval_order === 1 || applicantDept.code?.startsWith('gerencia'))) {
+              deptName = applicantDept.name;
+            } else {
+              deptName = construccionDeptName;
+            }
           }
         }
       }

@@ -144,25 +144,36 @@ export async function GET(request: Request) {
       });
     }
 
-    // Batch: obtener TODAS las aprobaciones de todas las listas en un solo query
+    // Batch: obtener TODAS las aprobaciones de todas las listas en bloques de 100 para no superar el límite de 1,000 filas de Supabase
     const allListIds = needsLists.map(nl => nl.id);
-    const { data: allApprovals } = await supabaseAdmin
-      .from('needs_list_approvals')
-      .select(`
-        id,
-        needs_list_id,
-        department_id,
-        status,
-        approval_order,
-        comments,
-        approved_at,
-        department:departments (
-          name,
-          code
-        )
-      `)
-      .in('needs_list_id', allListIds)
-      .order('approval_order');
+    const listIdChunks: number[][] = [];
+    for (let i = 0; i < allListIds.length; i += 100) {
+      listIdChunks.push(allListIds.slice(i, i + 100));
+    }
+
+    const approvalChunkResults = await Promise.all(
+      listIdChunks.map(chunk =>
+        supabaseAdmin
+          .from('needs_list_approvals')
+          .select(`
+            id,
+            needs_list_id,
+            department_id,
+            status,
+            approval_order,
+            comments,
+            approved_at,
+            department:departments (
+              name,
+              code
+            )
+          `)
+          .in('needs_list_id', chunk)
+          .order('approval_order')
+      )
+    );
+
+    const allApprovals = approvalChunkResults.flatMap(r => r.data || []);
 
     // Agrupar aprobaciones por needs_list_id
     const approvalsByListId = new Map<number, typeof allApprovals>();
