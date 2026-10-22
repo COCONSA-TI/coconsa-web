@@ -290,10 +290,12 @@ export async function GET(
     // Si la orden está pendiente o en proceso pero no tiene aprobación pendiente registrada,
     // resolver de forma inteligente para garantizar que esté etiquetada al 100% de las veces
     if ((normalizedStatus === 'pending' || normalizedStatus === 'in_progress') && !currentDepartmentName) {
-      if (storeTypeCode === 'maquinaria' || (store?.name && (store.name.toLowerCase().includes('maquinaria') || typedOrder.machine_id))) {
-        currentDepartmentName = 'Gerencia de Maquinaria';
+      if (normalizedStatus === 'in_progress') {
+        currentDepartmentName = 'Contraloría';
+      } else if (storeTypeCode === 'maquinaria' || (store?.name && (store.name.toLowerCase().includes('maquinaria') || typedOrder.machine_id))) {
+        currentDepartmentName = 'Maquinaria';
       } else if (storeTypeCode === 'obra' || store?.name) {
-        currentDepartmentName = 'Gerencia de Construcción';
+        currentDepartmentName = 'Construcción';
       } else if (user?.department_id) {
         const { data: uDept } = await supabaseAdmin
           .from('departments')
@@ -303,10 +305,10 @@ export async function GET(
         if (uDept && (uDept.approval_order === 1 || uDept.code?.startsWith('gerencia'))) {
           currentDepartmentName = uDept.name;
         } else {
-          currentDepartmentName = 'Gerencia de Construcción';
+          currentDepartmentName = 'Construcción';
         }
       } else {
-        currentDepartmentName = 'Gerencia de Construcción';
+        currentDepartmentName = 'Construcción';
       }
     } else if (normalizedStatus !== 'pending' && normalizedStatus !== 'in_progress') {
       currentDepartmentName = null;
