@@ -76,7 +76,9 @@ async function createOrderApprovalsServer(
   applicantDepartmentId: string,
   applicantId: string,
   isUrgent: boolean = false,
-  requiresExtraBudgetApproval: boolean = false
+  requiresExtraBudgetApproval: boolean = false,
+  storeName?: string,
+  storeTypeCode?: string | null
 ) {
   // Obtener información del solicitante
   const { data: applicant, error: applicantError } = await supabaseAdmin
@@ -120,75 +122,70 @@ async function createOrderApprovalsServer(
         approval_order: dept.approval_order,
       });
     }
-  } else {
-    // ORDEN NORMAL O CON AUTORIZACIÓN ESPECIAL: Determinar flujo según departamento
-    let applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
 
-    // Si requiere autorización especial pero el departamento del solicitante no es una Gerencia (approval_order 1),
-    // asignar Gerencia de Construcción o la primera Gerencia del flujo
-    if (requiresExtraBudgetApproval && (!applicantDept || applicantDept.approval_order !== 1)) {
-      const defaultGerencia = departments.find((d: Department) => d.code === 'gerencia_construccion' || d.approval_order === 1);
-      if (defaultGerencia) {
-        applicantDept = defaultGerencia;
+    await supabaseAdmin
+      .from('orders')
+      .update({ status: 'in_progress' })
+      .eq('id', orderId);
+  } else {
+    // Determinar la gerencia responsable (Paso 1)
+    const isMaquinaria = storeTypeCode
+      ? storeTypeCode === 'maquinaria'
+      : (storeName ? (storeName.trim().toLowerCase() === 'maquinaria' || /^0*30\b/i.test(storeName.trim())) : false);
+    const isObra = storeTypeCode
+      ? storeTypeCode === 'obra'
+      : !isMaquinaria;
+
+    let initialDept: Department | undefined;
+
+    if (requiresExtraBudgetApproval || isObra) {
+      // OBRAS o AUTORIZACIÓN ESPECIAL: Siempre y estrictamente Gerencia de Construcción (NUNCA Finanzas u otro depto)
+      initialDept = departments.find((d: Department) => d.code === 'gerencia_construccion') ||
+        departments.find((d: Department) => d.code?.includes('construccion')) ||
+        departments.find((d: Department) => d.name?.toLowerCase().includes('construcci'));
+    } else if (isMaquinaria) {
+      initialDept = departments.find((d: Department) => d.code === 'gerencia_maquinaria') ||
+        departments.find((d: Department) => d.name?.toLowerCase().includes('maquinaria'));
+    } else {
+      // 'otro' (gastos generales, oficinas, etc.)
+      const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
+      if (applicantDept && applicantDept.approval_order === 1) {
+        initialDept = applicantDept;
+      } else {
+        initialDept = departments.find((d: Department) => d.code === 'gerencia_construccion') ||
+          departments.find((d: Department) => d.code?.includes('construccion')) ||
+          departments.find((d: Department) => d.name?.toLowerCase().includes('construcci'));
       }
     }
 
-    const applicantApprovalOrder = applicantDept?.approval_order ?? 0;
+    // 1. Aprobación del primer paso (Gerencia):
+    // Siempre inicia en 'pending' para que Gerencia revise/autorice y la orden muestre la tag correcta en el dashboard (NO Contraloría)
+    if (initialDept) {
+      approvalsToCreate.push({
+        order_id: orderId,
+        department_id: initialDept.id,
+        status: 'pending',
+        approval_order: initialDept.approval_order || 1,
+        approver_id: null,
+        approved_at: null,
+        comments: requiresExtraBudgetApproval
+          ? 'Autorización especial requerida: conceptos fuera de presupuesto o agotados'
+          : null,
+      });
+    }
 
-    if (applicantApprovalOrder >= 2 && !requiresExtraBudgetApproval) {
-      // El solicitante pertenece a un departamento del flujo de aprobación (Contraloría, Dirección, Contabilidad, Pagos).
-      // NO se incluye Gerencia (step 1) porque no tienen gerente que les apruebe.
-      // NO se auto-aprueba su propio paso para evitar conflictos de interés.
-      // Flujo: Contraloría (2) → Dirección (3) → Contabilidad (4) → Pagos (5)
-      const flowDepartments = departments.filter(
-        (d: Department) => d.approval_order && d.approval_order >= 2
-      );
+    // 2. Aprobaciones para el resto del flujo (Contraloría 2, Dirección 3, Contabilidad 4, Pagos 5)
+    const subsequentDepartments = departments.filter(
+      (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== initialDept?.id
+    );
 
-      for (const dept of flowDepartments) {
-        approvalsToCreate.push({
-          order_id: orderId,
-          department_id: dept.id,
-          status: 'pending',
-          approval_order: dept.approval_order,
-        });
-      }
-    } else {
-      // El solicitante es de una Gerencia (approval_order = 1) o la orden requiere autorización especial.
-      // Flujo completo: Gerencia (1) → Contraloría (2) → Dirección (3) → Contabilidad (4) → Pagos (5)
-
-      // 1. Aprobación del departamento del solicitante (gerencia)
-      if (applicantDept) {
-        // Si requiere autorización especial: NUNCA se auto-aprueba, Gerencia debe aprobar explícitamente.
-        // Si es normal y el solicitante es jefe de departamento, se auto-aprueba.
-        const shouldAutoApprove = isApplicantDeptHead && !requiresExtraBudgetApproval;
-        approvalsToCreate.push({
-          order_id: orderId,
-          department_id: applicantDept.id,
-          status: shouldAutoApprove ? 'approved' : 'pending',
-          approval_order: applicantDept.approval_order || 1,
-          approver_id: shouldAutoApprove ? applicantId : null,
-          approved_at: shouldAutoApprove ? new Date().toISOString() : null,
-          comments: requiresExtraBudgetApproval
-            ? 'Autorización especial requerida: conceptos fuera de presupuesto'
-            : (shouldAutoApprove ? 'Auto-aprobado (solicitante es jefe de departamento)' : null),
-        });
-      }
-
-      // 2. Aprobaciones para el resto del flujo (contraloría, dirección, contabilidad, pagos)
-      // Solo incluir departamentos con approval_order > 1 que NO sean otras gerencias
-      // Evitamos duplicar el departamento de la gerencia seleccionada
-      const subsequentDepartments = departments.filter(
-        (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== applicantDept?.id
-      );
-
-      for (const dept of subsequentDepartments) {
-        approvalsToCreate.push({
-          order_id: orderId,
-          department_id: dept.id,
-          status: 'pending',
-          approval_order: dept.approval_order,
-        });
-      }
+    for (const dept of subsequentDepartments) {
+      approvalsToCreate.push({
+        order_id: orderId,
+        department_id: dept.id,
+        status: 'pending',
+        approval_order: dept.approval_order,
+      });
     }
   }
 
@@ -198,25 +195,6 @@ async function createOrderApprovalsServer(
 
   if (insertError) {
     throw new Error('Error al crear aprobaciones: ' + insertError.message);
-  }
-
-  // Si requiere autorización especial, se queda en 'pending' esperando a Gerencia.
-  // Si se auto-aprobó el primer nivel (orden normal con dept head de gerencia), pasa a in_progress.
-  // Si es orden urgente normal, también in_progress.
-  // Si el solicitante pertenece a un depto con approval_order >= 2 y no es especial, in_progress.
-  const applicantDeptFinal = departments.find((d: Department) => d.id === applicantDepartmentId);
-  const applicantApprovalOrder = applicantDeptFinal?.approval_order ?? 0;
-  const shouldBeInProgress = !requiresExtraBudgetApproval && (
-    (isUrgent && isApplicantDeptHead) ||
-    (isApplicantDeptHead && applicantApprovalOrder === 1) ||
-    (applicantApprovalOrder >= 2)
-  );
-
-  if (shouldBeInProgress) {
-    await supabaseAdmin
-      .from('orders')
-      .update({ status: 'in_progress' })
-      .eq('id', orderId);
   }
 
   return true;
@@ -342,25 +320,70 @@ export async function POST(request: Request) {
       );
     }
 
-    // Buscar el almacén por nombre o usar el ID proporcionado
+    // Buscar el almacén por ID proporcionado o por nombre
     let storeIdToUse = store_id;
-    
-    if (!storeIdToUse) {
-      const { data: storeData, error: storeError } = await supabaseAdmin
+    let storeRecord: any = null;
+
+    if (storeIdToUse) {
+      const { data, error } = await supabaseAdmin
         .from('stores')
-        .select('id')
+        .select('id, name, store_type_id, store_type:store_types(id, code, name)')
+        .eq('id', storeIdToUse)
+        .single();
+      if (!error && data) {
+        storeRecord = data;
+      } else {
+        const { data: fallbackData } = await supabaseAdmin
+          .from('stores')
+          .select('id, name')
+          .eq('id', storeIdToUse)
+          .single();
+        storeRecord = fallbackData;
+      }
+    } else {
+      const { data, error } = await supabaseAdmin
+        .from('stores')
+        .select('id, name, store_type_id, store_type:store_types(id, code, name)')
         .ilike('name', `%${store_name}%`)
         .limit(1)
         .single();
-
-      if (storeError || !storeData) {
-        return NextResponse.json(
-          { error: `No se encontró el almacén u obra "${store_name}". Verifica que esté registrado en el sistema.` },
-          { status: 404 }
-        );
+      if (!error && data) {
+        storeRecord = data;
+      } else {
+        const { data: fallbackData } = await supabaseAdmin
+          .from('stores')
+          .select('id, name')
+          .ilike('name', `%${store_name}%`)
+          .limit(1)
+          .single();
+        storeRecord = fallbackData;
       }
-      storeIdToUse = storeData.id;
+      if (storeRecord) {
+        storeIdToUse = storeRecord.id;
+      }
     }
+
+    if (!storeRecord || !storeIdToUse) {
+      return NextResponse.json(
+        { error: `No se encontró el almacén u obra "${store_name}". Verifica que esté registrado en el sistema.` },
+        { status: 404 }
+      );
+    }
+
+    // Extraer código de tipo de almacén ('obra', 'maquinaria', 'otro')
+    const rawStoreType = Array.isArray(storeRecord.store_type)
+      ? storeRecord.store_type[0]
+      : storeRecord.store_type;
+    const storeTypeCode: string | null = rawStoreType?.code || null;
+
+    // Determinar si es maquinaria u obra (priorizando store_types con fallback por compatibilidad)
+    const isMaquinaria = storeTypeCode
+      ? storeTypeCode === 'maquinaria'
+      : (store_name.trim().toLowerCase() === 'maquinaria' || /^0*30\b/i.test(store_name.trim()));
+
+    const isObra = storeTypeCode
+      ? storeTypeCode === 'obra'
+      : !isMaquinaria;
 
     // Resolver proveedor único para toda la orden
     // Se acepta supplier_id o supplier_name a nivel de orden, o como fallback del primer item
@@ -395,12 +418,16 @@ export async function POST(request: Request) {
     let requiresExtraBudgetApproval = false;
     let extraBudgetItemsCount = 0;
 
-    if (storeIdToUse) {
-      // Verificar si la obra tiene presupuesto cargado (hay registros en store_insumos)
+    // ÚNICAMENTE las tiendas clasificadas como 'obra' pueden requerir autorización especial
+    if (storeIdToUse && isObra) {
+      // Verificar si la obra tiene presupuesto cargado (insumos comprables activos con cantidad presupuestada > 0)
       const { count: insumoCount } = await supabaseAdmin
         .from('store_insumos')
         .select('id', { count: 'exact', head: true })
-        .eq('store_id', storeIdToUse);
+        .eq('store_id', storeIdToUse)
+        .eq('activo', true)
+        .gt('cantidad_presupuestada', 0)
+        .in('categoria', ['Materiales', 'Herramienta', 'Equipo']);
 
       const storeHasBudget = (insumoCount ?? 0) > 0;
 
@@ -457,6 +484,22 @@ export async function POST(request: Request) {
           requiresExtraBudgetApproval = true;
           extraBudgetItemsCount = specialAuthItems.length;
         }
+      } else {
+        // En obras sin presupuesto: NO hay autorización especial ni restricciones
+        requiresExtraBudgetApproval = false;
+        extraBudgetItemsCount = 0;
+        for (const item of items) {
+          delete item.is_extra_budget;
+          delete item.extra_budget_reason;
+        }
+      }
+    } else {
+      // Maquinaria u otro sin storeId: sin restricciones de presupuesto
+      requiresExtraBudgetApproval = false;
+      extraBudgetItemsCount = 0;
+      for (const item of items) {
+        delete item.is_extra_budget;
+        delete item.extra_budget_reason;
       }
     }
 
@@ -572,7 +615,7 @@ export async function POST(request: Request) {
     }
 
     // Crear el flujo de aprobaciones:
-    // Si requiere autorización especial, inicia en Gerencia (paso 1) sin auto-aprobarse para que Gerencia autorice.
+    // Inicia en Gerencia (paso 1: Construcción para obras, Maquinaria para taller/equipos) en 'pending'
     if (userDepartmentId) {
       try {
         await createOrderApprovalsServer(
@@ -580,7 +623,9 @@ export async function POST(request: Request) {
           userDepartmentId,
           userId,
           is_urgent,
-          requiresExtraBudgetApproval
+          requiresExtraBudgetApproval,
+          store_name,
+          storeTypeCode
         );
       } catch (err) {
         console.error('Error al crear flujo de aprobaciones:', err);

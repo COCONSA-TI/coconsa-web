@@ -99,9 +99,21 @@ export interface Role {
   created_at: string;
 }
 
+export type StoreTypeCode = 'obra' | 'maquinaria' | 'otro';
+
+export interface StoreType {
+  id: number;
+  code: StoreTypeCode | string;
+  name: string;
+  description?: string | null;
+  created_at?: string;
+}
+
 export interface Store {
   id: number;
   name: string;
+  store_type_id?: number | null;
+  store_type?: StoreType | null;
   is_active?: boolean;
   created_at: string;
 }

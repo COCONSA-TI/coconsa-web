@@ -49,7 +49,9 @@ async function recreateOrderApprovals(
   orderId: string,
   applicantId: string,
   isUrgent: boolean = false,
-  requiresExtraBudgetApproval: boolean = false
+  requiresExtraBudgetApproval: boolean = false,
+  storeName?: string,
+  storeTypeCode?: string | null
 ) {
   // Eliminar aprobaciones existentes
   await supabaseAdmin
@@ -99,69 +101,67 @@ async function recreateOrderApprovals(
         approval_order: dept.approval_order,
       });
     }
-  } else {
-    // ORDEN NORMAL O CON AUTORIZACIÓN ESPECIAL: Determinar flujo según departamento
-    let applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
 
-    if (requiresExtraBudgetApproval && (!applicantDept || applicantDept.approval_order !== 1)) {
-      const defaultGerencia = departments.find((d: Department) => d.code === 'gerencia_construccion' || d.approval_order === 1);
-      if (defaultGerencia) {
-        applicantDept = defaultGerencia;
+    return true; // in_progress
+  } else {
+    // Determinar la gerencia responsable (Paso 1)
+    const isMaquinaria = storeTypeCode
+      ? storeTypeCode === 'maquinaria'
+      : (storeName ? (storeName.trim().toLowerCase() === 'maquinaria' || /^0*30\b/i.test(storeName.trim())) : false);
+    const isObra = storeTypeCode
+      ? storeTypeCode === 'obra'
+      : !isMaquinaria;
+
+    let initialDept: Department | undefined;
+
+    if (requiresExtraBudgetApproval || isObra) {
+      // OBRAS o AUTORIZACIÓN ESPECIAL: Siempre y estrictamente Gerencia de Construcción (NUNCA Finanzas)
+      initialDept = departments.find((d: Department) => d.code === 'gerencia_construccion') ||
+        departments.find((d: Department) => d.code?.includes('construccion')) ||
+        departments.find((d: Department) => d.name?.toLowerCase().includes('construcci'));
+    } else if (isMaquinaria) {
+      initialDept = departments.find((d: Department) => d.code === 'gerencia_maquinaria') ||
+        departments.find((d: Department) => d.name?.toLowerCase().includes('maquinaria'));
+    } else {
+      // 'otro' (gastos generales, oficinas, etc.)
+      const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
+      if (applicantDept && applicantDept.approval_order === 1) {
+        initialDept = applicantDept;
+      } else {
+        initialDept = departments.find((d: Department) => d.code === 'gerencia_construccion') ||
+          departments.find((d: Department) => d.code?.includes('construccion')) ||
+          departments.find((d: Department) => d.name?.toLowerCase().includes('construcci'));
       }
     }
 
-    const applicantApprovalOrder = applicantDept?.approval_order ?? 0;
+    // 1. Aprobación del primer paso (Gerencia):
+    // Siempre inicia en 'pending' para que Gerencia revise/autorice y la orden muestre la tag correcta en el dashboard
+    if (initialDept) {
+      approvalsToCreate.push({
+        order_id: orderId,
+        department_id: initialDept.id,
+        status: 'pending',
+        approval_order: initialDept.approval_order || 1,
+        approver_id: null,
+        approved_at: null,
+        comments: requiresExtraBudgetApproval
+          ? 'Autorización especial requerida: conceptos fuera de presupuesto o agotados'
+          : null,
+      });
+    }
 
-    if (applicantApprovalOrder >= 2 && !requiresExtraBudgetApproval) {
-      // El solicitante pertenece a un departamento del flujo de aprobación (Contraloría, Dirección, Contabilidad, Pagos).
-      // NO se incluye Gerencia (step 1) porque no tienen gerente que les apruebe.
-      // NO se auto-aprueba su propio paso para evitar conflictos de interés.
-      // Flujo: Contraloría (2) → Dirección (3) → Contabilidad (4) → Pagos (5)
-      const flowDepartments = departments.filter(
-        (d: Department) => d.approval_order && d.approval_order >= 2
-      );
+    // 2. Aprobaciones para el resto del flujo (Contraloría 2, Dirección 3, Contabilidad 4, Pagos 5)
+    const subsequentDepartments = departments.filter(
+      (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== initialDept?.id
+    );
 
-      for (const dept of flowDepartments) {
-        approvalsToCreate.push({
-          order_id: orderId,
-          department_id: dept.id,
-          status: 'pending',
-          approval_order: dept.approval_order,
-        });
-      }
-    } else {
-      // El solicitante es de una Gerencia (approval_order = 1) o la orden requiere autorización especial.
-      // Flujo completo: Gerencia (1) → Contraloría (2) → Dirección (3) → Contabilidad (4) → Pagos (5)
-
-      // 1. Aprobación del departamento del solicitante (gerencia)
-      if (applicantDept) {
-        const shouldAutoApprove = isApplicantDeptHead && !requiresExtraBudgetApproval;
-        approvalsToCreate.push({
-          order_id: orderId,
-          department_id: applicantDept.id,
-          status: shouldAutoApprove ? 'approved' : 'pending',
-          approval_order: applicantDept.approval_order || 1,
-          approver_id: shouldAutoApprove ? applicantId : null,
-          approved_at: shouldAutoApprove ? new Date().toISOString() : null,
-          comments: requiresExtraBudgetApproval
-            ? 'Autorización especial requerida: conceptos fuera de presupuesto'
-            : (shouldAutoApprove ? 'Auto-aprobado (solicitante es jefe de departamento)' : null),
-        });
-      }
-
-      // 2. Aprobaciones para el resto del flujo
-      const subsequentDepartments = departments.filter(
-        (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== applicantDept?.id
-      );
-
-      for (const dept of subsequentDepartments) {
-        approvalsToCreate.push({
-          order_id: orderId,
-          department_id: dept.id,
-          status: 'pending',
-          approval_order: dept.approval_order,
-        });
-      }
+    for (const dept of subsequentDepartments) {
+      approvalsToCreate.push({
+        order_id: orderId,
+        department_id: dept.id,
+        status: 'pending',
+        approval_order: dept.approval_order,
+      });
     }
   }
 
@@ -173,14 +173,7 @@ async function recreateOrderApprovals(
     throw new Error('Error al crear aprobaciones: ' + insertError.message);
   }
 
-  // Determinar si la orden debe empezar en 'in_progress':
-  const applicantDeptForStatus = departments.find((d: Department) => d.id === applicantDepartmentId);
-  const applicantApprovalOrder = applicantDeptForStatus?.approval_order ?? 0;
-  return !requiresExtraBudgetApproval && (
-    (isUrgent && isApplicantDeptHead) ||
-    (isApplicantDeptHead && applicantApprovalOrder === 1) ||
-    applicantApprovalOrder >= 2
-  );
+  return false;
 }
 
 export async function GET(
@@ -211,12 +204,24 @@ export async function GET(
 
     const typedOrder = order as DBOrderDetail & { payment_proof_url?: string | null, machine_id?: number | null };
 
-    // Obtener datos relacionados
-    const { data: store } = await supabaseAdmin
+    // Obtener datos relacionados (con store_type)
+    let store: any = null;
+    const { data: storeWithTypes, error: storeTypesErr } = await supabaseAdmin
       .from('stores')
-      .select('name')
+      .select('name, store_type_id, store_type:store_types(code)')
       .eq('id', typedOrder.store_id)
       .single();
+
+    if (!storeTypesErr && storeWithTypes) {
+      store = storeWithTypes;
+    } else {
+      const { data: storeFallback } = await supabaseAdmin
+        .from('stores')
+        .select('name')
+        .eq('id', typedOrder.store_id)
+        .single();
+      store = storeFallback;
+    }
 
     const { data: user } = await supabaseAdmin
       .from('users')
@@ -277,10 +282,19 @@ export async function GET(
       currentDepartmentName = dept?.name || null;
     }
 
+    const rawStoreType = Array.isArray(store?.store_type)
+      ? store?.store_type[0]
+      : store?.store_type;
+    const storeTypeCode: string | null = rawStoreType?.code || null;
+
     // Si la orden está pendiente o en proceso pero no tiene aprobación pendiente registrada,
     // resolver de forma inteligente para garantizar que esté etiquetada al 100% de las veces
     if ((normalizedStatus === 'pending' || normalizedStatus === 'in_progress') && !currentDepartmentName) {
-      if (user?.department_id) {
+      if (storeTypeCode === 'maquinaria' || (store?.name && (store.name.toLowerCase().includes('maquinaria') || typedOrder.machine_id))) {
+        currentDepartmentName = 'Gerencia de Maquinaria';
+      } else if (storeTypeCode === 'obra' || store?.name) {
+        currentDepartmentName = 'Gerencia de Construcción';
+      } else if (user?.department_id) {
         const { data: uDept } = await supabaseAdmin
           .from('departments')
           .select('name, approval_order, code')
@@ -289,10 +303,10 @@ export async function GET(
         if (uDept && (uDept.approval_order === 1 || uDept.code?.startsWith('gerencia'))) {
           currentDepartmentName = uDept.name;
         } else {
-          currentDepartmentName = 'Contraloría';
+          currentDepartmentName = 'Gerencia de Construcción';
         }
       } else {
-        currentDepartmentName = 'Contraloría';
+        currentDepartmentName = 'Gerencia de Construcción';
       }
     } else if (normalizedStatus !== 'pending' && normalizedStatus !== 'in_progress') {
       currentDepartmentName = null;
@@ -616,11 +630,32 @@ export async function PUT(
     // Si NO es edición especial (es el solicitante original tras rechazo), recrear el flujo de aprobaciones
     if (!canSpecialEdit) {
       try {
+        let orderStoreName: string | undefined;
+        let orderStoreTypeCode: string | null = null;
+        const targetStoreId = storeIdToUse || existingOrder.store_id;
+        if (targetStoreId) {
+          const { data: st, error: stErr } = await supabaseAdmin
+            .from('stores')
+            .select('name, store_type_id, store_type:store_types(code)')
+            .eq('id', targetStoreId)
+            .single();
+          if (!stErr && st) {
+            orderStoreName = st.name;
+            const rType = Array.isArray(st.store_type) ? st.store_type[0] : st.store_type;
+            orderStoreTypeCode = rType?.code || null;
+          } else {
+            const { data: stFallback } = await supabaseAdmin.from('stores').select('name').eq('id', targetStoreId).single();
+            orderStoreName = stFallback?.name;
+          }
+        }
+
         const isAutoApproved = await recreateOrderApprovals(
           orderId,
           existingOrder.applicant_id,
           existingOrder.is_urgent || false,
-          Boolean(updatedOrder?.has_extra_budget_approval ?? existingOrder.has_extra_budget_approval)
+          Boolean(updatedOrder?.has_extra_budget_approval ?? existingOrder.has_extra_budget_approval),
+          orderStoreName,
+          orderStoreTypeCode
         );
         
         // Si se auto-aprobó el primer nivel, actualizar estado
