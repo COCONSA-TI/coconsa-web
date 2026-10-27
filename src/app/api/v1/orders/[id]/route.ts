@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/api-auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import type { OrderItem, Department } from "@/types/database";
 import { calculateRetentions } from "@/types/database";
+import { buildOrderApprovals } from "@/lib/orderApprovalRouting";
 
 interface OrderItemDisplay {
   nombre: string;
@@ -44,7 +45,8 @@ type DBOrderDetail = {
   extra_budget_items_count?: number | null;
 };
 
-// Función para recrear aprobaciones
+// Función para recrear aprobaciones (reenvío de una orden rechazada).
+// Regresa true si la orden debe quedar en proceso (se saltó o autoaprobó la Gerencia).
 async function recreateOrderApprovals(
   orderId: string,
   applicantId: string,
@@ -70,9 +72,6 @@ async function recreateOrderApprovals(
     throw new Error('Error al obtener información del solicitante');
   }
 
-  const isApplicantDeptHead = applicant.is_department_head;
-  const applicantDepartmentId = applicant.department_id;
-
   // Obtener todos los departamentos que requieren aprobación
   const { data: departments, error: deptError } = await supabaseAdmin
     .from('departments')
@@ -84,96 +83,26 @@ async function recreateOrderApprovals(
     throw new Error('Error al obtener departamentos');
   }
 
-  // Crear aprobaciones para cada departamento
-  const approvalsToCreate = [];
-
-  if (isUrgent && isApplicantDeptHead && !requiresExtraBudgetApproval) {
-    // ORDEN URGENTE: Solo crear aprobaciones para Dirección (3), Contabilidad (4) y Pagos (5)
-    const urgentDepartments = departments.filter(
-      (d: Department) => d.approval_order && d.approval_order >= 3
-    );
-
-    for (const dept of urgentDepartments) {
-      approvalsToCreate.push({
-        order_id: orderId,
-        department_id: dept.id,
-        status: 'pending',
-        approval_order: dept.approval_order,
-      });
-    }
-
-    return true; // in_progress
-  } else {
-    // Determinar la gerencia responsable (Paso 1)
-    const isMaquinaria = storeTypeCode
-      ? storeTypeCode === 'maquinaria'
-      : (storeName ? (storeName.trim().toLowerCase() === 'maquinaria' || /^0*30\b/i.test(storeName.trim())) : false);
-    const isObra = storeTypeCode
-      ? storeTypeCode === 'obra'
-      : !isMaquinaria;
-
-    let initialDept: Department | undefined;
-
-    if (requiresExtraBudgetApproval || isObra) {
-      // OBRAS o AUTORIZACIÓN ESPECIAL: Siempre y estrictamente Gerencia de Construcción (NUNCA Finanzas)
-      initialDept = departments.find((d: Department) => d.code === 'gerencia_construccion') ||
-        departments.find((d: Department) => d.code?.includes('construccion')) ||
-        departments.find((d: Department) => d.name?.toLowerCase().includes('construcci'));
-    } else if (isMaquinaria) {
-      initialDept = departments.find((d: Department) => d.code === 'gerencia_maquinaria') ||
-        departments.find((d: Department) => d.name?.toLowerCase().includes('maquinaria'));
-    } else {
-      // 'otro' (gastos generales, oficinas, etc.)
-      const applicantDept = departments.find((d: Department) => d.id === applicantDepartmentId);
-      if (applicantDept && applicantDept.approval_order === 1) {
-        initialDept = applicantDept;
-      } else {
-        initialDept = departments.find((d: Department) => d.code === 'gerencia_construccion') ||
-          departments.find((d: Department) => d.code?.includes('construccion')) ||
-          departments.find((d: Department) => d.name?.toLowerCase().includes('construcci'));
-      }
-    }
-
-    // 1. Aprobación del primer paso (Gerencia):
-    // Siempre inicia en 'pending' para que Gerencia revise/autorice y la orden muestre la tag correcta en el dashboard
-    if (initialDept) {
-      approvalsToCreate.push({
-        order_id: orderId,
-        department_id: initialDept.id,
-        status: 'pending',
-        approval_order: initialDept.approval_order || 1,
-        approver_id: null,
-        approved_at: null,
-        comments: requiresExtraBudgetApproval
-          ? 'Autorización especial requerida: conceptos fuera de presupuesto o agotados'
-          : null,
-      });
-    }
-
-    // 2. Aprobaciones para el resto del flujo (Contraloría 2, Dirección 3, Contabilidad 4, Pagos 5)
-    const subsequentDepartments = departments.filter(
-      (d: Department) => d.approval_order && d.approval_order > 1 && d.id !== initialDept?.id
-    );
-
-    for (const dept of subsequentDepartments) {
-      approvalsToCreate.push({
-        order_id: orderId,
-        department_id: dept.id,
-        status: 'pending',
-        approval_order: dept.approval_order,
-      });
-    }
-  }
+  const { approvals, startsInProgress } = buildOrderApprovals(departments as Department[], {
+    orderId,
+    applicantId,
+    applicantDepartmentId: applicant.department_id,
+    isApplicantDeptHead: Boolean(applicant.is_department_head),
+    isUrgent,
+    requiresExtraBudgetApproval,
+    storeName,
+    storeTypeCode,
+  });
 
   const { error: insertError } = await supabaseAdmin
     .from('order_approvals')
-    .insert(approvalsToCreate);
+    .insert(approvals);
 
   if (insertError) {
     throw new Error('Error al crear aprobaciones: ' + insertError.message);
   }
 
-  return false;
+  return startsInProgress;
 }
 
 export async function GET(
@@ -660,7 +589,7 @@ export async function PUT(
           orderStoreTypeCode
         );
         
-        // Si se auto-aprobó el primer nivel, actualizar estado
+        // Si se saltó o autoaprobó la Gerencia, la orden queda en proceso
         if (isAutoApproved) {
           await supabaseAdmin
             .from('orders')
