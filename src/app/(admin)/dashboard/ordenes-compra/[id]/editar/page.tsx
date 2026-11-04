@@ -191,6 +191,14 @@ export default function EditarOrdenPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [originalOrder, setOriginalOrder] = useState<OrderDetail | null>(null);
+  // Quien edita su propia orden rechazada (no definitiva) la reenvía, aunque tenga edición especial
+  const isOwnRejectedOrder = Boolean(
+    originalOrder && user &&
+    originalOrder.status === "rejected" &&
+    !originalOrder.is_definitive_rejection &&
+    user.email === originalOrder.applicant_email
+  );
+  const isSpecialEditOnly = canSpecialEdit && !isOwnRejectedOrder;
 
   const [availableStores, setAvailableStores] = useState<string[]>([]);
   const [availableSuppliers, setAvailableSuppliers] = useState<string[]>([]);
@@ -603,7 +611,7 @@ export default function EditarOrdenPage() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold">Editar Orden #{orderId}</h1>
-              {canSpecialEdit ? (
+              {isSpecialEditOnly ? (
                 <span className="px-3 py-1 rounded-full text-xs font-semibold bg-white/20 text-white border border-white/40">
                   Edición Gerencial
                 </span>
@@ -614,7 +622,7 @@ export default function EditarOrdenPage() {
               )}
             </div>
             <p className="text-red-100 text-sm mt-1">
-              {canSpecialEdit
+              {isSpecialEditOnly
                 ? "Modifica datos, cantidades, insumos o clasifica esta orden como destajo"
                 : "Modifica los datos y reenvía la orden para aprobación"}
             </p>
@@ -623,7 +631,7 @@ export default function EditarOrdenPage() {
       </div>
 
       {/* Mensaje informativo */}
-      {canSpecialEdit ? (
+      {isSpecialEditOnly ? (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
           <div className="flex items-start gap-3">
             <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1168,7 +1176,7 @@ export default function EditarOrdenPage() {
               ? uploadingFiles
                 ? "Subiendo archivos..."
                 : "Guardando..."
-              : canSpecialEdit
+              : isSpecialEditOnly
               ? "Guardar Cambios"
               : "Guardar y Reenviar"}
           </button>
