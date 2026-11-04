@@ -355,9 +355,13 @@ export async function PUT(
     // Permiso especial: Dirección, Gerente de Construcción, Gerente/Jefe de Contraloría y Admin pueden editar en cualquier momento
     const canSpecialEdit = isAdminUser || isDirection || isConstruccionHead || isContraloriaHead;
 
+    const isRejected = existingOrder.status === 'RECHAZADA' || existingOrder.status === 'rejected';
+    // Quien edita su propia orden rechazada (no definitiva) la reenvía, aunque tenga edición especial
+    const isOwnRejectedOrder = isRejected && !existingOrder.is_definitive_rejection && existingOrder.applicant_id === session!.userId;
+    const shouldResend = !canSpecialEdit || isOwnRejectedOrder;
+
     if (!canSpecialEdit) {
       // Flujo normal: solo se pueden editar órdenes rechazadas que no sean definitivas y por el solicitante
-      const isRejected = existingOrder.status === 'RECHAZADA' || existingOrder.status === 'rejected';
       if (!isRejected) {
         return NextResponse.json(
           { error: "Solo se pueden editar órdenes rechazadas" },
@@ -511,9 +515,9 @@ export async function PUT(
       updated_at: new Date().toISOString(),
     };
 
-    // Si es edición normal del solicitante tras rechazo, cambiar estado a pendiente
-    // Si es edición especial gerencial/dirección, se preserva el estado original
-    if (!canSpecialEdit) {
+    // Si el solicitante reenvía su orden rechazada, cambiar estado a pendiente
+    // Si es edición especial gerencial/dirección de otra orden, se preserva el estado original
+    if (shouldResend) {
       updateData.status = 'PENDIENTE';
     }
 
@@ -558,8 +562,8 @@ export async function PUT(
       );
     }
 
-    // Si NO es edición especial (es el solicitante original tras rechazo), recrear el flujo de aprobaciones
-    if (!canSpecialEdit) {
+    // Si el solicitante original reenvía su orden rechazada, recrear el flujo de aprobaciones
+    if (shouldResend) {
       try {
         let orderStoreName: string | undefined;
         let orderStoreTypeCode: string | null = null;
@@ -614,7 +618,7 @@ export async function PUT(
 
     return NextResponse.json({
       success: true,
-      message: canSpecialEdit ? "Orden de compra actualizada exitosamente" : "Orden actualizada y reenviada para aprobación",
+      message: shouldResend ? "Orden actualizada y reenviada para aprobación" : "Orden de compra actualizada exitosamente",
       order: updatedOrder
     });
 
